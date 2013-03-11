@@ -1,19 +1,33 @@
 module hibernated.type;
 
-interface Type {
-	immutable string getName();
-	immutable TypeInfo getReturnedClass();
+class NullableNumber {
+	bool is_null;
+}
+
+class NumberBox(T) : NullableNumber {
+	T value;
+	this(T v) { this.value = v; }
+}
+
+alias NumberBox!int Integer;
+
+class Type {
+public:
+	immutable string getName() { return ""; }
+	immutable TypeInfo getReturnedClass() { return null; }
 }
 
 class StringType : Type {
-	immutable string getName() { return "String"; }
-	immutable TypeInfo getReturnedClass() { return typeid(string); }
+public:
+	override immutable string getName() { return "String"; }
+	override immutable TypeInfo getReturnedClass() { return typeid(string); }
 
 }
 
 class IntegerType : Type {
-	immutable string getName() { return ""; }
-	immutable TypeInfo getReturnedClass() { return typeid(int); }
+public:
+	override immutable string getName() { return ""; }
+	override immutable TypeInfo getReturnedClass() { return typeid(int); }
 
 }
 
