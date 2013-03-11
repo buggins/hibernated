@@ -43,10 +43,16 @@ struct DynamicUpdate {
 }
 
 // column is primary key
-enum Id;
+struct Id {
+	immutable bool dummy;
+	this(bool enabled) {}
+}
 
 // column is server generated value (e.g. AUTO INCREMENT field)
-enum Generated;
+struct Generated {
+	immutable bool dummy;
+	this(bool enabled) {}
+}
 
 
 unittest {
@@ -62,4 +68,5 @@ unittest {
 		@Column("name")
 		string name;
 	}
+
 }

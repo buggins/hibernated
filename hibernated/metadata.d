@@ -3,6 +3,7 @@ module hibernated.metadata;
 import std.stdio;
 import std.traits;
 import std.typecons;
+import std.typetuple;
 import std.string;
 import hibernated.annotations;
 import hibernated.type;
@@ -44,13 +45,12 @@ class EntityInfo {
 	}
 }
 
-
 bool isHibernatedAnnotation(alias t)() {
-	return is(typeof(t) == Id) || is(typeof(t) == Entity) || is(typeof(t) == Column) || is(typeof(t) == Table);
+	return is(typeof(t) == Id) || is(typeof(t) == Entity) || is(typeof(t) == Column) || is(typeof(t) == Table) || is(typeof(t) == Generated) || is(typeof(t) == Id) || t.stringof == Column.stringof || t.stringof == Id.stringof || t.stringof == Generated.stringof || t.stringof == Entity.stringof;
 }
 
 bool isHibernatedEntityAnnotation(alias t)() {
-	return is(typeof(t) == Entity);
+	return is(typeof(t) == Entity) || t.stringof == Entity.stringof;
 }
 
 string capitalizeFieldName(immutable string name) {
@@ -88,6 +88,9 @@ string getEntityName(T)() {
 		static if (is(typeof(a) == Entity)) {
 			return a.name;
 		}
+		static if (a.stringof == Entity.stringof) {
+			return T.stringof;
+		}
 	}
 	return T.stringof;
 }
@@ -106,6 +109,9 @@ bool hasIdAnnotation(T, string m)() {
 		static if (is(typeof(a) == Id)) {
 			return true;
 		}
+		static if (a.stringof == Id.stringof) {
+			return true;
+		}
 	}
 	return false;
 }
@@ -115,17 +121,27 @@ bool hasGeneratedAnnotation(T, string m)() {
 		static if (is(typeof(a) == Generated)) {
 			return true;
 		}
+		static if (a.stringof == Generated.stringof) {
+			return true;
+		}
 	}
 	return false;
+}
+
+string applyDefault(string s, string defaultValue) {
+	return s != null && s.length > 0 ? s : defaultValue;
 }
 
 string getColumnName(T, string m)() {
 	foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
 		static if (is(typeof(a) == Column)) {
-			return a.name;
+			return applyDefault(a.name, toLower(getPropertyName!(T,m)()));
+		}
+		static if (a.stringof == Column.stringof) {
+			return toLower(getPropertyName!(T,m)());
 		}
 	}
-	return null;
+	return toLower(m);
 }
 
 int getColumnLength(T, string m)() {
@@ -155,17 +171,51 @@ bool getColumnUnique(T, string m)() {
 	return false;
 }
 
+string getPropertyName(T, string m)() {
+	alias typeof(__traits(getMember, T, m)) ti;
+	static if (is(ti == function)) {
+		return getterNameToFieldName(m);
+	}
+	return m;
+}
+
+string getColumnTypeName(T, string m)() {
+	alias typeof(__traits(getMember, T, m)) ti;
+	static if (is(ti == int)) {
+		return "new IntegerType()";
+	}
+	static if (is(ti == long)) {
+		return "new BigIntegerType()";
+	}
+	static if (is(ti == string)) {
+		return "new StringType()";
+	}
+	static if (is(ti == function)) {
+		static if (is(ReturnType!(ti) == int)) {
+			return "new IntegerType()";
+		}
+		static if (is(ReturnType!(ti) == string)) {
+			return "new StringType()";
+		}
+	}
+	return null;
+}
+
 string getPropertyDef(T, immutable string m)() {
+	immutable string propertyName = getPropertyName!(T,m)();
+	static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
 	immutable bool isId = hasIdAnnotation!(T, m)();
 	immutable bool isGenerated = hasGeneratedAnnotation!(T, m)();
-	immutable string name = getColumnName!(T, m)();
+	immutable string columnName = getColumnName!(T, m)();
 	immutable length = getColumnLength!(T, m)();
 	immutable bool nullable = getColumnNullable!(T, m)();
 	immutable bool unique = getColumnUnique!(T, m)();
-	return "new PropertyInfo(\"" ~ name ~ "\"," ~ format("%s",length) ~ "," ~ (nullable ? "true" : "false") ~ ")";
+	immutable string typeName = getColumnTypeName!(T, m)();
+	static assert (typeName != null, "Cannot determine column type for member " ~ m ~ " of type " ~ T.stringof);
+	return "    new PropertyInfo(\"" ~ propertyName ~ "\", \"" ~ columnName ~ "\", " ~ typeName ~ ", " ~ format("%s",length) ~ ", " ~ (isId ? "true" : "false")  ~ ", " ~ (isGenerated ? "true" : "false")  ~ ", " ~ (nullable ? "true" : "false") ~ ")";
 }
 
-string entityInfo(T)() {
+string getEntityDef(T)() {
 	string res;
 	string generatedGettersSetters;
 
@@ -178,15 +228,13 @@ string entityInfo(T)() {
 
 	immutable string entityName = getEntityName!T();
 	immutable string tableName = getTableName!T();
-	pragma(msg, "entityName=" ~ entityName);
-	pragma(msg, "tableName=" ~ tableName);
 
 	static assert (entityName != null, "Type " ~ typeName ~ " has no Entity name specified");
 	static assert (tableName != null, "Type " ~ typeName ~ " has no Table name specified");
 
 	generatedEntityInfo ~= "new EntityInfo(";
-	generatedEntityInfo ~= "\"" ~ entityName ~ "\",";
-	generatedEntityInfo ~= "\"" ~ tableName ~ "\",";
+	generatedEntityInfo ~= "\"" ~ entityName ~ "\", ";
+	generatedEntityInfo ~= "\"" ~ tableName ~ "\", ";
 	generatedEntityInfo ~= "cast (immutable PropertyInfo[]) [\n";
 
 	foreach (m; __traits(allMembers, T)) {
@@ -194,77 +242,41 @@ string entityInfo(T)() {
 
 		static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
 			
-			static if (hasHibernatedAnnotation!(T, m)) {
-				pragma(msg, "Member " ~ m ~ " has known annotation");
-			}
+//			static if (hasHibernatedAnnotation!(T, m)) {
+//				pragma(msg, "Member " ~ m ~ " has known annotation");
+//			}
 
 			alias typeof(__traits(getMember, T, m)) ti;
 
 
-			static if (__traits(getAttributes, __traits(getMember, T, m)).length >= 1) {
+			static if (hasHibernatedAnnotation!(T, m)) {
 				
 				immutable string propertyDef = getPropertyDef!(T, m)();
-				pragma(msg, propertyDef);
+				//pragma(msg, propertyDef);
 
 				if (generatedPropertyInfo != null)
 					generatedPropertyInfo ~= ",\n";
 				generatedPropertyInfo ~= propertyDef;
 
 				
-				static if (is(ti == function)) {
-					// 
-					immutable string fieldName = getterNameToFieldName(m);
-					
-					pragma(msg, "Function Name to Field name:");
-					pragma(msg, fieldName);
-				} else {
-					// field
-					immutable string membername = m;
-					immutable string getterName = "get" ~ capitalizeFieldName(m);
-					immutable string setterName = "set" ~ capitalizeFieldName(m);
-					
-					pragma(msg, getterName);
-					pragma(msg, setterName);
-					generatedGettersSetters ~= "   public " ~ ti.stringof ~ " " ~ getterName ~ "() { return " ~ m ~ "; }\n";
-					generatedGettersSetters ~= "   public void " ~ setterName ~ "(" ~ ti.stringof ~ " " ~ m ~ ") { this." ~ m ~ " = " ~ m ~ "; }\n";
-				}
+//				static if (is(ti == function)) {
+//					// 
+//					immutable string fieldName = getterNameToFieldName(m);
+//					
+//					pragma(msg, "Function Name to Field name:");
+//					pragma(msg, fieldName);
+//				} else {
+//					// field
+//					immutable string membername = m;
+//					immutable string getterName = "get" ~ capitalizeFieldName(m);
+//					immutable string setterName = "set" ~ capitalizeFieldName(m);
+//					
+//					pragma(msg, getterName);
+//					pragma(msg, setterName);
+//					generatedGettersSetters ~= "   public " ~ ti.stringof ~ " " ~ getterName ~ "() { return " ~ m ~ "; }\n";
+//					generatedGettersSetters ~= "   public void " ~ setterName ~ "(" ~ ti.stringof ~ " " ~ m ~ ") { this." ~ m ~ " = " ~ m ~ "; }\n";
+//				}
 				
-				
-				
-				if (res.length > 0)
-					res ~= ", ";
-				res ~= m;
-				res ~= "(";
-				
-				pragma(msg, __traits(getAttributes, __traits(getMember, T, m)));
-				
-				foreach(a; __traits(getAttributes, __traits(getMember, T, m))) {
-					
-					static if (isHibernatedAnnotation!a) {
-						pragma(msg, "Is known attribute");
-					}
-					
-					pragma(msg, a);
-					//pragma(msg, a.name);
-					static if (is(typeof(a) == Column)) {
-						pragma(msg, "Attribute is Column");
-						pragma(msg, a.name);
-						res ~= a.name;
-					}
-				}
-				
-				static if (is(ti == long)) {
-					pragma(msg, "Member is long field");
-				}
-				static if (is(ti == function)) {
-					pragma(msg, "Member is function");
-				}
-				static if (is(ti == Nullable!long)) {
-					pragma(msg, "Member is Nullable!long");
-				}
-				//immutable TypeInfo * ti = typeof(__traits(getMember, T, m));
-				pragma(msg, typeof(__traits(getMember, T, m)));
-				res ~= ")";
 			}
 		}
 	}
@@ -277,12 +289,32 @@ string entityInfo(T)() {
 	return generatedEntityInfo ~ "\n" ~ generatedGettersSetters;
 }
 
-
-
-class MetadataInfo(T) {
-	string name;
-	static string fields = GenerateFieldList!(T);
+string entityListDef(T ...)() {
+	string res;
+	foreach(t; T) {
+		immutable string def = getEntityDef!t;
+		if (res.length > 0)
+			res ~= ",\n";
+		res ~= def;
+	}
+	return 
+		"static immutable EntityInfo[] entities;\n" ~
+		"static this() { entities = cast(immutable EntityInfo[])[\n" ~ res ~ "]; }";
 }
+
+mixin template entityListMixin(T...) {
+	mixin entityListDef!(T);
+}
+
+class SchemaInfo(T...) {
+	mixin(entityListDef!(T)());
+	public immutable (EntityInfo[]) getEntities() { return entities; }
+}
+
+//class MetadataInfo(T) {
+//	string name;
+//	static string fields = GenerateFieldList!(T);
+//}
 
 unittest {
 
@@ -292,27 +324,82 @@ unittest {
 
 
 
+
 	//assert(entity.properties.length == 0);
 	writeln("Running unittests");
 
-	@Entity("User1")
+	@Entity
 	@Table("users")
 	class User {
 
-		@Id @Generated
-		@Column("id")
+		@Id() @Generated
+		@Column("id_column")
 		int id;
 
-		@Column("name")
+		@Column("name_column")
 		string name;
+
+		// no column name
+		@Column
+		string flags;
 		
+		// annotated getter
+		string login;
+		@Column
+		string getLogin() { return login; }
+		void setLogin(string login) { this.login = login; }
+
+		// no 
+		@Column
+		int testColumn;
+		
+
 		//mixin GenerateEntityMetadata!();
 		//pragma(msg, "User entity fields: " ~ fields);
 	}
 
-	immutable string info = entityInfo!User();
+	@Entity
+	@Table("customer")
+	class Customer {
+		@Column
+		int id;
+		@Column
+		string name;
+	}
+
+	immutable string info = getEntityDef!User();
+	immutable string infos = entityListDef!(User, Customer)();
+
+//	string [] list = ["bla 1", "bla 2"];
+
+
+	auto ei = new EntityInfo("User", "users", cast (immutable PropertyInfo[]) [
+	                                                                 new PropertyInfo("id", "id_column", new IntegerType(), 0, true, true, false),
+	                                                                 new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false),
+	                                                                 new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true),
+	                                                                 new PropertyInfo("login", "login", new StringType(), 0, false, false, true),
+	                                                                 new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true)]);
+
+//
+
+	EntityInfo[] entities3 =  [
+	                                                                 new EntityInfo("User", "users", cast (immutable PropertyInfo[]) [
+	                                                                 new PropertyInfo("id", "id_column", new IntegerType(), 0, true, true, false),
+	                                                                 new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false),
+	                                                                 new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true),
+	                                                                 new PropertyInfo("login", "login", new StringType(), 0, false, false, true),
+	                                                                 new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true)])
+	                                                                 ,
+	                                                                 new EntityInfo("Customer", "customer", cast (immutable PropertyInfo[]) [
+	                                                                        new PropertyInfo("id", "id", new IntegerType(), 0, false, false, true),
+	                                                                        new PropertyInfo("name", "name", new StringType(), 0, false, false, true)])
+	                                                                 ];
+
+	auto schema = new SchemaInfo!(User, Customer);
+	writeln(schema.getEntities().length);
 
 	pragma(msg, info);
+	pragma(msg, infos);
 
 	writeln("User entity info: " ~ info);
 

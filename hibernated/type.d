@@ -26,8 +26,15 @@ public:
 
 class IntegerType : Type {
 public:
-	override immutable string getName() { return ""; }
+	override immutable string getName() { return "Integer"; }
 	override immutable TypeInfo getReturnedClass() { return typeid(int); }
 
+}
+
+class BigIntegerType : Type {
+public:
+	override immutable string getName() { return "BigInteger"; }
+	override immutable TypeInfo getReturnedClass() { return typeid(int); }
+	
 }
 
