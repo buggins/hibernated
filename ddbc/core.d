@@ -7,7 +7,7 @@ class SQLException : Exception {
 interface Connection {
 	void close();
 	void commit();
-	Statement * createStatement();
+	Statement createStatement();
 	string getCatalog();
 	bool isClosed();
 	void rollback();
@@ -41,15 +41,15 @@ interface ResultSet {
 }
 
 interface Statement {
-	ResultSet * executeQuery(string query);
+	ResultSet executeQuery(string query);
 	bool executeUpdate();
 	void close();
 }
 
 interface Driver {
-	Connection * connect(string url, string[string] params);
+	Connection connect(string url, string[string] params);
 }
 
 interface DataSource {
-	Connection * getConnection();
+	Connection getConnection();
 }

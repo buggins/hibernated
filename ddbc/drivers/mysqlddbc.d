@@ -18,7 +18,7 @@ public:
     override void commit() {
         // TODO:
     }
-    override Statement * createStatement() {
+    override Statement createStatement() {
         // TODO:
         return null;
     }
@@ -44,7 +44,7 @@ public:
 // sample URL:
 // mysql://localhost:3306/DatabaseName
 class MySQLDriver : Driver {
-    override Connection * connect(string url, string[string] params) {
+    override Connection connect(string url, string[string] params) {
         return null;
     }
 }
