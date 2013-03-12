@@ -2,6 +2,7 @@ module ddbc.drivers.mysqlddbc;
 
 import ddbc.core;
 import ddbc.common;
+import ddbc.drivers.mysql;
 
 class MySQLConnection : Connection {
 private:
