@@ -139,8 +139,10 @@ class MySQLResultSet : ddbc.core.ResultSet {
             throw new SQLException("Column index out of bounds: " ~ to!string(columnIndex));
         if (currentRowIndex < 0 || currentRowIndex >= rowCount)
             throw new SQLException("No current row in result set");
-        Variant res = rs[currentRowIndex][columnIndex - 1];
-        lastIsNull = !res.hasValue;
+		lastIsNull = rs[currentRowIndex].isNull(columnIndex - 1);
+		Variant res;
+		if (!lastIsNull)
+		    res = rs[currentRowIndex][columnIndex - 1];
         return res;
     }
 
