@@ -368,10 +368,10 @@ unittest {
 		string flags;
 		
 		// annotated getter
-		string login;
+		private string login;
 		@Column
-		string getLogin() { return login; }
-		void setLogin(string login) { this.login = login; }
+		public string getLogin() { return login; }
+		public void setLogin(string login) { this.login = login; }
 
 		// no (), no column name
 		@Column
