@@ -8,11 +8,11 @@ import std.string;
 import hibernated.annotations;
 import hibernated.type;
 
-interface ClassMetadata {
-	immutable string getEntityName();
-	immutable TypeInfo getMappedClass();
-	immutable string[] getPropertyNames();
-}
+//interface ClassMetadata {
+//	immutable string getEntityName();
+//	immutable TypeInfo getMappedClass();
+//	immutable string[] getPropertyNames();
+//}
 
 class PropertyInfo {
 public:
@@ -37,8 +37,8 @@ public:
 class EntityInfo {
 	immutable string name;
 	immutable string tableName;
-	immutable PropertyInfo[] properties;
-	public this(immutable string name, immutable string tableName, immutable PropertyInfo[] properties) {
+	immutable PropertyInfo* [] properties;
+	public this(immutable string name, immutable string tableName, immutable PropertyInfo* [] properties) {
 		this.name = name;
 		this.tableName = tableName;
 		this.properties = properties;
@@ -235,7 +235,7 @@ string getEntityDef(T)() {
 	generatedEntityInfo ~= "new EntityInfo(";
 	generatedEntityInfo ~= "\"" ~ entityName ~ "\", ";
 	generatedEntityInfo ~= "\"" ~ tableName ~ "\", ";
-	generatedEntityInfo ~= "cast (immutable PropertyInfo[]) [\n";
+	generatedEntityInfo ~= "cast (immutable PropertyInfo * []) [\n";
 
 	foreach (m; __traits(allMembers, T)) {
 		//pragma(msg, m);
@@ -298,17 +298,30 @@ string entityListDef(T ...)() {
 		res ~= def;
 	}
 	return 
-		"static immutable EntityInfo[] entities;\n" ~
-		"static this() { entities = cast(immutable EntityInfo[])[\n" ~ res ~ "]; }";
+		"static this() {\n" ~
+		"    entities = cast(immutable EntityInfo * [])[\n" ~ res ~ "];\n" ~
+		"    immutable (EntityInfo *) [string] map;\n" ~
+		"    foreach(e; entities) {\n" ~
+		"        map[e.name] = e;\n" ~
+		"    }\n" ~
+		"    entityMap = cast(immutable EntityInfo * [string])map;\n" ~
+		"}";
 }
 
-mixin template entityListMixin(T...) {
-	mixin entityListDef!(T);
+abstract class SchemaInfo {
+	public immutable (EntityInfo * []) getEntities();
+	public immutable (EntityInfo * [string]) getEntityMap();
+	public immutable (EntityInfo *) findEntity(string entityName);
 }
 
-class SchemaInfo(T...) {
+class SchemaInfoImpl(T...) : SchemaInfo {
+	static immutable EntityInfo * [string] entityMap;
+	static immutable EntityInfo * [] entities;
 	mixin(entityListDef!(T)());
-	public immutable (EntityInfo[]) getEntities() { return entities; }
+
+	override public immutable (EntityInfo * []) getEntities() { return entities; }
+	override public immutable (EntityInfo * [string]) getEntityMap() { return entityMap; }
+	override public immutable (EntityInfo *) findEntity(string entityName) { return entityMap[entityName]; }
 }
 
 //class MetadataInfo(T) {
@@ -318,7 +331,7 @@ class SchemaInfo(T...) {
 
 unittest {
 
-	EntityInfo entity = new EntityInfo("user", "users", cast (immutable PropertyInfo[]) [
+	EntityInfo entity = new EntityInfo("user", "users", cast (immutable PropertyInfo * []) [
 	                                                     new PropertyInfo("id", "id", new IntegerType(), 0, true, true, false)
 	                                                     ]);
 
@@ -373,7 +386,7 @@ unittest {
 //	string [] list = ["bla 1", "bla 2"];
 
 
-	auto ei = new EntityInfo("User", "users", cast (immutable PropertyInfo[]) [
+	auto ei = new EntityInfo("User", "users", cast (immutable PropertyInfo * []) [
 	                                                                 new PropertyInfo("id", "id_column", new IntegerType(), 0, true, true, false),
 	                                                                 new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false),
 	                                                                 new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true),
@@ -383,19 +396,19 @@ unittest {
 //
 
 	EntityInfo[] entities3 =  [
-	                                                                 new EntityInfo("User", "users", cast (immutable PropertyInfo[]) [
+	                                                                 new EntityInfo("User", "users", cast (immutable PropertyInfo * []) [
 	                                                                 new PropertyInfo("id", "id_column", new IntegerType(), 0, true, true, false),
 	                                                                 new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false),
 	                                                                 new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true),
 	                                                                 new PropertyInfo("login", "login", new StringType(), 0, false, false, true),
 	                                                                 new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true)])
 	                                                                 ,
-	                                                                 new EntityInfo("Customer", "customer", cast (immutable PropertyInfo[]) [
+	                                                                 new EntityInfo("Customer", "customer", cast (immutable PropertyInfo * []) [
 	                                                                        new PropertyInfo("id", "id", new IntegerType(), 0, false, false, true),
 	                                                                        new PropertyInfo("name", "name", new StringType(), 0, false, false, true)])
 	                                                                 ];
 
-	auto schema = new SchemaInfo!(User, Customer);
+	auto schema = new SchemaInfoImpl!(User, Customer);
 	writeln(schema.getEntities().length);
 
 	pragma(msg, info);
