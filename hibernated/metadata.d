@@ -349,17 +349,14 @@ unittest {
 	                                                     new PropertyInfo("id", "id", new IntegerType(), 0, true, true, false)
 	                                                     ]);
 
-
-
-
-	//assert(entity.properties.length == 0);
+	assert(entity.properties.length == 1);
 	writeln("Running unittests");
 
 	@Entity
 	@Table("users")
 	class User {
 
-		@Id() @Generated
+		@Id @Generated
 		@Column("id_column")
 		int id;
 
@@ -376,30 +373,23 @@ unittest {
 		string getLogin() { return login; }
 		void setLogin(string login) { this.login = login; }
 
-		// no 
+		// no (), no column name
 		@Column
 		int testColumn;
-		
-
-		//mixin GenerateEntityMetadata!();
-		//pragma(msg, "User entity fields: " ~ fields);
 	}
 
 	@Entity
 	@Table("customer")
 	class Customer {
+		@Id @Generated
 		@Column
 		int id;
 		@Column
 		string name;
 	}
 
-	immutable string info = getEntityDef!User();
-	immutable string infos = entityListDef!(User, Customer)();
-
-//	string [] list = ["bla 1", "bla 2"];
-
-
+//	immutable string info = getEntityDef!User();
+//	immutable string infos = entityListDef!(User, Customer)();
 
 	immutable EntityInfo ei = cast(immutable EntityInfo)new EntityInfo("User", "users", cast (immutable PropertyInfo []) [
 	                                                                 new PropertyInfo("id", "id_column", new IntegerType(), 0, true, true, false),
@@ -426,17 +416,14 @@ unittest {
 	                                                                 ];
 
 
+	// Checking generated metadata
 	auto schema = new SchemaInfoImpl!(User, Customer);
+	assert(schema.getEntityCount() == 2);
 	assert(schema.findEntity("User").findProperty("name").columnName == "name_column");
 	assert(schema.findEntity("User").getProperties()[0].columnName == "id_column");
 	assert(schema.findEntity("User").getProperty(2).propertyName == "flags");
-
-	pragma(msg, info);
-	pragma(msg, infos);
-
-	writeln("User entity info: " ~ info);
-
-	pragma(msg, "Hello from unittest");
-	//assert(false);
-	assert(true);
+	assert(schema.findEntity("User").findProperty("id").generated == true);
+	assert(schema.findEntity("User").findProperty("id").key == true);
+	assert(schema.findEntity("Customer").findProperty("id").generated == true);
+	assert(schema.findEntity("Customer").findProperty("id").key == true);
 }
