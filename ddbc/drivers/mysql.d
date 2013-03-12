@@ -52,12 +52,11 @@
  * License:   $(LINK www.boost.org/LICENSE_1_0.txt, Boost License 1.0).
  * Author:   Steve Teale
  */
-module mysql.connection;
+module ddbc.drivers.mysql;
 
-import mysql.sha1;
+import ddbc.drivers.sha1;
 
-import vibe.core.net;
-import vibe.utils.string;
+import std.socket;
 
 import std.algorithm;
 import std.conv;
@@ -549,7 +548,7 @@ enum CommandType : ubyte
     STMT_FETCH          = 0x1c,
 }
 
-T consume(T)(TcpConnection conn) {
+T consume(T)(Socket conn) {
     ubyte[T.sizeof] buffer;
     conn.read(buffer);
     ubyte[] rng = buffer;
@@ -1895,7 +1894,7 @@ body
  * zero sequence number, to which the server replies with zero or more packets with sequential
  * sequence numbers.
  */
-class Connection : EventedObject
+class Connection //: EventedObject
 {
 protected:
     enum OpenState
@@ -1908,7 +1907,7 @@ protected:
         authenticated
     }
     OpenState     _open;
-    TcpConnection _socket;
+    Socket _socket;
 
     SvrCapFlags _sCaps, _cCaps;
     uint    _sThread;
@@ -1930,14 +1929,14 @@ protected:
     ubyte[] getPacket()
     {
         ubyte[4] header;
-        _socket.read(header);
+        _socket.receive(header);
         // number of bytes always set as 24-bit
         uint numDataBytes = (header[2] << 16) + (header[1] << 8) + header[0];
         enforceEx!MYX(header[3] == pktNumber, "Server packet out of order");
         bumpPacket();
 
         ubyte[] packet = new ubyte[numDataBytes];
-        _socket.read(packet);
+        _socket.receive(packet);
         assert(packet.length == numDataBytes, "Wrong number of bytes read");
         return packet;
     }
@@ -2102,6 +2101,12 @@ protected:
         enforceEx!MYX(packet.consume!ubyte() == 0, "Excepted \\0 terminating scramble buf");
 
         return authBuf;
+    }
+
+    Socket connectTcp(string host, ushort port) {
+        TcpSocket s = new TcpSocket();
+        s.connect(new InternetAddress(host, port));
+        return s;
     }
 
     void init_connection()
@@ -2289,12 +2294,12 @@ public:
 
     @property bool closed()
     {
-        return _open == OpenState.notConnected || !_socket.connected;
+        return _open == OpenState.notConnected || !_socket.isAlive;
     }
 
-   void acquire() { if( _socket ) _socket.acquire(); }
-   void release() { if( _socket ) _socket.release(); }
-   bool isOwner() { return _socket ? _socket.isOwner() : false; }
+   //void acquire() { if( _socket ) _socket.acquire(); }
+   //void release() { if( _socket ) _socket.release(); }
+   //bool isOwner() { return _socket ? _socket.isOwner() : false; }
 
     /**
      * Explicitly close the connection.
@@ -2314,12 +2319,12 @@ public:
      */
     void close()
     {
-        if (_open == OpenState.authenticated && _socket.connected)
+        if (_open == OpenState.authenticated && _socket.isAlive)
             quit();
 
         if (_open == OpenState.connected)
         {
-            if(_socket.connected)
+            if(_socket.isAlive)
                 _socket.close();
             _open = OpenState.notConnected;
         }

@@ -1,3 +1,5 @@
+module ddbc.drivers.sha1;
+
 import std.stdio;
 import std.conv;
 
