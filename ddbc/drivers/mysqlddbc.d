@@ -3,6 +3,7 @@ module ddbc.drivers.mysqlddbc;
 import std.string;
 import std.conv;
 import std.stdio;
+import std.variant;
 import ddbc.core;
 import ddbc.common;
 import ddbc.drivers.mysql;
@@ -68,8 +69,7 @@ public:
         // TODO:
     }
     override Statement createStatement() {
-        // TODO:
-        return null;
+        return new MySQLStatement(this);
     }
     override string getCatalog() {
         // TODO:
@@ -129,14 +129,19 @@ class MySQLResultSet : ddbc.core.ResultSet {
     private ddbc.drivers.mysql.ResultSet rs;
     private bool closed;
     private int currentRowIndex;
-    private Row currentRow;
     private int rowCount;
     private int[string] columnMap;
+    private bool lastIsNull;
+    private int columnCount;
 
     Variant getValue(int columnIndex) {
-        if (columnIndex < 1 || columnIndex > currentRow.length)
-            throw SQLException("Column index out of bounds: " ~ to!string(columnIndex));
-        return currentRow[columnIndex - 1];
+        if (columnIndex < 1 || columnIndex > columnCount)
+            throw new SQLException("Column index out of bounds: " ~ to!string(columnIndex));
+        if (currentRowIndex < 0 || currentRowIndex >= rowCount)
+            throw new SQLException("No current row in result set");
+        Variant res = rs[currentRowIndex][columnIndex - 1];
+        lastIsNull = !res.hasValue;
+        return res;
     }
 
 public:
@@ -146,8 +151,8 @@ public:
         closed = false;
         rowCount = rs.length;
         currentRowIndex = -1;
-        currentRow = null;
         columnMap = rs.getColNameMap();
+        columnCount = rs.getColNames().length;
     }
 
     override void close() {
@@ -156,20 +161,18 @@ public:
     }
     override bool first() {
         currentRowIndex = 0;
-        currentRow = rowCount > 0 ? rs[0] : null;
-        return currentRow != null;
+        return currentRowIndex >= 0 && currentRowIndex < rowCount;
     }
     override bool isFirst() {
-        return currentRow != null && currentRowIndex == 0;
+        return rowCount > 0 && currentRowIndex == 0;
     }
     override bool isLast() {
-        return currentRowIndex == rowCount - 1;
+        return rowCount > 0 && currentRowIndex == rowCount - 1;
     }
     override bool next() {
         if (currentRowIndex + 1 >= rowCount)
             return false;
         currentRowIndex++;
-        currentRow = rs[currentRowIndex];
         return true;
     }
     
@@ -181,27 +184,54 @@ public:
     }
     override bool getBoolean(int columnIndex) {
         Variant v = getValue(columnIndex);
-        return false;
+        if (lastIsNull)
+            return false;
+        if (v.convertsTo!(bool))
+            return v.get!(bool);
+        if (v.convertsTo!(int))
+            return v.get!(int) != 0;
+        if (v.convertsTo!(long))
+            return v.get!(long) != 0;
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to boolean");
     }
     override bool getBoolean(string columnName) {
         return getBoolean(findColumn(columnName));
     }
     override int getInt(int columnIndex) {
         Variant v = getValue(columnIndex);
-        return 0;
+        if (lastIsNull)
+            return 0;
+        if (v.convertsTo!(int))
+            return v.get!(int);
+        if (v.convertsTo!(long))
+            return to!int(v.get!(long));
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to int");
     }
     override int getInt(string columnName) {
         return getInt(findColumn(columnName));
     }
     override long getLong(int columnIndex) {
         Variant v = getValue(columnIndex);
-        return 0;
+        if (lastIsNull)
+            return 0;
+        if (v.convertsTo!(long))
+            return v.get!(long);
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to long");
     }
     override long getLong(string columnName) {
         return getLong(findColumn(columnName));
     }
+    override string getString(int columnIndex) {
+        Variant v = getValue(columnIndex);
+        if (lastIsNull)
+            return null;
+        return v.toString();
+    }
+    override string getString(string columnName) {
+        return getString(findColumn(columnName));
+    }
     override bool wasNull() {
-        return false;
+        return lastIsNull;
     }
 }
 

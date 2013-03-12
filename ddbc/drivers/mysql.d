@@ -2752,6 +2752,16 @@ private:
     }
 
 public:
+
+    string[] getColNames() { return _colNames; }
+
+    int[string] getColNameMap() { 
+        int[string] map;
+        foreach(index, item; _colNames)
+            map[item] = index;
+        return map;
+    }
+
     /**
      * Make the ResultSet behave as a random access range - empty
      *
@@ -2890,13 +2900,6 @@ private:
     }
 
 public:
-    string[] getColNames() { return _colNames; }
-    int[string] getColNameMap() { 
-        int[string] map;
-        foreach(item, index; _colNames)
-            map[item] = index;
-        return map;
-    }
 
     ~this()
     {

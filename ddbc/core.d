@@ -37,7 +37,9 @@ interface ResultSet {
 	int getInt(string columnName);
 	long getLong(int columnIndex);
 	long getLong(string columnName);
-	bool wasNull();
+    string getString(int columnIndex);
+    string getString(string columnName);
+    bool wasNull();
 }
 
 interface Statement {
