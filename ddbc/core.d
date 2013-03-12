@@ -32,7 +32,7 @@ interface ResultSet {
 
 	int findColumn(string columnName);
 	bool getBoolean(int columnIndex);
-	bool getBoolean(int columnIndex);
+	bool getBoolean(string columnName);
 	int getInt(int columnIndex);
 	int getInt(string columnName);
 	long getLong(int columnIndex);
@@ -42,7 +42,7 @@ interface ResultSet {
 
 interface Statement {
 	ResultSet executeQuery(string query);
-	bool executeUpdate();
+	int executeUpdate(string query);
 	void close();
 }
 
