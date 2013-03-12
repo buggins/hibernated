@@ -1931,7 +1931,7 @@ protected:
     ubyte[] getPacket()
     {
         ubyte[4] header;
-        int bytesRead = _socket.receive(header);
+        long bytesRead = _socket.receive(header);
         enforceEx!MYX(bytesRead == 4, "Server packet too short");
         // number of bytes always set as 24-bit
         uint numDataBytes = (header[2] << 16) + (header[1] << 8) + header[0];
@@ -2758,7 +2758,7 @@ public:
     int[string] getColNameMap() { 
         int[string] map;
         foreach(index, item; _colNames)
-            map[item] = index;
+            map[item] = cast(int)index;
         return map;
     }
 

@@ -28,24 +28,24 @@ public:
         this.params = params;
         //writeln("parsing url " ~ url);
         string urlParams;
-        int qmIndex = indexOf(url, '?');
+        auto qmIndex = indexOf(url, '?');
         if (qmIndex >=0 ) {
             urlParams = url[qmIndex + 1 .. $];
             url = url[0 .. qmIndex];
             // TODO: parse params
         }
         string dbName = "";
-        int firstSlashes = indexOf(url, "//");
-        int lastSlash = lastIndexOf(url, '/');
-        int hostNameStart = firstSlashes >= 0 ? firstSlashes + 2 : 0;
-        int hostNameEnd = lastSlash >=0 && lastSlash > firstSlashes + 1 ? lastSlash : url.length;
+		auto firstSlashes = indexOf(url, "//");
+		auto lastSlash = lastIndexOf(url, '/');
+		auto hostNameStart = firstSlashes >= 0 ? firstSlashes + 2 : 0;
+		auto hostNameEnd = lastSlash >=0 && lastSlash > firstSlashes + 1 ? lastSlash : url.length;
         if (hostNameEnd < url.length - 1) {
             dbName = url[hostNameEnd + 1 .. $];
         }
         hostname = url[hostNameStart..hostNameEnd];
         if (hostname.length == 0)
             hostname = "localhost";
-        int portDelimiter = indexOf(hostname, ":");
+		auto portDelimiter = indexOf(hostname, ":");
         if (portDelimiter >= 0) {
             string portString = hostname[portDelimiter + 1 .. $];
             hostname = hostname[0 .. portDelimiter];
@@ -151,10 +151,10 @@ public:
         this.stmt = stmt;
         this.rs = resultSet;
         closed = false;
-        rowCount = rs.length;
+        rowCount = cast(int)rs.length;
         currentRowIndex = -1;
         columnMap = rs.getColNameMap();
-        columnCount = rs.getColNames().length;
+        columnCount = cast(int)rs.getColNames().length;
     }
 
     override void close() {

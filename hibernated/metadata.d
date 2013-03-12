@@ -50,7 +50,7 @@ class EntityInfo {
 	}
 	immutable (PropertyInfo[]) getProperties() immutable { return properties; }
 	immutable (PropertyInfo[string]) getPropertyMap() immutable { return propertyMap; }
-	int getPropertyCount() immutable { return properties.length; }
+	ulong getPropertyCount() immutable { return properties.length; }
 	immutable (PropertyInfo) getProperty(int propertyIndex) immutable { return properties[propertyIndex]; }
 	immutable (PropertyInfo) findProperty(string propertyName) immutable { return propertyMap[propertyName]; }
 }

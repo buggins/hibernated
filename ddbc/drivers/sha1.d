@@ -205,7 +205,7 @@ public:
       return rv;
    }
 
-   bool input(const(ubyte)* message_array, uint length)
+   bool input(const(ubyte)* message_array, ulong length)
    {
       if (!length)
          return true;
