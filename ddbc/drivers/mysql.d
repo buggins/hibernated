@@ -1646,6 +1646,8 @@ public:
 
 bool isEOFPacket(ubyte[] packet)
 {
+    if (packet.length == 0)
+        return false;
     return packet.front == ResultPacketMarker.eof && packet.length < 9;
 }
 
@@ -1929,15 +1931,16 @@ protected:
     ubyte[] getPacket()
     {
         ubyte[4] header;
-        _socket.receive(header);
+        int bytesRead = _socket.receive(header);
+        enforceEx!MYX(bytesRead == 4, "Server packet too short");
         // number of bytes always set as 24-bit
         uint numDataBytes = (header[2] << 16) + (header[1] << 8) + header[0];
         enforceEx!MYX(header[3] == pktNumber, "Server packet out of order");
         bumpPacket();
 
         ubyte[] packet = new ubyte[numDataBytes];
-        _socket.receive(packet);
-        assert(packet.length == numDataBytes, "Wrong number of bytes read");
+        bytesRead = _socket.receive(packet);
+        assert(bytesRead == numDataBytes, "Wrong number of bytes read");
         return packet;
     }
 
@@ -1948,7 +1951,7 @@ protected:
     }
     body
     {
-        _socket.write(packet);
+        _socket.send(packet);
     }
 
     void send(ubyte[] header, ubyte[] data)
@@ -1958,9 +1961,9 @@ protected:
     }
     body
     {
-        _socket.write(header);
+        _socket.send(header);
         if(data.length)
-            _socket.write(data);
+            _socket.send(data);
     }
 
     void sendCmd(T)(CommandType cmd, T[] data)

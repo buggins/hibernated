@@ -350,7 +350,6 @@ unittest {
 	                                                     ]);
 
 	assert(entity.properties.length == 1);
-	writeln("Running unittests");
 
 	@Entity
 	@Table("users")
