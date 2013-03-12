@@ -223,11 +223,23 @@ public:
     override long getLong(string columnName) {
         return getLong(findColumn(columnName));
     }
+	string decodeTextBlob(ubyte[] data) {
+		char[] res = new char[data.length];
+		foreach (i, ch; data) {
+			res[i] = cast(char)ch;
+		}
+		return to!string(res);
+	}
     override string getString(int columnIndex) {
         Variant v = getValue(columnIndex);
         if (lastIsNull)
             return null;
-        return v.toString();
+		if (v.convertsTo!(ubyte[])) {
+			// assume blob encoding is utf-8
+			// TODO: check field encoding
+			return decodeTextBlob(v.get!(ubyte[]));
+		}
+		return v.toString();
     }
     override string getString(string columnName) {
         return getString(findColumn(columnName));
