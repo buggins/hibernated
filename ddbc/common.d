@@ -197,6 +197,9 @@ public:
 		throw new SQLException("Method not implemented");
 	}
 
+	override bool isNull(int columnIndex) {
+		throw new SQLException("Method not implemented");
+	}
 
 	//Retrieves the number, types and properties of this ResultSet object's columns
 	override ResultSetMetadata getMetaData() {

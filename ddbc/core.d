@@ -1,7 +1,9 @@
 module ddbc.core;
 
+import std.exception;
+
 class SQLException : Exception {
-	this(string msg) { super(msg); }
+	this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
 }
 
 interface Connection {
@@ -68,6 +70,7 @@ interface ResultSet {
 	float getFloat(string columnName);
 	string getString(int columnIndex);
     string getString(string columnName);
+	bool isNull(int columnIndex);
     bool wasNull();
 }
 
@@ -88,11 +91,16 @@ interface PreparedStatement : Statement {
 	void setInt(int parameterIndex, int x);
 	void setShort(int parameterIndex, short x);
 	void setByte(int parameterIndex, byte x);
+	void setBytes(int parameterIndex, byte[] x);
 	void setUlong(int parameterIndex, ulong x);
 	void setUint(int parameterIndex, uint x);
 	void setUshort(int parameterIndex, ushort x);
 	void setUbyte(int parameterIndex, ubyte x);
+	void setUbytes(int parameterIndex, ubyte[] x);
 	void setString(int parameterIndex, string x);
+
+	void setNull(int parameterIndex);
+	void setNull(int parameterIndex, int sqlType);
 }
 
 interface Driver {

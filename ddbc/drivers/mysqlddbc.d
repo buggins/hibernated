@@ -1,12 +1,13 @@
 module ddbc.drivers.mysqlddbc;
 
 import std.algorithm;
-import std.string;
 import std.conv;
+import std.exception;
 import std.stdio;
+import std.string;
 import std.variant;
-import ddbc.core;
 import ddbc.common;
+import ddbc.core;
 import ddbc.drivers.mysql;
 
 class MySQLConnection : ddbc.core.Connection {
@@ -232,9 +233,33 @@ public:
         checkIndex(parameterIndex);
         cmd.param(parameterIndex-1) = x;
     }
+    override void setBytes(int parameterIndex, byte[] x) {
+        checkIndex(parameterIndex);
+        if (x == null)
+            setNull(parameterIndex);
+        else
+            cmd.param(parameterIndex-1) = x;
+    }
+    override void setUbytes(int parameterIndex, ubyte[] x) {
+        checkIndex(parameterIndex);
+        if (x == null)
+            setNull(parameterIndex);
+        else
+            cmd.param(parameterIndex-1) = x;
+    }
     override void setString(int parameterIndex, string x) {
         checkIndex(parameterIndex);
-        cmd.param(parameterIndex-1) = x;
+        if (x == null)
+            setNull(parameterIndex);
+        else
+            cmd.param(parameterIndex-1) = x;
+    }
+    override void setNull(int parameterIndex) {
+        checkIndex(parameterIndex);
+        cmd.setNullParam(parameterIndex-1);
+    }
+    override void setNull(int parameterIndex, int sqlType) {
+        setNull(parameterIndex);
     }
 }
 
@@ -250,11 +275,9 @@ class MySQLResultSet : ResultSetImpl {
 
     Variant getValue(int columnIndex) {
 		checkClosed();
-        if (columnIndex < 1 || columnIndex > columnCount)
-            throw new SQLException("Column index out of bounds: " ~ to!string(columnIndex));
-        if (currentRowIndex < 0 || currentRowIndex >= rowCount)
-            throw new SQLException("No current row in result set");
-		lastIsNull = rs[currentRowIndex].isNull(columnIndex - 1);
+        enforceEx!SQLException(columnIndex < 1 || columnIndex > columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
+        enforceEx!SQLException(currentRowIndex < 0 || currentRowIndex >= rowCount, "No current row in result set");
+        lastIsNull = rs[currentRowIndex].isNull(columnIndex - 1);
 		Variant res;
 		if (!lastIsNull)
 		    res = rs[currentRowIndex][columnIndex - 1];
@@ -451,6 +474,12 @@ public:
     override bool wasNull() {
 		checkClosed();
 		return lastIsNull;
+    }
+    override bool isNull(int columnIndex) {
+        checkClosed();
+        enforceEx!SQLException(columnIndex < 1 || columnIndex > columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
+        enforceEx!SQLException(currentRowIndex < 0 || currentRowIndex >= rowCount, "No current row in result set");
+        return rs[currentRowIndex].isNull(columnIndex - 1);
     }
 
     //Retrieves the Statement object that produced this ResultSet object.

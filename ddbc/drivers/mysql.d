@@ -3621,6 +3621,13 @@ public:
         return _inParams[index];
     }
 
+	void setNullParam(uint index) {
+		enforceEx!MYX(_hStmt, "The statement must be prepared before parameters are bound.");
+		enforceEx!MYX(index < _psParams, "Parameter index out of range.");
+		_psa[index].isNull = true;
+		_inParams[index]="";
+	}
+
     /**
      * Execute a one-off SQL command.
      *
