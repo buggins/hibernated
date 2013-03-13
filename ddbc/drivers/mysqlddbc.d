@@ -6,6 +6,7 @@ import std.exception;
 import std.stdio;
 import std.string;
 import std.variant;
+import core.sync.mutex;
 import ddbc.common;
 import ddbc.core;
 import ddbc.drivers.mysql;
@@ -22,6 +23,7 @@ private:
     ddbc.drivers.mysql.Connection conn;
     bool closed;
     bool autocommit;
+    Mutex mutex;
 
 
 	MySQLStatement [] activeStatements;
@@ -40,7 +42,17 @@ private:
 
 public:
 
+    void lock() {
+        mutex.lock();
+    }
+
+    void unlock() {
+        mutex.unlock();
+    }
+
     ddbc.drivers.mysql.Connection getConnection() { return conn; }
+
+
 	void onStatementClosed(MySQLStatement stmt) {
 		foreach(index, item; activeStatements) {
 			if (item == stmt) {
@@ -51,6 +63,7 @@ public:
 	}
 
     this(string url, string[string] params) {
+        mutex = new Mutex();
         this.url = url;
         this.params = params;
         //writeln("parsing url " ~ url);
@@ -92,44 +105,74 @@ public:
     }
     override void close() {
 		checkClosed();
-		closeUnclosedStatements();
+
+        lock();
+        scope(exit) unlock();
+
+        closeUnclosedStatements();
+
         conn.close();
         closed = true;
     }
     override void commit() {
         checkClosed();
+
+        lock();
+        scope(exit) unlock();
+
         Statement stmt = createStatement();
         scope(exit) stmt.close();
         stmt.executeUpdate("COMMIT");
     }
     override Statement createStatement() {
         checkClosed();
+
+        lock();
+        scope(exit) unlock();
+
         MySQLStatement stmt = new MySQLStatement(this);
 		activeStatements ~= stmt;
         return stmt;
     }
+
     PreparedStatement prepareStatement(string sql) {
         checkClosed();
+
+        lock();
+        scope(exit) unlock();
+
         MySQLPreparedStatement stmt = new MySQLPreparedStatement(this, sql);
         activeStatements ~= stmt;
         return stmt;
     }
+
     override string getCatalog() {
         return dbName;
     }
+
     /// Sets the given catalog name in order to select a subspace of this Connection object's database in which to work.
     override void setCatalog(string catalog) {
         checkClosed();
         if (dbName == catalog)
             return;
+
+        lock();
+        scope(exit) unlock();
+
         conn.selectDB(catalog);
         dbName = catalog;
     }
+
     override bool isClosed() {
         return closed;
     }
+
     override void rollback() {
         checkClosed();
+
+        lock();
+        scope(exit) unlock();
+
         Statement stmt = createStatement();
         scope(exit) stmt.close();
         stmt.executeUpdate("ROLLBACK");
@@ -141,6 +184,9 @@ public:
         checkClosed();
         if (this.autocommit == autoCommit)
             return;
+        lock();
+        scope(exit) unlock();
+
         Statement stmt = createStatement();
         scope(exit) stmt.close();
         stmt.executeUpdate("SET autocommit=" ~ (autoCommit ? "1" : "0"));
@@ -149,11 +195,27 @@ public:
 }
 
 class MySQLStatement : Statement {
-
-    private MySQLConnection conn;
-    private Command * cmd;
+private:
+    MySQLConnection conn;
+    Command * cmd;
     ddbc.drivers.mysql.ResultSet rs;
 	MySQLResultSet resultSet;
+
+    bool closed;
+
+public:
+    void checkClosed() {
+        enforceEx!SQLException(!closed, "Statement is already closed");
+    }
+
+    void lock() {
+        conn.lock();
+    }
+    
+    void unlock() {
+        conn.unlock();
+    }
+
     this(MySQLConnection conn) {
         this.conn = conn;
     }
@@ -189,22 +251,33 @@ class MySQLStatement : Statement {
     }
 public:
     MySQLConnection getConnection() {
+        checkClosed();
         return conn;
     }
     override ddbc.core.ResultSet executeQuery(string query) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         cmd = new Command(conn.getConnection(), query);
         rs = cmd.execSQLResult();
         resultSet = new MySQLResultSet(this, rs, createMetadata(cmd.getResultHeaders().getFieldDescriptions()));
         return resultSet;
     }
     override int executeUpdate(string query) {
-		cmd = new Command(conn.getConnection(), query);
+        checkClosed();
+        lock();
+        scope(exit) unlock();
+        cmd = new Command(conn.getConnection(), query);
 		ulong rowsAffected = 0;
 		cmd.execSQL(rowsAffected);
         return cast(int)rowsAffected;
     }
     override void close() {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         closeResultSet();
+        closed = true;
     }
     void closeResultSet() {
         if (cmd == null) {
@@ -244,6 +317,9 @@ public:
 
     /// Retrieves a ResultSetMetaData object that contains information about the columns of the ResultSet object that will be returned when this PreparedStatement object is executed.
     override ResultSetMetaData getMetaData() {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         if (metadata is null)
             metadata = createMetadata(cmd.getPreparedHeaders().getFieldDescriptions());
         return metadata;
@@ -251,64 +327,106 @@ public:
 
     /// Retrieves the number, types and properties of this PreparedStatement object's parameters.
     override ParameterMetaData getParameterMetaData() {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         if (paramMetadata is null)
             paramMetadata = createMetadata(cmd.getPreparedHeaders().getParamDescriptions());
         return paramMetadata;
     }
 
     override int executeUpdate() {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         ulong rowsAffected = 0;
         cmd.execPrepared(rowsAffected);
         return cast(int)rowsAffected;
     }
     override ddbc.core.ResultSet executeQuery() {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         rs = cmd.execPreparedResult();
         resultSet = new MySQLResultSet(this, rs, getMetaData());
         return resultSet;
     }
     
     override void clearParameters() {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         for (int i = 1; i <= paramCount; i++)
             setNull(i);
     }
     
     override void setBoolean(int parameterIndex, bool x) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         checkIndex(parameterIndex);
         cmd.param(parameterIndex-1) = x;
     }
     override void setLong(int parameterIndex, long x) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         checkIndex(parameterIndex);
         cmd.param(parameterIndex-1) = x;
     }
     override void setUlong(int parameterIndex, ulong x) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         checkIndex(parameterIndex);
         cmd.param(parameterIndex-1) = x;
     }
     override void setInt(int parameterIndex, int x) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         checkIndex(parameterIndex);
         cmd.param(parameterIndex-1) = x;
     }
     override void setUint(int parameterIndex, uint x) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         checkIndex(parameterIndex);
         cmd.param(parameterIndex-1) = x;
     }
     override void setShort(int parameterIndex, short x) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         checkIndex(parameterIndex);
         cmd.param(parameterIndex-1) = x;
     }
     override void setUshort(int parameterIndex, ushort x) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         checkIndex(parameterIndex);
         cmd.param(parameterIndex-1) = x;
     }
     override void setByte(int parameterIndex, byte x) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         checkIndex(parameterIndex);
         cmd.param(parameterIndex-1) = x;
     }
     override void setUbyte(int parameterIndex, ubyte x) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         checkIndex(parameterIndex);
         cmd.param(parameterIndex-1) = x;
     }
     override void setBytes(int parameterIndex, byte[] x) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         checkIndex(parameterIndex);
         if (x == null)
             setNull(parameterIndex);
@@ -316,6 +434,9 @@ public:
             cmd.param(parameterIndex-1) = x;
     }
     override void setUbytes(int parameterIndex, ubyte[] x) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         checkIndex(parameterIndex);
         if (x == null)
             setNull(parameterIndex);
@@ -323,6 +444,9 @@ public:
             cmd.param(parameterIndex-1) = x;
     }
     override void setString(int parameterIndex, string x) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         checkIndex(parameterIndex);
         if (x == null)
             setNull(parameterIndex);
@@ -330,10 +454,16 @@ public:
             cmd.param(parameterIndex-1) = x;
     }
     override void setNull(int parameterIndex) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         checkIndex(parameterIndex);
         cmd.setNullParam(parameterIndex-1);
     }
     override void setNull(int parameterIndex, int sqlType) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         setNull(parameterIndex);
     }
 }
@@ -366,6 +496,15 @@ class MySQLResultSet : ResultSetImpl {
 	}
 
 public:
+
+    void lock() {
+        stmt.lock();
+    }
+
+    void unlock() {
+        stmt.unlock();
+    }
+
     this(MySQLStatement stmt, ddbc.drivers.mysql.ResultSet resultSet, ResultSetMetaData metadata) {
         this.stmt = stmt;
         this.rs = resultSet;
@@ -392,30 +531,43 @@ public:
 
     //Retrieves the number, types and properties of this ResultSet object's columns
     override ResultSetMetaData getMetaData() {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         return metadata;
     }
 
     override void close() {
         checkClosed();
-       	stmt.closeResultSet();
+        lock();
+        scope(exit) unlock();
+        stmt.closeResultSet();
        	closed = true;
     }
     override bool first() {
 		checkClosed();
+        lock();
+        scope(exit) unlock();
         currentRowIndex = 0;
         return currentRowIndex >= 0 && currentRowIndex < rowCount;
     }
     override bool isFirst() {
 		checkClosed();
-		return rowCount > 0 && currentRowIndex == 0;
+        lock();
+        scope(exit) unlock();
+        return rowCount > 0 && currentRowIndex == 0;
     }
     override bool isLast() {
 		checkClosed();
-		return rowCount > 0 && currentRowIndex == rowCount - 1;
+        lock();
+        scope(exit) unlock();
+        return rowCount > 0 && currentRowIndex == rowCount - 1;
     }
     override bool next() {
 		checkClosed();
-		if (currentRowIndex + 1 >= rowCount)
+        lock();
+        scope(exit) unlock();
+        if (currentRowIndex + 1 >= rowCount)
             return false;
         currentRowIndex++;
         return true;
@@ -423,13 +575,18 @@ public:
     
     override int findColumn(string columnName) {
 		checkClosed();
-		int * p = (columnName in columnMap);
+        lock();
+        scope(exit) unlock();
+        int * p = (columnName in columnMap);
         if (!p)
             throw new SQLException("Column " ~ columnName ~ " not found");
         return *p + 1;
     }
 
     override bool getBoolean(int columnIndex) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         Variant v = getValue(columnIndex);
         if (lastIsNull)
             return false;
@@ -442,6 +599,9 @@ public:
         throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to boolean");
     }
     override ubyte getUbyte(int columnIndex) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         Variant v = getValue(columnIndex);
         if (lastIsNull)
             return 0;
@@ -452,6 +612,9 @@ public:
         throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to ubyte");
     }
     override byte getByte(int columnIndex) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         Variant v = getValue(columnIndex);
         if (lastIsNull)
             return 0;
@@ -462,6 +625,9 @@ public:
         throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to byte");
     }
     override short getShort(int columnIndex) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         Variant v = getValue(columnIndex);
         if (lastIsNull)
             return 0;
@@ -472,6 +638,9 @@ public:
         throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to short");
     }
     override ushort getUshort(int columnIndex) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         Variant v = getValue(columnIndex);
         if (lastIsNull)
             return 0;
@@ -482,6 +651,9 @@ public:
         throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to ushort");
     }
     override int getInt(int columnIndex) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         Variant v = getValue(columnIndex);
         if (lastIsNull)
             return 0;
@@ -492,6 +664,9 @@ public:
         throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to int");
     }
     override uint getUint(int columnIndex) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         Variant v = getValue(columnIndex);
         if (lastIsNull)
             return 0;
@@ -502,6 +677,9 @@ public:
         throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to uint");
     }
     override long getLong(int columnIndex) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         Variant v = getValue(columnIndex);
         if (lastIsNull)
             return 0;
@@ -510,6 +688,9 @@ public:
         throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to long");
     }
     override ulong getUlong(int columnIndex) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         Variant v = getValue(columnIndex);
         if (lastIsNull)
             return 0;
@@ -518,6 +699,9 @@ public:
         throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to ulong");
     }
     override double getDouble(int columnIndex) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         Variant v = getValue(columnIndex);
         if (lastIsNull)
             return 0;
@@ -526,6 +710,9 @@ public:
         throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to double");
     }
     override float getFloat(int columnIndex) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         Variant v = getValue(columnIndex);
         if (lastIsNull)
             return 0;
@@ -534,6 +721,9 @@ public:
         throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to float");
     }
     override ubyte[] getBytes(int columnIndex) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         Variant v = getValue(columnIndex);
         if (lastIsNull)
             return null;
@@ -543,6 +733,9 @@ public:
         throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to ubyte[]");
     }
     override string getString(int columnIndex) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         Variant v = getValue(columnIndex);
         if (lastIsNull)
             return null;
@@ -554,11 +747,15 @@ public:
         return v.toString();
     }
     override bool wasNull() {
-		checkClosed();
-		return lastIsNull;
+        checkClosed();
+        lock();
+        scope(exit) unlock();
+        return lastIsNull;
     }
     override bool isNull(int columnIndex) {
         checkClosed();
+        lock();
+        scope(exit) unlock();
         enforceEx!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
         enforceEx!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
         return rs[currentRowIndex].isNull(columnIndex - 1);
@@ -566,12 +763,17 @@ public:
 
     //Retrieves the Statement object that produced this ResultSet object.
     override Statement getStatement() {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
         return stmt;
     }
 
     //Retrieves the current row number
     override int getRow() {
         checkClosed();
+        lock();
+        scope(exit) unlock();
         if (currentRowIndex <0 || currentRowIndex >= rowCount)
             return 0;
         return currentRowIndex + 1;
@@ -580,6 +782,8 @@ public:
     //Retrieves the fetch size for this ResultSet object.
     override int getFetchSize() {
         checkClosed();
+        lock();
+        scope(exit) unlock();
         return rowCount;
     }
 }
