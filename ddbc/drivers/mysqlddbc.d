@@ -92,14 +92,19 @@ public:
         closed = true;
     }
     override void commit() {
-        // TODO:
+        checkClosed();
+        Statement stmt = createStatement();
+        scope(exit) stmt.close();
+        stmt.executeUpdate("COMMIT");
     }
     override Statement createStatement() {
-		MySQLStatement stmt = new MySQLStatement(this);
+        checkClosed();
+        MySQLStatement stmt = new MySQLStatement(this);
 		activeStatements ~= stmt;
         return stmt;
     }
     PreparedStatement prepareStatement(string sql) {
+        checkClosed();
         MySQLPreparedStatement stmt = new MySQLPreparedStatement(this, sql);
         activeStatements ~= stmt;
         return stmt;
@@ -112,7 +117,10 @@ public:
         return closed;
     }
     override void rollback() {
-        // TODO:
+        checkClosed();
+        Statement stmt = createStatement();
+        scope(exit) stmt.close();
+        stmt.executeUpdate("ROLLBACK");
     }
     override bool getAutoCommit() {
         // TODO:
