@@ -132,6 +132,12 @@ public:
 	override byte getByte(string columnName) {
 		return getByte(findColumn(columnName));
 	}
+	override ubyte[] getBytes(int columnIndex) {
+		throw new SQLException("Method not implemented");
+	}
+	override ubyte[] getBytes(string columnName) {
+		return getBytes(findColumn(columnName));
+	}
 	override short getShort(int columnIndex) {
 		throw new SQLException("Method not implemented");
 	}
@@ -190,8 +196,21 @@ public:
 		throw new SQLException("Method not implemented");
 	}
 
+
 	//Retrieves the number, types and properties of this ResultSet object's columns
 	override ResultSetMetadata getMetaData() {
+		throw new SQLException("Method not implemented");
+	}
+	//Retrieves the Statement object that produced this ResultSet object.
+	override Statement getStatement() {
+		throw new SQLException("Method not implemented");
+	}
+	//Retrieves the current row number
+	override int getRow() {
+		throw new SQLException("Method not implemented");
+	}
+	//Retrieves the fetch size for this ResultSet object.
+	override int getFetchSize() {
 		throw new SQLException("Method not implemented");
 	}
 }

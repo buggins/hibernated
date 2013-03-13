@@ -32,12 +32,20 @@ interface ResultSet {
 
 	//Retrieves the number, types and properties of this ResultSet object's columns
 	ResultSetMetadata getMetaData();
+	//Retrieves the Statement object that produced this ResultSet object.
+	Statement getStatement();
+	//Retrieves the current row number
+	int getRow();
+	//Retrieves the fetch size for this ResultSet object.
+	int getFetchSize();
 
 	int findColumn(string columnName);
 	bool getBoolean(int columnIndex);
 	bool getBoolean(string columnName);
 	ubyte getUbyte(int columnIndex);
 	ubyte getUbyte(string columnName);
+	ubyte[] getBytes(int columnIndex);
+	ubyte[] getBytes(string columnName);
 	byte getByte(int columnIndex);
 	byte getByte(string columnName);
 	short getShort(int columnIndex);

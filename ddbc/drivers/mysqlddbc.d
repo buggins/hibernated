@@ -350,6 +350,15 @@ public:
             return v.get!(float);
         throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to float");
     }
+    override ubyte[] getBytes(int columnIndex) {
+        Variant v = getValue(columnIndex);
+        if (lastIsNull)
+            return null;
+        if (v.convertsTo!(ubyte[])) {
+            return v.get!(ubyte[]);
+        }
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to ubyte[]");
+    }
     override string getString(int columnIndex) {
         Variant v = getValue(columnIndex);
         if (lastIsNull)
@@ -364,6 +373,25 @@ public:
     override bool wasNull() {
 		checkClosed();
 		return lastIsNull;
+    }
+
+    //Retrieves the Statement object that produced this ResultSet object.
+    override Statement getStatement() {
+        return stmt;
+    }
+
+    //Retrieves the current row number
+    override int getRow() {
+        checkClosed();
+        if (currentRowIndex <0 || currentRowIndex >= rowCount)
+            return 0;
+        return currentRowIndex + 1;
+    }
+
+    //Retrieves the fetch size for this ResultSet object.
+    override int getFetchSize() {
+        checkClosed();
+        return rowCount;
     }
 }
 
