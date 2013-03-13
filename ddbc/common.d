@@ -43,6 +43,7 @@ class ConnectionWrapper : Connection {
 	override void rollback() { base.rollback(); }
 	override bool getAutoCommit() { return base.getAutoCommit(); }
 	override void setAutoCommit(bool autoCommit) { base.setAutoCommit(autoCommit); }
+	override void setCatalog(string catalog) { base.setCatalog(catalog); }
 }
 
 // TODO: implement limits

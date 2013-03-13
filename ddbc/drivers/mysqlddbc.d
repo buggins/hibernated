@@ -110,8 +110,13 @@ public:
         return stmt;
     }
     override string getCatalog() {
-        // TODO:
-        return "";
+        return dbName;
+    }
+    /// Sets the given catalog name in order to select a subspace of this Connection object's database in which to work.
+    override void setCatalog(string catalog) {
+        checkClosed();
+        conn.selectDB(catalog);
+        dbName = catalog;
     }
     override bool isClosed() {
         return closed;

@@ -7,15 +7,26 @@ class SQLException : Exception {
 }
 
 interface Connection {
+	/// Releases this Connection object's database and JDBC resources immediately instead of waiting for them to be automatically released.
 	void close();
+	/// Makes all changes made since the previous commit/rollback permanent and releases any database locks currently held by this Connection object.
 	void commit();
+	/// Retrieves this Connection object's current catalog name.
 	string getCatalog();
+	/// Sets the given catalog name in order to select a subspace of this Connection object's database in which to work.
+	void setCatalog(string catalog);
+	/// Retrieves whether this Connection object has been closed.
 	bool isClosed();
+	/// Undoes all changes made in the current transaction and releases any database locks currently held by this Connection object.
 	void rollback();
+	/// Retrieves the current auto-commit mode for this Connection object.
 	bool getAutoCommit();
+	/// Sets this connection's auto-commit mode to the given state.
 	void setAutoCommit(bool autoCommit);
 	// statements
+	/// Creates a Statement object for sending SQL statements to the database.
 	Statement createStatement();
+	/// Creates a PreparedStatement object for sending parameterized SQL statements to the database.
 	PreparedStatement prepareStatement(string query);
 }
 
