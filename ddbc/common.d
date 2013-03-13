@@ -34,6 +34,7 @@ class ConnectionWrapper : Connection {
 		closed = true; 
 		pool.onConnectionClosed(base); 
 	}
+	override PreparedStatement prepareStatement(string query) { return base.prepareStatement(query); }
 	override void commit() { base.commit(); }
 	override Statement createStatement() { return base.createStatement(); }
 	override string getCatalog() { return base.getCatalog(); }

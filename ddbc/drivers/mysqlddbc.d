@@ -98,6 +98,11 @@ public:
 		activeStatements ~= stmt;
         return stmt;
     }
+    PreparedStatement prepareStatement(string sql) {
+        MySQLPreparedStatement stmt = new MySQLPreparedStatement(this, sql);
+        activeStatements ~= stmt;
+        return stmt;
+    }
     override string getCatalog() {
         // TODO:
         return "";
@@ -141,7 +146,7 @@ public:
 		cmd = new Command(conn.getConnection(), query);
 		ulong rowsAffected = 0;
 		cmd.execSQL(rowsAffected);
-		return cast(int)rowsAffected;
+        return cast(int)rowsAffected;
     }
     override void close() {
         closeResultSet();
@@ -157,6 +162,34 @@ public:
 			resultSet.onStatementClosed();
 			resultSet = null;
 		}
+    }
+}
+
+class MySQLPreparedStatement : MySQLStatement, PreparedStatement {
+    string query;
+    this(MySQLConnection conn, string query) {
+        super(conn);
+        this.query = query;
+    }
+    
+public:
+    override int executeUpdate() {
+        return 0;
+    }
+    override ddbc.core.ResultSet executeQuery() {
+        return null;
+    }
+    
+    override void clearParameters() {
+    }
+    
+    override void setBoolean(int parameterIndex, bool x) {
+    }
+    override void setInt(int parameterIndex, int x) {
+    }
+    override void setShort(int parameterIndex, short x) {
+    }
+    override void setString(int parameterIndex, short x) {
     }
 }
 

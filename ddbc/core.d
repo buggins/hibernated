@@ -7,12 +7,14 @@ class SQLException : Exception {
 interface Connection {
 	void close();
 	void commit();
-	Statement createStatement();
 	string getCatalog();
 	bool isClosed();
 	void rollback();
 	bool getAutoCommit();
 	void setAutoCommit(bool autoCommit);
+	// statements
+	Statement createStatement();
+	PreparedStatement prepareStatement(string query);
 }
 
 interface ResultSetMetadata {
@@ -73,6 +75,18 @@ interface Statement {
 	ResultSet executeQuery(string query);
 	int executeUpdate(string query);
 	void close();
+}
+
+interface PreparedStatement : Statement {
+	int executeUpdate();
+	ResultSet executeQuery();
+
+	void clearParameters();
+
+	void setBoolean(int parameterIndex, bool x);
+	void setInt(int parameterIndex, int x);
+	void setShort(int parameterIndex, short x);
+	void setString(int parameterIndex, short x);
 }
 
 interface Driver {
