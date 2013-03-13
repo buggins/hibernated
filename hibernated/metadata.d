@@ -6,6 +6,8 @@ import std.traits;
 import std.typecons;
 import std.typetuple;
 
+import ddbc.core;
+
 import hibernated.annotations;
 import hibernated.type;
 
@@ -15,8 +17,12 @@ import hibernated.type;
 //	immutable string[] getPropertyNames();
 //}
 
+
+
 class PropertyInfo {
 public:
+	alias void function(Object, DataSetReader, int index) ReaderFunc;
+	alias void function(Object, DataSetWriter, int index) WriterFunc;
 	immutable string propertyName;
 	immutable string columnName;
 	immutable Type columnType;
@@ -24,6 +30,8 @@ public:
 	immutable bool key;
 	immutable bool generated;
 	immutable bool nullable;
+	ReaderFunc readFunc;
+	WriterFunc writeFunc;
 	this(string propertyName, string columnName, immutable Type columnType, int length, bool key, bool generated, bool nullable) {
 		this.propertyName = propertyName;
 		this.columnName = columnName;
@@ -73,6 +81,14 @@ string getterNameToFieldName(immutable string name) {
 		return toLower(name[3..4]) ~ name[4..$];
 	if (name[0..2] == "is")
 		return toLower(name[2..3]) ~ name[3..$];
+	return "_" ~ name;
+}
+
+string getterNameToSetterName(immutable string name) {
+	if (name[0..3] == "get")
+		return "set" ~ name[4..$]; // e.g. getValue() -> setValue()
+	if (name[0..2] == "is")
+		return "set" ~ toUpper(name[0..1]) ~ name[1..$]; // e.g.  isDefault()->setIsDefault()
 	return "_" ~ name;
 }
 
@@ -190,6 +206,22 @@ string getPropertyName(T, string m)() {
 	return m;
 }
 
+string getPropertyReadCode(T, string m)() {
+	alias typeof(__traits(getMember, T, m)) ti;
+	static if (is(ti == function)) {
+		return "entity." ~ m ~ "()";
+	}
+	return "entity." ~ m;
+}
+
+string getPropertyWriteCode(T, string m)() {
+	alias typeof(__traits(getMember, T, m)) ti;
+	static if (is(ti == function)) {
+		return "entity." ~ getterNameToSetterName(m) ~ "(" ~ getColumnTypeDatasetReadCode!(T, m)() ~ ");";
+	}
+	return "entity." ~ m ~ " = " ~ getColumnTypeDatasetReadCode!(T, m)() ~ ";";
+}
+
 string getColumnTypeName(T, string m)() {
 	alias typeof(__traits(getMember, T, m)) ti;
 	static if (is(ti == int)) {
@@ -205,6 +237,9 @@ string getColumnTypeName(T, string m)() {
 		static if (is(ReturnType!(ti) == int)) {
 			return "new IntegerType()";
 		}
+		static if (is(ReturnType!(ti) == long)) {
+			return "new IntegerType()";
+		}
 		static if (is(ReturnType!(ti) == string)) {
 			return "new StringType()";
 		}
@@ -212,7 +247,59 @@ string getColumnTypeName(T, string m)() {
 	return null;
 }
 
+string getColumnTypeDatasetReadCode(T, string m)() {
+	alias typeof(__traits(getMember, T, m)) ti;
+	static if (is(ti == int)) {
+		return "r.getInt(index)";
+	}
+	static if (is(ti == long)) {
+		return "r.getLong(index)";
+	}
+	static if (is(ti == string)) {
+		return "r.getString(index)";
+	}
+	static if (is(ti == function)) {
+		static if (is(ReturnType!(ti) == int)) {
+			return "r.getInt(index)";
+		}
+		static if (is(ReturnType!(ti) == long)) {
+			return "r.getLong(index)";
+		}
+		static if (is(ReturnType!(ti) == string)) {
+			return "r.getString(index)";
+		}
+	}
+	return null;
+}
+
+string getColumnTypeDatasetWriteCode(T, string m)() {
+	alias typeof(__traits(getMember, T, m)) ti;
+	immutable string readCode = getPropertyReadCode!(T,m)();
+	static if (is(ti == int)) {
+		return "r.setInt(index, " ~ readCode ~ ");";
+	}
+	static if (is(ti == long)) {
+		return "r.setLong(index, " ~ readCode ~ ");";
+	}
+	static if (is(ti == string)) {
+		return "r.setString(index, " ~ readCode ~ ");";
+	}
+	static if (is(ti == function)) {
+		static if (is(ReturnType!(ti) == int)) {
+			return "r.setInt(index, " ~ readCode ~ ");";
+		}
+		static if (is(ReturnType!(ti) == long)) {
+			return "r.setLong(index, " ~ readCode ~ ");";
+		}
+		static if (is(ReturnType!(ti) == string)) {
+			return "r.setString(index, " ~ readCode ~ ");";
+		}
+	}
+	return null;
+}
+
 string getPropertyDef(T, immutable string m)() {
+	immutable string entityClassName = T.stringof;
 	immutable string propertyName = getPropertyName!(T,m)();
 	static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
 	immutable bool isId = hasIdAnnotation!(T, m)();
@@ -222,6 +309,28 @@ string getPropertyDef(T, immutable string m)() {
 	immutable bool nullable = getColumnNullable!(T, m)();
 	immutable bool unique = getColumnUnique!(T, m)();
 	immutable string typeName = getColumnTypeName!(T, m)();
+	immutable string propertyReadCode = getPropertyReadCode!(T,m)();
+	immutable string datasetReadCode = getColumnTypeDatasetReadCode!(T,m)();
+	immutable string propertyWriteCode = getPropertyWriteCode!(T,m)();
+	immutable string datasetWriteCode = getColumnTypeDatasetWriteCode!(T,m)();
+	immutable string readerFuncDef = "\n" ~
+		"void function(Object obj, DataSetReader r, int index) { \n" ~ 
+		"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+			"    " ~ propertyWriteCode ~ " \n" ~
+		" }\n";
+	immutable string writerFuncDef = "\n" ~
+		"void function(Object obj, DataSetWriter r, int index) { \n" ~ 
+			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+			"    " ~ datasetWriteCode ~ " \n" ~
+			" }\n";
+
+//	pragma(msg, propertyReadCode);
+//	pragma(msg, datasetReadCode);
+//	pragma(msg, propertyWriteCode);
+//	pragma(msg, datasetWriteCode);
+	pragma(msg, readerFuncDef);
+	pragma(msg, writerFuncDef);
+
 	static assert (typeName != null, "Cannot determine column type for member " ~ m ~ " of type " ~ T.stringof);
 	return "    new PropertyInfo(\"" ~ propertyName ~ "\", \"" ~ columnName ~ "\", " ~ typeName ~ ", " ~ format("%s",length) ~ ", " ~ (isId ? "true" : "false")  ~ ", " ~ (isGenerated ? "true" : "false")  ~ ", " ~ (nullable ? "true" : "false") ~ ")";
 }
@@ -379,7 +488,7 @@ unittest {
 	                                                                 new PropertyInfo("login", "login", new StringType(), 0, false, false, true),
 	                                                                 new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true)]);
 
-	//function (User, 
+	void function(User, DataSetReader, int) readFunc = function(User entity, DataSetReader reader, int index) { };
 
 	assert(ei.findProperty("name").columnName == "name_column");
 	assert(ei.getProperties()[0].columnName == "id_column");
