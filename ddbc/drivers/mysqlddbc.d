@@ -21,6 +21,9 @@ private:
     int port = 3306;
     ddbc.drivers.mysql.Connection conn;
     bool closed;
+    bool autocommit;
+
+
 	MySQLStatement [] activeStatements;
 
 	void closeUnclosedStatements() {
@@ -84,6 +87,8 @@ public:
         //writeln("host " ~ hostname ~ " : " ~ to!string(port) ~ " db=" ~ dbName ~ " user=" ~ username ~ " pass=" ~ password);
 
         conn = new ddbc.drivers.mysql.Connection(hostname, username, password, dbName, cast(ushort)port);
+        closed = false;
+        setAutoCommit(true);
     }
     override void close() {
 		checkClosed();
@@ -115,6 +120,8 @@ public:
     /// Sets the given catalog name in order to select a subspace of this Connection object's database in which to work.
     override void setCatalog(string catalog) {
         checkClosed();
+        if (dbName == catalog)
+            return;
         conn.selectDB(catalog);
         dbName = catalog;
     }
@@ -128,11 +135,16 @@ public:
         stmt.executeUpdate("ROLLBACK");
     }
     override bool getAutoCommit() {
-        // TODO:
-        return true;
+        return autocommit;
     }
     override void setAutoCommit(bool autoCommit) {
-        // TODO:
+        checkClosed();
+        if (this.autocommit == autoCommit)
+            return;
+        Statement stmt = createStatement();
+        scope(exit) stmt.close();
+        stmt.executeUpdate("SET autocommit=" ~ (autoCommit ? "1" : "0"));
+        this.autocommit = autoCommit;
     }
 }
 
