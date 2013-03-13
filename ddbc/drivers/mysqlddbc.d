@@ -160,7 +160,7 @@ public:
     }
 }
 
-class MySQLResultSet : ddbc.core.ResultSet {
+class MySQLResultSet : ResultSetImpl {
     private MySQLStatement stmt;
     private ddbc.drivers.mysql.ResultSet rs;
     private bool closed;
@@ -202,6 +202,15 @@ public:
 	void onStatementClosed() {
 		closed = true;
 	}
+    string decodeTextBlob(ubyte[] data) {
+        char[] res = new char[data.length];
+        foreach (i, ch; data) {
+            res[i] = cast(char)ch;
+        }
+        return to!string(res);
+    }
+
+    // ResultSet interface implementation
 
     override void close() {
         checkClosed();
@@ -236,6 +245,7 @@ public:
             throw new SQLException("Column " ~ columnName ~ " not found");
         return *p + 1;
     }
+
     override bool getBoolean(int columnIndex) {
         Variant v = getValue(columnIndex);
         if (lastIsNull)
@@ -248,8 +258,45 @@ public:
             return v.get!(long) != 0;
         throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to boolean");
     }
-    override bool getBoolean(string columnName) {
-        return getBoolean(findColumn(columnName));
+    override ubyte getUbyte(int columnIndex) {
+        Variant v = getValue(columnIndex);
+        if (lastIsNull)
+            return 0;
+        if (v.convertsTo!(ubyte))
+            return v.get!(ubyte);
+        if (v.convertsTo!(long))
+            return to!ubyte(v.get!(long));
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to ubyte");
+    }
+    override byte getByte(int columnIndex) {
+        Variant v = getValue(columnIndex);
+        if (lastIsNull)
+            return 0;
+        if (v.convertsTo!(byte))
+            return v.get!(byte);
+        if (v.convertsTo!(long))
+            return to!byte(v.get!(long));
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to byte");
+    }
+    override short getShort(int columnIndex) {
+        Variant v = getValue(columnIndex);
+        if (lastIsNull)
+            return 0;
+        if (v.convertsTo!(short))
+            return v.get!(short);
+        if (v.convertsTo!(long))
+            return to!short(v.get!(long));
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to short");
+    }
+    override ushort getUshort(int columnIndex) {
+        Variant v = getValue(columnIndex);
+        if (lastIsNull)
+            return 0;
+        if (v.convertsTo!(ushort))
+            return v.get!(ushort);
+        if (v.convertsTo!(long))
+            return to!ushort(v.get!(long));
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to ushort");
     }
     override int getInt(int columnIndex) {
         Variant v = getValue(columnIndex);
@@ -261,8 +308,15 @@ public:
             return to!int(v.get!(long));
         throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to int");
     }
-    override int getInt(string columnName) {
-        return getInt(findColumn(columnName));
+    override uint getUint(int columnIndex) {
+        Variant v = getValue(columnIndex);
+        if (lastIsNull)
+            return 0;
+        if (v.convertsTo!(uint))
+            return v.get!(uint);
+        if (v.convertsTo!(ulong))
+            return to!int(v.get!(ulong));
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to uint");
     }
     override long getLong(int columnIndex) {
         Variant v = getValue(columnIndex);
@@ -272,16 +326,30 @@ public:
             return v.get!(long);
         throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to long");
     }
-    override long getLong(string columnName) {
-        return getLong(findColumn(columnName));
+    override ulong getUlong(int columnIndex) {
+        Variant v = getValue(columnIndex);
+        if (lastIsNull)
+            return 0;
+        if (v.convertsTo!(ulong))
+            return v.get!(ulong);
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to ulong");
     }
-	string decodeTextBlob(ubyte[] data) {
-		char[] res = new char[data.length];
-		foreach (i, ch; data) {
-			res[i] = cast(char)ch;
-		}
-		return to!string(res);
-	}
+    override double getDouble(int columnIndex) {
+        Variant v = getValue(columnIndex);
+        if (lastIsNull)
+            return 0;
+        if (v.convertsTo!(double))
+            return v.get!(double);
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to double");
+    }
+    override float getFloat(int columnIndex) {
+        Variant v = getValue(columnIndex);
+        if (lastIsNull)
+            return 0;
+        if (v.convertsTo!(float))
+            return v.get!(float);
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to float");
+    }
     override string getString(int columnIndex) {
         Variant v = getValue(columnIndex);
         if (lastIsNull)
@@ -292,9 +360,6 @@ public:
 			return decodeTextBlob(v.get!(ubyte[]));
 		}
         return v.toString();
-    }
-    override string getString(string columnName) {
-        return getString(findColumn(columnName));
     }
     override bool wasNull() {
 		checkClosed();

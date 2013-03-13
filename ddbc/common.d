@@ -91,3 +91,107 @@ public:
 		freeConnections ~= connection;
 	}
 }
+
+// Helper implementation of ResultSet - throws Method not implemented for most of methods.
+class ResultSetImpl : ddbc.core.ResultSet {
+public:
+	override void close() {
+		throw new SQLException("Method not implemented");
+	}
+	override bool first() {
+		throw new SQLException("Method not implemented");
+	}
+	override bool isFirst() {
+		throw new SQLException("Method not implemented");
+	}
+	override bool isLast() {
+		throw new SQLException("Method not implemented");
+	}
+	override bool next() {
+		throw new SQLException("Method not implemented");
+	}
+	
+	override int findColumn(string columnName) {
+		throw new SQLException("Method not implemented");
+	}
+	override bool getBoolean(int columnIndex) {
+		throw new SQLException("Method not implemented");
+	}
+	override bool getBoolean(string columnName) {
+		return getBoolean(findColumn(columnName));
+	}
+	override ubyte getUbyte(int columnIndex) {
+		throw new SQLException("Method not implemented");
+	}
+	override ubyte getUbyte(string columnName) {
+		return getUbyte(findColumn(columnName));
+	}
+	override byte getByte(int columnIndex) {
+		throw new SQLException("Method not implemented");
+	}
+	override byte getByte(string columnName) {
+		return getByte(findColumn(columnName));
+	}
+	override short getShort(int columnIndex) {
+		throw new SQLException("Method not implemented");
+	}
+	override short getShort(string columnName) {
+		return getShort(findColumn(columnName));
+	}
+	override ushort getUshort(int columnIndex) {
+		throw new SQLException("Method not implemented");
+	}
+	override ushort getUshort(string columnName) {
+		return getUshort(findColumn(columnName));
+	}
+	override int getInt(int columnIndex) {
+		throw new SQLException("Method not implemented");
+	}
+	override int getInt(string columnName) {
+		return getInt(findColumn(columnName));
+	}
+	override uint getUint(int columnIndex) {
+		throw new SQLException("Method not implemented");
+	}
+	override uint getUint(string columnName) {
+		return getUint(findColumn(columnName));
+	}
+	override long getLong(int columnIndex) {
+		throw new SQLException("Method not implemented");
+	}
+	override long getLong(string columnName) {
+		return getLong(findColumn(columnName));
+	}
+	override ulong getUlong(int columnIndex) {
+		throw new SQLException("Method not implemented");
+	}
+	override ulong getUlong(string columnName) {
+		return getUlong(findColumn(columnName));
+	}
+	override double getDouble(int columnIndex) {
+		throw new SQLException("Method not implemented");
+	}
+	override double getDouble(string columnName) {
+		return getDouble(findColumn(columnName));
+	}
+	override float getFloat(int columnIndex) {
+		throw new SQLException("Method not implemented");
+	}
+	override float getFloat(string columnName) {
+		return getFloat(findColumn(columnName));
+	}
+	override string getString(int columnIndex) {
+		throw new SQLException("Method not implemented");
+	}
+	override string getString(string columnName) {
+		return getString(findColumn(columnName));
+	}
+	override bool wasNull() {
+		throw new SQLException("Method not implemented");
+	}
+
+	//Retrieves the number, types and properties of this ResultSet object's columns
+	override ResultSetMetadata getMetaData() {
+		throw new SQLException("Method not implemented");
+	}
+}
