@@ -1,6 +1,7 @@
 module ddbc.common;
 import ddbc.core;
 import std.algorithm;
+import std.exception;
 
 class DataSourceImpl : DataSource {
 	Driver driver;
@@ -217,4 +218,79 @@ public:
 	override int getFetchSize() {
 		throw new SQLException("Method not implemented");
 	}
+}
+
+class ColumnMetadataItem {
+	string 	catalogName;
+	int	    displaySize;
+	string 	label;
+	string  name;
+	int 	type;
+	string 	typeName;
+	int     precision;
+	int     scale;
+	string  schemaName;
+	string  tableName;
+	bool 	isAutoIncrement;
+	bool 	isCaseSensitive;
+	bool 	isCurrency;
+	bool 	isDefinitelyWritable;
+	int 	isNullable;
+	bool 	isReadOnly;
+	bool 	isSearchable;
+	bool 	isSigned;
+	bool 	isWritable;
+}
+
+class ResultSetMetadataImpl : ResultSetMetadata {
+	ColumnMetadataItem [] cols;
+	this(ColumnMetadataItem [] cols) {
+		this.cols = cols;
+	}
+	ref ColumnMetadataItem col(int column) {
+		enforceEx!SQLException(column >=1 && column <= cols.length, "Column index out of range");
+		return cols[column - 1];
+	}
+	//Returns the number of columns in this ResultSet object.
+	override int getColumnCount() { return cols.length; }
+	// Gets the designated column's table's catalog name.
+	override string getCatalogName(int column) { return col(column).catalogName; }
+	// Returns the fully-qualified name of the Java class whose instances are manufactured if the method ResultSet.getObject is called to retrieve a value from the column.
+	//override string getColumnClassName(int column) { return col(column).catalogName; }
+	// Indicates the designated column's normal maximum width in characters.
+	override int getColumnDisplaySize(int column) { return col(column).displaySize; }
+	// Gets the designated column's suggested title for use in printouts and displays.
+	override string getColumnLabel(int column) { return col(column).label; }
+	// Get the designated column's name.
+	override string getColumnName(int column) { return col(column).name; }
+	// Retrieves the designated column's SQL type.
+	override int getColumnType(int column) { return col(column).type; }
+	// Retrieves the designated column's database-specific type name.
+	override string getColumnTypeName(int column) { return col(column).typeName; }
+	// Get the designated column's number of decimal digits.
+	override int getPrecision(int column) { return col(column).precision; }
+	// Gets the designated column's number of digits to right of the decimal point.
+	override int getScale(int column) { return col(column).scale; }
+	// Get the designated column's table's schema.
+	override string getSchemaName(int column) { return col(column).schemaName; }
+	// Gets the designated column's table name.
+	override string getTableName(int column) { return col(column).tableName; }
+	// Indicates whether the designated column is automatically numbered, thus read-only.
+	override bool isAutoIncrement(int column) { return col(column).isAutoIncrement; }
+	// Indicates whether a column's case matters.
+	override bool isCaseSensitive(int column) { return col(column).isCaseSensitive; }
+	// Indicates whether the designated column is a cash value.
+	override bool isCurrency(int column) { return col(column).isCurrency; }
+	// Indicates whether a write on the designated column will definitely succeed.
+	override bool isDefinitelyWritable(int column) { return col(column).isDefinitelyWritable; }
+	// Indicates the nullability of values in the designated column.
+	override int isNullable(int column) { return col(column).isNullable; }
+	// Indicates whether the designated column is definitely not writable.
+	override bool isReadOnly(int column) { return col(column).isReadOnly; }
+	// Indicates whether the designated column can be used in a where clause.
+	override bool isSearchable(int column) { return col(column).isSearchable; }
+	// Indicates whether values in the designated column are signed numbers.
+	override bool isSigned(int column) { return col(column).isSigned; }
+	// Indicates whether it is possible for a write on the designated column to succeed.
+	override bool isWritable(int column) { return col(column).isWritable; }
 }

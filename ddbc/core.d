@@ -20,11 +20,49 @@ interface Connection {
 }
 
 interface ResultSetMetadata {
+	//Returns the number of columns in this ResultSet object.
 	int getColumnCount();
-	string getColumnName(int columnIndex);
-	string getColumnLabel(int columnIndex);
-	int getColumnType(int columnIndex);
-	bool isNullable(int columnIndex);
+
+	// Gets the designated column's table's catalog name.
+	string getCatalogName(int column);
+	// Returns the fully-qualified name of the Java class whose instances are manufactured if the method ResultSet.getObject is called to retrieve a value from the column.
+	//string getColumnClassName(int column);
+	// Indicates the designated column's normal maximum width in characters.
+	int getColumnDisplaySize(int column);
+	// Gets the designated column's suggested title for use in printouts and displays.
+	string getColumnLabel(int column);
+	// Get the designated column's name.
+	string getColumnName(int column);
+	// Retrieves the designated column's SQL type.
+	int getColumnType(int column);
+	// Retrieves the designated column's database-specific type name.
+	string getColumnTypeName(int column);
+	// Get the designated column's number of decimal digits.
+	int getPrecision(int column);
+	// Gets the designated column's number of digits to right of the decimal point.
+	int getScale(int column);
+	// Get the designated column's table's schema.
+	string getSchemaName(int column);
+	// Gets the designated column's table name.
+	string getTableName(int column);
+	// Indicates whether the designated column is automatically numbered, thus read-only.
+	bool isAutoIncrement(int column);
+	// Indicates whether a column's case matters.
+	bool isCaseSensitive(int column);
+	// Indicates whether the designated column is a cash value.
+	bool isCurrency(int column);
+	// Indicates whether a write on the designated column will definitely succeed.
+	bool isDefinitelyWritable(int column);
+	// Indicates the nullability of values in the designated column.
+	int isNullable(int column);
+	// Indicates whether the designated column is definitely not writable.
+	bool isReadOnly(int column);
+	// Indicates whether the designated column can be used in a where clause.
+	bool isSearchable(int column);
+	// Indicates whether values in the designated column are signed numbers.
+	bool isSigned(int column);
+	// Indicates whether it is possible for a write on the designated column to succeed.
+	bool isWritable(int column);
 }
 
 interface ResultSet {

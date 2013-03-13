@@ -133,6 +133,20 @@ class MySQLStatement : Statement {
         this.conn = conn;
     }
 
+    ResultSetMetadataImpl createMetadata(FieldDescription[] fields) {
+        ColumnMetadataItem[] res = new ColumnMetadataItem[fields.length];
+        foreach(i, field; fields) {
+            ColumnMetadataItem item = new ColumnMetadataItem();
+            item.schemaName = field.db;
+            item.name = field.originalName;
+            item.label = field.name;
+            item.precision = field.length;
+            item.isNullable = !field.notNull;
+            // TODO: fill more params
+            res[i] = item;
+        }
+        return new ResultSetMetadataImpl(res);
+    }
 public:
     MySQLConnection getConnection() {
         return conn;
@@ -140,7 +154,7 @@ public:
     override ddbc.core.ResultSet executeQuery(string query) {
         cmd = new Command(conn.getConnection(), query);
         rs = cmd.execSQLResult();
-		resultSet = new MySQLResultSet(this, rs);
+        resultSet = new MySQLResultSet(this, rs, createMetadata(cmd.getResultHeaders().getFieldDescriptions()));
         return resultSet;
     }
     override int executeUpdate(string query) {
@@ -192,7 +206,7 @@ public:
     }
     override ddbc.core.ResultSet executeQuery() {
         rs = cmd.execPreparedResult();
-        resultSet = new MySQLResultSet(this, rs);
+        resultSet = new MySQLResultSet(this, rs, createMetadata(cmd.getPreparedHeaders().getFieldDescriptions()));
         return resultSet;
     }
     
@@ -270,6 +284,7 @@ public:
 class MySQLResultSet : ResultSetImpl {
     private MySQLStatement stmt;
     private ddbc.drivers.mysql.ResultSet rs;
+    ResultSetMetadataImpl metadata;
     private bool closed;
     private int currentRowIndex;
     private int rowCount;
@@ -294,9 +309,10 @@ class MySQLResultSet : ResultSetImpl {
 	}
 
 public:
-    this(MySQLStatement stmt, ddbc.drivers.mysql.ResultSet resultSet) {
+    this(MySQLStatement stmt, ddbc.drivers.mysql.ResultSet resultSet, ResultSetMetadataImpl metadata) {
         this.stmt = stmt;
         this.rs = resultSet;
+        this.metadata = metadata;
         closed = false;
         rowCount = rs.length;
         currentRowIndex = -1;
@@ -316,6 +332,11 @@ public:
     }
 
     // ResultSet interface implementation
+
+    //Retrieves the number, types and properties of this ResultSet object's columns
+    override ResultSetMetadata getMetaData() {
+        return metadata;
+    }
 
     override void close() {
         checkClosed();

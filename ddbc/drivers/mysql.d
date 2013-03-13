@@ -1715,6 +1715,7 @@ private:
 
 public:
 
+	FieldDescription[] getFieldDescriptions() { return _fieldDescriptions; }
     /**
      * Construct a ResultSetHeaders struct from a sequence of FieldDescription packets and an EOF packet.
      *
@@ -1805,7 +1806,11 @@ private:
     }
 
 public:
-    this(Connection con, ushort cols, ushort params)
+
+	FieldDescription[] getFieldDescriptions() { return _colDescriptions; }
+	ParamDescription[] getParamDescriptions() { return _paramDescriptions; }
+
+	this(Connection con, ushort cols, ushort params)
     {
         _con = con;
         _colCount = cols;
@@ -3377,6 +3382,10 @@ public:
 	int getParamCount() {
 		return _psParams;
 	}
+
+	ref ResultSetHeaders getResultHeaders() { return _rsh; }
+	ref PreparedStmtHeaders getPreparedHeaders() { return _psh; }
+	//ref ParamDescription getParamDescription() { return _ps
 
     @property
     {
