@@ -510,10 +510,10 @@ public:
         this.rs = resultSet;
         this.metadata = metadata;
         closed = false;
-        rowCount = rs.length;
+        rowCount = cast(int)rs.length;
         currentRowIndex = -1;
         columnMap = rs.getColNameMap();
-        columnCount = rs.getColNames().length;
+		columnCount = cast(int)rs.getColNames().length;
     }
 
 	void onStatementClosed() {

@@ -273,7 +273,7 @@ class ParameterMetaDataImpl : ParameterMetaData {
 	//String getParameterClassName(int param);
 	/// Retrieves the number of parameters in the PreparedStatement object for which this ParameterMetaData object contains information.
 	int getParameterCount() {
-		return cols.length;
+		return cast(int)cols.length;
 	}
 	/// Retrieves the designated parameter's mode.
 	int getParameterMode(int param) { return col(param).mode; }
@@ -301,7 +301,7 @@ class ResultSetMetaDataImpl : ResultSetMetaData {
 		return cols[column - 1];
 	}
 	//Returns the number of columns in this ResultSet object.
-	override int getColumnCount() { return cols.length; }
+	override int getColumnCount() { return cast(int)cols.length; }
 	// Gets the designated column's table's catalog name.
 	override string getCatalogName(int column) { return col(column).catalogName; }
 	// Returns the fully-qualified name of the Java class whose instances are manufactured if the method ResultSet.getObject is called to retrieve a value from the column.
