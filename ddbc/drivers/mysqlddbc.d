@@ -133,7 +133,7 @@ class MySQLStatement : Statement {
         this.conn = conn;
     }
 
-    ResultSetMetadataImpl createMetadata(FieldDescription[] fields) {
+    ResultSetMetaData createMetadata(FieldDescription[] fields) {
         ColumnMetadataItem[] res = new ColumnMetadataItem[fields.length];
         foreach(i, field; fields) {
             ColumnMetadataItem item = new ColumnMetadataItem();
@@ -141,11 +141,26 @@ class MySQLStatement : Statement {
             item.name = field.originalName;
             item.label = field.name;
             item.precision = field.length;
+            item.scale = field.scale;
             item.isNullable = !field.notNull;
+            item.isSigned = !field.unsigned;
             // TODO: fill more params
             res[i] = item;
         }
-        return new ResultSetMetadataImpl(res);
+        return new ResultSetMetaDataImpl(res);
+    }
+    ParameterMetaData createMetadata(ParamDescription[] fields) {
+        ParameterMetaDataItem[] res = new ParameterMetaDataItem[fields.length];
+        foreach(i, field; fields) {
+            ParameterMetaDataItem item = new ParameterMetaDataItem();
+            item.precision = field.length;
+            item.scale = field.scale;
+            item.isNullable = !field.notNull;
+            item.isSigned = !field.unsigned;
+            // TODO: fill more params
+            res[i] = item;
+        }
+        return new ParameterMetaDataImpl(res);
     }
 public:
     MySQLConnection getConnection() {
@@ -183,6 +198,8 @@ public:
 class MySQLPreparedStatement : MySQLStatement, PreparedStatement {
     string query;
     int paramCount;
+    ResultSetMetaData metadata;
+    ParameterMetaData paramMetadata;
     this(MySQLConnection conn, string query) {
         super(conn);
         this.query = query;
@@ -199,6 +216,21 @@ class MySQLPreparedStatement : MySQLStatement, PreparedStatement {
         return cmd.param(cast(ushort)(index - 1));
     }
 public:
+
+    /// Retrieves a ResultSetMetaData object that contains information about the columns of the ResultSet object that will be returned when this PreparedStatement object is executed.
+    override ResultSetMetaData getMetaData() {
+        if (metadata is null)
+            metadata = createMetadata(cmd.getPreparedHeaders().getFieldDescriptions());
+        return metadata;
+    }
+
+    /// Retrieves the number, types and properties of this PreparedStatement object's parameters.
+    override ParameterMetaData getParameterMetaData() {
+        if (paramMetadata is null)
+            paramMetadata = createMetadata(cmd.getPreparedHeaders().getParamDescriptions());
+        return paramMetadata;
+    }
+
     override int executeUpdate() {
         ulong rowsAffected = 0;
         cmd.execPrepared(rowsAffected);
@@ -206,7 +238,7 @@ public:
     }
     override ddbc.core.ResultSet executeQuery() {
         rs = cmd.execPreparedResult();
-        resultSet = new MySQLResultSet(this, rs, createMetadata(cmd.getPreparedHeaders().getFieldDescriptions()));
+        resultSet = new MySQLResultSet(this, rs, getMetaData());
         return resultSet;
     }
     
@@ -284,7 +316,7 @@ public:
 class MySQLResultSet : ResultSetImpl {
     private MySQLStatement stmt;
     private ddbc.drivers.mysql.ResultSet rs;
-    ResultSetMetadataImpl metadata;
+    ResultSetMetaData metadata;
     private bool closed;
     private int currentRowIndex;
     private int rowCount;
@@ -309,7 +341,7 @@ class MySQLResultSet : ResultSetImpl {
 	}
 
 public:
-    this(MySQLStatement stmt, ddbc.drivers.mysql.ResultSet resultSet, ResultSetMetadataImpl metadata) {
+    this(MySQLStatement stmt, ddbc.drivers.mysql.ResultSet resultSet, ResultSetMetaData metadata) {
         this.stmt = stmt;
         this.rs = resultSet;
         this.metadata = metadata;
@@ -334,7 +366,7 @@ public:
     // ResultSet interface implementation
 
     //Retrieves the number, types and properties of this ResultSet object's columns
-    override ResultSetMetadata getMetaData() {
+    override ResultSetMetaData getMetaData() {
         return metadata;
     }
 

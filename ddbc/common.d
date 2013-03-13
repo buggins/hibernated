@@ -203,7 +203,7 @@ public:
 	}
 
 	//Retrieves the number, types and properties of this ResultSet object's columns
-	override ResultSetMetadata getMetaData() {
+	override ResultSetMetaData getMetaData() {
 		throw new SQLException("Method not implemented");
 	}
 	//Retrieves the Statement object that produced this ResultSet object.
@@ -242,7 +242,55 @@ class ColumnMetadataItem {
 	bool 	isWritable;
 }
 
-class ResultSetMetadataImpl : ResultSetMetadata {
+class ParameterMetaDataItem {
+	/// Retrieves the designated parameter's mode.
+	int mode;
+	/// Retrieves the designated parameter's SQL type.
+	int type;
+	/// Retrieves the designated parameter's database-specific type name.
+	string typeName;
+	/// Retrieves the designated parameter's number of decimal digits.
+	int precision;
+	/// Retrieves the designated parameter's number of digits to right of the decimal point.
+	int scale;
+	/// Retrieves whether null values are allowed in the designated parameter.
+	int isNullable;
+	/// Retrieves whether values for the designated parameter can be signed numbers.
+	bool isSigned;
+}
+
+class ParameterMetaDataImpl : ParameterMetaData {
+	ParameterMetaDataItem [] cols;
+	this(ParameterMetaDataItem [] cols) {
+		this.cols = cols;
+	}
+	ref ParameterMetaDataItem col(int column) {
+		enforceEx!SQLException(column >=1 && column <= cols.length, "Parameter index out of range");
+		return cols[column - 1];
+	}
+	// Retrieves the fully-qualified name of the Java class whose instances should be passed to the method PreparedStatement.setObject.
+	//String getParameterClassName(int param);
+	/// Retrieves the number of parameters in the PreparedStatement object for which this ParameterMetaData object contains information.
+	int getParameterCount() {
+		return cols.length;
+	}
+	/// Retrieves the designated parameter's mode.
+	int getParameterMode(int param) { return col(param).mode; }
+	/// Retrieves the designated parameter's SQL type.
+	int getParameterType(int param) { return col(param).type; }
+	/// Retrieves the designated parameter's database-specific type name.
+	string getParameterTypeName(int param) { return col(param).typeName; }
+	/// Retrieves the designated parameter's number of decimal digits.
+	int getPrecision(int param) { return col(param).precision; }
+	/// Retrieves the designated parameter's number of digits to right of the decimal point.
+	int getScale(int param) { return col(param).scale; }
+	/// Retrieves whether null values are allowed in the designated parameter.
+	int isNullable(int param) { return col(param).isNullable; }
+	/// Retrieves whether values for the designated parameter can be signed numbers.
+	bool isSigned(int param) { return col(param).isSigned; }
+}
+
+class ResultSetMetaDataImpl : ResultSetMetaData {
 	ColumnMetadataItem [] cols;
 	this(ColumnMetadataItem [] cols) {
 		this.cols = cols;
