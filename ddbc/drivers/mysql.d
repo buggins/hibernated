@@ -3265,7 +3265,9 @@ private:
 					vals[vcl..vcl+packed.length] = packed[];
 					vcl += packed.length;
                     break;
-                case "char[]":
+				case "void":
+					throw new MYX("Unbound parameter " ~ to!string(i), __FILE__, __LINE__);
+				case "char[]":
                     if (ext == SQLType.INFER_FROM_D_TYPE)
                         types[ct++] = SQLType.VARCHAR;
                     else
@@ -3305,7 +3307,7 @@ private:
                     vcl += packed.length;
                     break;
                 default:
-                    throw new MYX("Unsupported parameter type", __FILE__, __LINE__);
+					throw new MYX("Unsupported parameter type " ~ ts, __FILE__, __LINE__);
             }
 		}
 		vals.length = vcl;

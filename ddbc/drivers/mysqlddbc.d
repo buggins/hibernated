@@ -191,10 +191,14 @@ public:
         return cast(int)rowsAffected;
     }
     override ddbc.core.ResultSet executeQuery() {
-        return null;
+        rs = cmd.execPreparedResult();
+        resultSet = new MySQLResultSet(this, rs);
+        return resultSet;
     }
     
     override void clearParameters() {
+        for (int i = 1; i <= paramCount; i++)
+            setNull(i);
     }
     
     override void setBoolean(int parameterIndex, bool x) {
@@ -275,8 +279,8 @@ class MySQLResultSet : ResultSetImpl {
 
     Variant getValue(int columnIndex) {
 		checkClosed();
-        enforceEx!SQLException(columnIndex < 1 || columnIndex > columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
-        enforceEx!SQLException(currentRowIndex < 0 || currentRowIndex >= rowCount, "No current row in result set");
+        enforceEx!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
+        enforceEx!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
         lastIsNull = rs[currentRowIndex].isNull(columnIndex - 1);
 		Variant res;
 		if (!lastIsNull)
@@ -477,8 +481,8 @@ public:
     }
     override bool isNull(int columnIndex) {
         checkClosed();
-        enforceEx!SQLException(columnIndex < 1 || columnIndex > columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
-        enforceEx!SQLException(currentRowIndex < 0 || currentRowIndex >= rowCount, "No current row in result set");
+        enforceEx!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
+        enforceEx!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
         return rs[currentRowIndex].isNull(columnIndex - 1);
     }
 
