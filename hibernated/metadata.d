@@ -1,5 +1,6 @@
 module hibernated.metadata;
 
+import std.conv;
 import std.stdio;
 import std.string;
 import std.traits;
@@ -32,7 +33,7 @@ public:
 	immutable bool nullable;
 	ReaderFunc readFunc;
 	WriterFunc writeFunc;
-	this(string propertyName, string columnName, immutable Type columnType, int length, bool key, bool generated, bool nullable) {
+	this(string propertyName, string columnName, immutable Type columnType, int length, bool key, bool generated, bool nullable, ReaderFunc reader, WriterFunc writer) {
 		this.propertyName = propertyName;
 		this.columnName = columnName;
 		this.columnType = columnType;
@@ -40,6 +41,8 @@ public:
 		this.key = key;
 		this.generated = generated;
 		this.nullable = nullable;
+		this.readFunc = reader;
+		this.writeFunc = writer;
 	}
 }
 
@@ -48,10 +51,12 @@ class EntityInfo {
 	immutable string tableName;
 	immutable PropertyInfo [] properties;
 	immutable PropertyInfo [string] propertyMap;
-	public this(immutable string name, immutable string tableName, immutable PropertyInfo [] properties) {
+	immutable (TypeInfo_Class) classInfo;
+	public this(immutable string name, immutable string tableName, immutable PropertyInfo [] properties, immutable (TypeInfo_Class) classInfo) {
 		this.name = name;
 		this.tableName = tableName;
 		this.properties = properties;
+		this.classInfo = classInfo;
 		immutable (PropertyInfo) [string] map;
 		foreach(p; properties)
 			map[p.propertyName] = p;
@@ -62,6 +67,7 @@ class EntityInfo {
 	ulong getPropertyCount() immutable { return properties.length; }
 	immutable (PropertyInfo) getProperty(int propertyIndex) immutable { return properties[propertyIndex]; }
 	immutable (PropertyInfo) findProperty(string propertyName) immutable { return propertyMap[propertyName]; }
+	Object createEntity() immutable { return Object.factory((cast(TypeInfo_Class)classInfo).name); }
 }
 
 bool isHibernatedAnnotation(alias t)() {
@@ -86,7 +92,7 @@ string getterNameToFieldName(immutable string name) {
 
 string getterNameToSetterName(immutable string name) {
 	if (name[0..3] == "get")
-		return "set" ~ name[4..$]; // e.g. getValue() -> setValue()
+		return "set" ~ name[3..$]; // e.g. getValue() -> setValue()
 	if (name[0..2] == "is")
 		return "set" ~ toUpper(name[0..1]) ~ name[1..$]; // e.g.  isDefault()->setIsDefault()
 	return "_" ~ name;
@@ -299,7 +305,7 @@ string getColumnTypeDatasetWriteCode(T, string m)() {
 }
 
 string getPropertyDef(T, immutable string m)() {
-	immutable string entityClassName = T.stringof;
+	immutable string entityClassName = fullyQualifiedName!T;
 	immutable string propertyName = getPropertyName!(T,m)();
 	static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
 	immutable bool isId = hasIdAnnotation!(T, m)();
@@ -314,12 +320,12 @@ string getPropertyDef(T, immutable string m)() {
 	immutable string propertyWriteCode = getPropertyWriteCode!(T,m)();
 	immutable string datasetWriteCode = getColumnTypeDatasetWriteCode!(T,m)();
 	immutable string readerFuncDef = "\n" ~
-		"void function(Object obj, DataSetReader r, int index) { \n" ~ 
+		"function(Object obj, DataSetReader r, int index) { \n" ~ 
 		"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
 			"    " ~ propertyWriteCode ~ " \n" ~
 		" }\n";
 	immutable string writerFuncDef = "\n" ~
-		"void function(Object obj, DataSetWriter r, int index) { \n" ~ 
+		"function(Object obj, DataSetWriter r, int index) { \n" ~ 
 			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
 			"    " ~ datasetWriteCode ~ " \n" ~
 			" }\n";
@@ -332,7 +338,12 @@ string getPropertyDef(T, immutable string m)() {
 	pragma(msg, writerFuncDef);
 
 	static assert (typeName != null, "Cannot determine column type for member " ~ m ~ " of type " ~ T.stringof);
-	return "    new PropertyInfo(\"" ~ propertyName ~ "\", \"" ~ columnName ~ "\", " ~ typeName ~ ", " ~ format("%s",length) ~ ", " ~ (isId ? "true" : "false")  ~ ", " ~ (isGenerated ? "true" : "false")  ~ ", " ~ (nullable ? "true" : "false") ~ ")";
+	return "    new PropertyInfo(\"" ~ propertyName ~ "\", \"" ~ columnName ~ "\", " ~ typeName ~ ", " ~ 
+			format("%s",length) ~ ", " ~ (isId ? "true" : "false")  ~ ", " ~ 
+			(isGenerated ? "true" : "false")  ~ ", " ~ (nullable ? "true" : "false") ~ ", " ~ 
+			readerFuncDef ~ ", " ~
+			writerFuncDef ~ ", " ~
+			")";
 }
 
 string getEntityDef(T)() {
@@ -384,7 +395,9 @@ string getEntityDef(T)() {
 	//pragma(msg, typeof(t));
 
 	generatedEntityInfo ~= generatedPropertyInfo;
-	generatedEntityInfo ~= "])";
+	generatedEntityInfo ~= "],";
+	generatedEntityInfo ~= "cast(immutable TypeInfo_Class)" ~ typeName ~ ".classinfo";
+	generatedEntityInfo ~= ")";
 
 	return generatedEntityInfo ~ "\n" ~ generatedGettersSetters;
 }
@@ -402,31 +415,53 @@ string entityListDef(T ...)() {
 		"static this() {\n" ~
 		"    entities = cast(immutable EntityInfo [])[\n" ~ res ~ "];\n" ~
 		"    immutable (EntityInfo) [string] map;\n" ~
+		"    immutable (EntityInfo) [TypeInfo_Class] typemap;\n" ~
 		"    foreach(e; entities) {\n" ~
 		"        map[e.name] = e;\n" ~
+		"        writeln((cast(TypeInfo_Class)e.classInfo).toString());\n" ~
+		"        typemap[cast(TypeInfo_Class)e.classInfo] = e;\n" ~
 		"    }\n" ~
 		"    entityMap = cast(immutable EntityInfo [string])map;\n" ~
+		"    classMap = cast(immutable EntityInfo [TypeInfo_Class])map;\n" ~
 		"}";
 }
 
 abstract class SchemaInfo {
-	public immutable (EntityInfo []) getEntities();
-	public immutable (EntityInfo [string]) getEntityMap();
-	public immutable (EntityInfo) findEntity(string entityName);
-	public immutable (EntityInfo) getEntity(int entityIndex);
-	public int getEntityCount();
+	public immutable (EntityInfo []) getEntities() immutable;
+	public immutable (EntityInfo [string]) getEntityMap() immutable;
+	public immutable (EntityInfo [TypeInfo_Class]) getClassMap() immutable;
+	public immutable (EntityInfo) findEntity(string entityName) immutable;
+	public immutable (EntityInfo) getEntity(int entityIndex) immutable;
+	public int getEntityCount() immutable;
+	public immutable (EntityInfo) findEntityByClass(Object obj) immutable {
+		writeln("search for " ~ obj.classinfo.name);
+		return getEntityMap()[obj.classinfo.name];
+//		if ((obj.classinfo in getClassMap()) is null)
+//			throw new Exception("Class " ~ obj.classinfo.toString() ~ " not found in map of size " ~ to!string(getClassMap().length));
+//		immutable (EntityInfo) ei = getClassMap()[obj.classinfo];
+//		return ei;
+	}
+	public void readAllColumns(Object obj, DataSetReader r, int startColumn) immutable {
+		writeln("ClassInfo = " ~ obj.classinfo.toString());
+		immutable EntityInfo ei = findEntityByClass(obj);
+//		for (int i = 0; i<ei.getPropertyCount(); i++) {
+//			ei.getProperty(i).readFunc(obj, r, startColumn + i);
+//		}
+	}
 }
 
 class SchemaInfoImpl(T...) : SchemaInfo {
 	static immutable EntityInfo [string] entityMap;
 	static immutable EntityInfo [] entities;
+	static immutable (EntityInfo [TypeInfo_Class]) classMap;
 	mixin(entityListDef!(T)());
 
-	override public immutable (EntityInfo[]) getEntities() { return entities; }
-	override public immutable (EntityInfo[string]) getEntityMap() { return entityMap; }
-	override public immutable (EntityInfo) findEntity(string entityName) { return entityMap[entityName]; }
-	override public immutable (EntityInfo) getEntity(int entityIndex) { return entities[entityIndex]; }
-	override public int getEntityCount() { return entities.length; }
+	override public immutable (EntityInfo[]) getEntities()  immutable { return entities; }
+	override public immutable (EntityInfo[string]) getEntityMap()  immutable { return entityMap; }
+	override public immutable (EntityInfo) findEntity(string entityName)  immutable { return entityMap[entityName]; }
+	override public immutable (EntityInfo) getEntity(int entityIndex)  immutable { return entities[entityIndex]; }
+	override public immutable (EntityInfo [TypeInfo_Class]) getClassMap()  immutable { return classMap; }
+	override public int getEntityCount()  immutable { return cast(int)entities.length; }
 }
 
 //class MetadataInfo(T) {
@@ -434,59 +469,78 @@ class SchemaInfoImpl(T...) : SchemaInfo {
 //	static string fields = GenerateFieldList!(T);
 //}
 
+@Entity
+@Table("users")
+class User {
+	
+	@Id @Generated
+	@Column("id_column")
+	int id;
+	
+	@Column("name_column")
+	string name;
+	
+	// no column name
+	@Column
+	string flags;
+	
+	// annotated getter
+	private string login;
+	@Column
+	public string getLogin() { return login; }
+	public void setLogin(string login) { this.login = login; }
+	
+	// no (), no column name
+	@Column
+	int testColumn;
+}
+
+@Entity
+@Table("customer")
+class Customer {
+	@Id @Generated
+	@Column
+	int id;
+	@Column
+	string name;
+}
+
+@Entity
+@Table("t1")
+class T1 {
+	@Id @Generated
+	@Column
+	int id;
+	@Column
+	string name;
+	@Column
+	long flags;
+	@Column
+	string comment;
+	override string toString() {
+		return "id=" ~ to!string(id) ~ ", name=" ~ name ~ ", flags=" ~ to!string(flags) ~ ", comment=" ~ comment;
+	}
+}
+
+
 unittest {
 
 	EntityInfo entity = new EntityInfo("user", "users", cast (immutable PropertyInfo []) [
-	                                                     new PropertyInfo("id", "id", new IntegerType(), 0, true, true, false)
-	                                                     ]);
+	                                                     new PropertyInfo("id", "id", new IntegerType(), 0, true, true, false, null, null)
+	                                                     ], null);
 
 	assert(entity.properties.length == 1);
 
-	@Entity
-	@Table("users")
-	class User {
-
-		@Id @Generated
-		@Column("id_column")
-		int id;
-
-		@Column("name_column")
-		string name;
-
-		// no column name
-		@Column
-		string flags;
-		
-		// annotated getter
-		private string login;
-		@Column
-		public string getLogin() { return login; }
-		public void setLogin(string login) { this.login = login; }
-
-		// no (), no column name
-		@Column
-		int testColumn;
-	}
-
-	@Entity
-	@Table("customer")
-	class Customer {
-		@Id @Generated
-		@Column
-		int id;
-		@Column
-		string name;
-	}
 
 //	immutable string info = getEntityDef!User();
 //	immutable string infos = entityListDef!(User, Customer)();
 
 	immutable EntityInfo ei = cast(immutable EntityInfo)new EntityInfo("User", "users", cast (immutable PropertyInfo []) [
-	                                                                 new PropertyInfo("id", "id_column", new IntegerType(), 0, true, true, false),
-	                                                                 new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false),
-	                                                                 new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true),
-	                                                                 new PropertyInfo("login", "login", new StringType(), 0, false, false, true),
-	                                                                 new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true)]);
+	                                                                 new PropertyInfo("id", "id_column", new IntegerType(), 0, true, true, false, null, null),
+                                                                      new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, null, null),
+                                                                      new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, null, null),
+                                                                      new PropertyInfo("login", "login", new StringType(), 0, false, false, true, null, null),
+                                                                      new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true, null, null)], null);
 
 	void function(User, DataSetReader, int) readFunc = function(User entity, DataSetReader reader, int index) { };
 
@@ -497,20 +551,20 @@ unittest {
 
 	EntityInfo[] entities3 =  [
 	                                                                 new EntityInfo("User", "users", cast (immutable PropertyInfo []) [
-	                                                                 new PropertyInfo("id", "id_column", new IntegerType(), 0, true, true, false),
-	                                                                 new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false),
-	                                                                 new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true),
-	                                                                 new PropertyInfo("login", "login", new StringType(), 0, false, false, true),
-	                                                                 new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true)])
+	                                                                 new PropertyInfo("id", "id_column", new IntegerType(), 0, true, true, false, null, null),
+	                                                                  new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, null, null),
+	                                                                  new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, null, null),
+	                                                                  new PropertyInfo("login", "login", new StringType(), 0, false, false, true, null, null),
+	                                                                  new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true, null, null)], null)
 	                                                                 ,
 	                                                                 new EntityInfo("Customer", "customer", cast (immutable PropertyInfo []) [
-	                                                                        new PropertyInfo("id", "id", new IntegerType(), 0, false, false, true),
-	                                                                        new PropertyInfo("name", "name", new StringType(), 0, false, false, true)])
+                                                                     new PropertyInfo("id", "id", new IntegerType(), 0, false, false, true, null, null),
+                                                                     new PropertyInfo("name", "name", new StringType(), 0, false, false, true, null, null)], null)
 	                                                                 ];
 
 
 	// Checking generated metadata
-	auto schema = new SchemaInfoImpl!(User, Customer);
+	immutable SchemaInfo schema = cast(immutable SchemaInfo) new SchemaInfoImpl!(User, Customer);
 	assert(schema.getEntityCount() == 2);
 	assert(schema.findEntity("User").findProperty("name").columnName == "name_column");
 	assert(schema.findEntity("User").getProperties()[0].columnName == "id_column");
@@ -519,4 +573,12 @@ unittest {
 	assert(schema.findEntity("User").findProperty("id").key == true);
 	assert(schema.findEntity("Customer").findProperty("id").generated == true);
 	assert(schema.findEntity("Customer").findProperty("id").key == true);
+
+	assert(schema.findEntity("User").findProperty("id").readFunc !is null);
+
+	Object e1 = schema.findEntity("User").createEntity();
+	assert(e1 !is null);
+	User e1user = cast(User)e1;
+	assert(e1user !is null);
+	e1user.id = 25;
 }
