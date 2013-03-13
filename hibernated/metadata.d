@@ -1,10 +1,11 @@
 module hibernated.metadata;
 
 import std.stdio;
+import std.string;
 import std.traits;
 import std.typecons;
 import std.typetuple;
-import std.string;
+
 import hibernated.annotations;
 import hibernated.type;
 
@@ -267,26 +268,6 @@ string getEntityDef(T)() {
 				if (generatedPropertyInfo != null)
 					generatedPropertyInfo ~= ",\n";
 				generatedPropertyInfo ~= propertyDef;
-
-				
-//				static if (is(ti == function)) {
-//					// 
-//					immutable string fieldName = getterNameToFieldName(m);
-//					
-//					pragma(msg, "Function Name to Field name:");
-//					pragma(msg, fieldName);
-//				} else {
-//					// field
-//					immutable string membername = m;
-//					immutable string getterName = "get" ~ capitalizeFieldName(m);
-//					immutable string setterName = "set" ~ capitalizeFieldName(m);
-//					
-//					pragma(msg, getterName);
-//					pragma(msg, setterName);
-//					generatedGettersSetters ~= "   public " ~ ti.stringof ~ " " ~ getterName ~ "() { return " ~ m ~ "; }\n";
-//					generatedGettersSetters ~= "   public void " ~ setterName ~ "(" ~ ti.stringof ~ " " ~ m ~ ") { this." ~ m ~ " = " ~ m ~ "; }\n";
-//				}
-				
 			}
 		}
 	}
@@ -298,6 +279,7 @@ string getEntityDef(T)() {
 
 	return generatedEntityInfo ~ "\n" ~ generatedGettersSetters;
 }
+
 
 string entityListDef(T ...)() {
 	string res;
@@ -396,6 +378,9 @@ unittest {
 	                                                                 new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true),
 	                                                                 new PropertyInfo("login", "login", new StringType(), 0, false, false, true),
 	                                                                 new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true)]);
+
+	//function (User, 
+
 	assert(ei.findProperty("name").columnName == "name_column");
 	assert(ei.getProperties()[0].columnName == "id_column");
 	assert(ei.getProperty(2).propertyName == "flags");
