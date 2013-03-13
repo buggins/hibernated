@@ -2492,6 +2492,7 @@ struct ParameterSpecialization
     SQLType type = SQLType.INFER_FROM_D_TYPE;
     uint chunkSize;
     uint delegate(ubyte[]) chunkDelegate;
+	bool dummy;
 }
 alias ParameterSpecialization PSN;
 
@@ -3370,6 +3371,10 @@ public:
         _sql = sql;
         this(con);
     }
+
+	int getParamCount() {
+		return _psParams;
+	}
 
     @property
     {

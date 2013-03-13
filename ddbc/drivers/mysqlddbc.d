@@ -167,14 +167,27 @@ public:
 
 class MySQLPreparedStatement : MySQLStatement, PreparedStatement {
     string query;
+    int paramCount;
     this(MySQLConnection conn, string query) {
         super(conn);
         this.query = query;
+        cmd = new Command(conn.getConnection(), query);
+        cmd.prepare();
+        paramCount = cmd.getParamCount();
     }
-    
+    void checkIndex(int index) {
+        if (index < 1 || index > paramCount)
+            throw new SQLException("Parameter index " ~ to!string(index) ~ " is out of range");
+    }
+    ref Variant getParam(int index) {
+        checkIndex(index);
+        return cmd.param(cast(ushort)(index - 1));
+    }
 public:
     override int executeUpdate() {
-        return 0;
+        ulong rowsAffected = 0;
+        cmd.execPrepared(rowsAffected);
+        return cast(int)rowsAffected;
     }
     override ddbc.core.ResultSet executeQuery() {
         return null;
@@ -184,12 +197,44 @@ public:
     }
     
     override void setBoolean(int parameterIndex, bool x) {
+        checkIndex(parameterIndex);
+        cmd.bindParameter!bool(x, parameterIndex - 1);
+    }
+    override void setLong(int parameterIndex, long x) {
+        checkIndex(parameterIndex);
+        cmd.bindParameter!long(x, parameterIndex - 1);
+    }
+    override void setUlong(int parameterIndex, ulong x) {
+        auto p = getParam(parameterIndex);
+        p = x;
     }
     override void setInt(int parameterIndex, int x) {
+        checkIndex(parameterIndex);
+        cmd.bindParameter!int(x, parameterIndex - 1);
+    }
+    override void setUint(int parameterIndex, uint x) {
+        auto p = getParam(parameterIndex);
+        p = x;
     }
     override void setShort(int parameterIndex, short x) {
+        auto p = getParam(parameterIndex);
+        p = x;
     }
-    override void setString(int parameterIndex, short x) {
+    override void setUshort(int parameterIndex, ushort x) {
+        auto p = getParam(parameterIndex);
+        p = x;
+    }
+    override void setByte(int parameterIndex, byte x) {
+        auto p = getParam(parameterIndex);
+        p = x;
+    }
+    override void setUbyte(int parameterIndex, ubyte x) {
+        auto p = getParam(parameterIndex);
+        p = x;
+    }
+    override void setString(int parameterIndex, string x) {
+        checkIndex(parameterIndex);
+        cmd.bindParameter!string(x, parameterIndex - 1);
     }
 }
 

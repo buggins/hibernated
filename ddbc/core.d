@@ -84,9 +84,15 @@ interface PreparedStatement : Statement {
 	void clearParameters();
 
 	void setBoolean(int parameterIndex, bool x);
+	void setLong(int parameterIndex, long x);
 	void setInt(int parameterIndex, int x);
 	void setShort(int parameterIndex, short x);
-	void setString(int parameterIndex, short x);
+	void setByte(int parameterIndex, byte x);
+	void setUlong(int parameterIndex, ulong x);
+	void setUint(int parameterIndex, uint x);
+	void setUshort(int parameterIndex, ushort x);
+	void setUbyte(int parameterIndex, ubyte x);
+	void setString(int parameterIndex, string x);
 }
 
 interface Driver {
