@@ -198,43 +198,43 @@ public:
     
     override void setBoolean(int parameterIndex, bool x) {
         checkIndex(parameterIndex);
-        cmd.bindParameter!bool(x, parameterIndex - 1);
+        cmd.param(parameterIndex-1) = x;
     }
     override void setLong(int parameterIndex, long x) {
         checkIndex(parameterIndex);
-        cmd.bindParameter!long(x, parameterIndex - 1);
+        cmd.param(parameterIndex-1) = x;
     }
     override void setUlong(int parameterIndex, ulong x) {
-        auto p = getParam(parameterIndex);
-        p = x;
+        checkIndex(parameterIndex);
+        cmd.param(parameterIndex-1) = x;
     }
     override void setInt(int parameterIndex, int x) {
         checkIndex(parameterIndex);
-        cmd.bindParameter!int(x, parameterIndex - 1);
+        cmd.param(parameterIndex-1) = x;
     }
     override void setUint(int parameterIndex, uint x) {
-        auto p = getParam(parameterIndex);
-        p = x;
+        checkIndex(parameterIndex);
+        cmd.param(parameterIndex-1) = x;
     }
     override void setShort(int parameterIndex, short x) {
-        auto p = getParam(parameterIndex);
-        p = x;
+        checkIndex(parameterIndex);
+        cmd.param(parameterIndex-1) = x;
     }
     override void setUshort(int parameterIndex, ushort x) {
-        auto p = getParam(parameterIndex);
-        p = x;
+        checkIndex(parameterIndex);
+        cmd.param(parameterIndex-1) = x;
     }
     override void setByte(int parameterIndex, byte x) {
-        auto p = getParam(parameterIndex);
-        p = x;
+        checkIndex(parameterIndex);
+        cmd.param(parameterIndex-1) = x;
     }
     override void setUbyte(int parameterIndex, ubyte x) {
-        auto p = getParam(parameterIndex);
-        p = x;
+        checkIndex(parameterIndex);
+        cmd.param(parameterIndex-1) = x;
     }
     override void setString(int parameterIndex, string x) {
         checkIndex(parameterIndex);
-        cmd.bindParameter!string(x, parameterIndex - 1);
+        cmd.param(parameterIndex-1) = x;
     }
 }
 

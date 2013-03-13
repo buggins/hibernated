@@ -3067,7 +3067,7 @@ private:
 
         foreach (size_t i; 0..pc)
         {
-            if (_psa[i].chunkSize)
+			if (_psa[i].chunkSize)
                 longData= true;
             bool isnull = _psa[i].isNull;
             Variant v = _inParams[i];
@@ -3080,7 +3080,7 @@ private:
                 isRef= true;
             }
 
-            enum UNSIGNED  = 0x80;
+			enum UNSIGNED  = 0x80;
             enum SIGNED    = 0;
             switch (ts)
             {
@@ -3253,17 +3253,17 @@ private:
                     vcl += l;
                     break;
                 case "immutable(char)[]":
-                    if (ext == SQLType.INFER_FROM_D_TYPE)
+					if (ext == SQLType.INFER_FROM_D_TYPE)
                         types[ct++] = SQLType.VARCHAR;
                     else
                         types[ct++] = cast(ubyte) ext;
                     types[ct++] = SIGNED;
-                    if (isnull) break;
-                    string s = isRef? *(v.get!(string*)): v.get!(string);
-                    ubyte[] packed = packLCS(cast(void[]) s);
-                    reAlloc(packed.length);
-                    vals[vcl..vcl+packed.length] = packed[];
-                    vcl += packed.length;
+					if (isnull) break;
+					string s = isRef? *(v.get!(string*)): v.get!(string);
+					ubyte[] packed = packLCS(cast(void[]) s);
+					reAlloc(packed.length);
+					vals[vcl..vcl+packed.length] = packed[];
+					vcl += packed.length;
                     break;
                 case "char[]":
                     if (ext == SQLType.INFER_FROM_D_TYPE)
@@ -3307,8 +3307,8 @@ private:
                 default:
                     throw new MYX("Unsupported parameter type", __FILE__, __LINE__);
             }
-        }
-        vals.length = vcl;
+		}
+		vals.length = vcl;
         return types;
     }
 
@@ -3527,7 +3527,7 @@ public:
      * To bind to some D variable, we set the corrsponding variant with its address, so there is no
      * need to rebind between calls to execPreparedXXX.
      */
-    void bindParameter(T)(ref T val, uint pIndex, ParameterSpecialization psn = PSN(0, false, SQLType.INFER_FROM_D_TYPE, 0, null, true))
+	void bindParameter(T)(ref T val, uint pIndex, ParameterSpecialization psn = PSN(0, false, SQLType.INFER_FROM_D_TYPE, 0, null, false)) //true
     {
         // Now in theory we should be able to check the parameter type here, since the protocol is supposed
         // to send us type information for the parameters, but this capability seems to be broken. This assertion
