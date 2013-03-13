@@ -1,5 +1,6 @@
 module ddbc.drivers.mysqlddbc;
 
+import std.algorithm;
 import std.string;
 import std.conv;
 import std.stdio;
@@ -19,33 +20,55 @@ private:
     int port = 3306;
     ddbc.drivers.mysql.Connection conn;
     bool closed;
+	MySQLStatement [] activeStatements;
+
+	void closeUnclosedStatements() {
+		MySQLStatement [] list = activeStatements.dup;
+		foreach(stmt; list) {
+			stmt.close();
+		}
+	}
+
+	void checkClosed() {
+		if (closed)
+			throw new SQLException("Connection is already closed");
+	}
+
 public:
 
     ddbc.drivers.mysql.Connection getConnection() { return conn; }
+	void onStatementClosed(MySQLStatement stmt) {
+		foreach(index, item; activeStatements) {
+			if (item == stmt) {
+				remove(activeStatements, index);
+				return;
+			}
+		}
+	}
 
     this(string url, string[string] params) {
         this.url = url;
         this.params = params;
         //writeln("parsing url " ~ url);
         string urlParams;
-        auto qmIndex = indexOf(url, '?');
+        ptrdiff_t qmIndex = std.string.indexOf(url, '?');
         if (qmIndex >=0 ) {
             urlParams = url[qmIndex + 1 .. $];
             url = url[0 .. qmIndex];
             // TODO: parse params
         }
         string dbName = "";
-		auto firstSlashes = indexOf(url, "//");
-		auto lastSlash = lastIndexOf(url, '/');
-		auto hostNameStart = firstSlashes >= 0 ? firstSlashes + 2 : 0;
-		auto hostNameEnd = lastSlash >=0 && lastSlash > firstSlashes + 1 ? lastSlash : url.length;
+		ptrdiff_t firstSlashes = std.string.indexOf(url, "//");
+		ptrdiff_t lastSlash = std.string.lastIndexOf(url, '/');
+		ptrdiff_t hostNameStart = firstSlashes >= 0 ? firstSlashes + 2 : 0;
+		ptrdiff_t hostNameEnd = lastSlash >=0 && lastSlash > firstSlashes + 1 ? lastSlash : url.length;
         if (hostNameEnd < url.length - 1) {
             dbName = url[hostNameEnd + 1 .. $];
         }
         hostname = url[hostNameStart..hostNameEnd];
         if (hostname.length == 0)
             hostname = "localhost";
-		auto portDelimiter = indexOf(hostname, ":");
+		ptrdiff_t portDelimiter = std.string.indexOf(hostname, ":");
         if (portDelimiter >= 0) {
             string portString = hostname[portDelimiter + 1 .. $];
             hostname = hostname[0 .. portDelimiter];
@@ -62,6 +85,8 @@ public:
         conn = new ddbc.drivers.mysql.Connection(hostname, username, password, dbName, cast(ushort)port);
     }
     override void close() {
+		checkClosed();
+		closeUnclosedStatements();
         conn.close();
         closed = true;
     }
@@ -69,7 +94,9 @@ public:
         // TODO:
     }
     override Statement createStatement() {
-        return new MySQLStatement(this);
+		MySQLStatement stmt = new MySQLStatement(this);
+		activeStatements ~= stmt;
+        return stmt;
     }
     override string getCatalog() {
         // TODO:
@@ -95,6 +122,7 @@ class MySQLStatement : Statement {
     private MySQLConnection conn;
     private Command * cmd;
     ddbc.drivers.mysql.ResultSet rs;
+	MySQLResultSet resultSet;
     this(MySQLConnection conn) {
         this.conn = conn;
     }
@@ -106,10 +134,14 @@ public:
     override ddbc.core.ResultSet executeQuery(string query) {
         cmd = new Command(conn.getConnection(), query);
         rs = cmd.execSQLResult();
-        return new MySQLResultSet(this, rs);
+		resultSet = new MySQLResultSet(this, rs);
+        return resultSet;
     }
     override int executeUpdate(string query) {
-        return false;
+		cmd = new Command(conn.getConnection(), query);
+		ulong rowsAffected = 0;
+		cmd.execSQL(rowsAffected);
+		return cast(int)rowsAffected;
     }
     override void close() {
         closeResultSet();
@@ -121,6 +153,10 @@ public:
         cmd.releaseStatement();
         delete cmd;
         cmd = null;
+		if (resultSet !is null) {
+			resultSet.onStatementClosed();
+			resultSet = null;
+		}
     }
 }
 
@@ -135,6 +171,7 @@ class MySQLResultSet : ddbc.core.ResultSet {
     private int columnCount;
 
     Variant getValue(int columnIndex) {
+		checkClosed();
         if (columnIndex < 1 || columnIndex > columnCount)
             throw new SQLException("Column index out of bounds: " ~ to!string(columnIndex));
         if (currentRowIndex < 0 || currentRowIndex >= rowCount)
@@ -146,40 +183,55 @@ class MySQLResultSet : ddbc.core.ResultSet {
         return res;
     }
 
+	void checkClosed() {
+		if (closed)
+			throw new SQLException("Result set is already closed");
+	}
+
 public:
     this(MySQLStatement stmt, ddbc.drivers.mysql.ResultSet resultSet) {
         this.stmt = stmt;
         this.rs = resultSet;
         closed = false;
-        rowCount = cast(int)rs.length;
+        rowCount = rs.length;
         currentRowIndex = -1;
         columnMap = rs.getColNameMap();
-        columnCount = cast(int)rs.getColNames().length;
+        columnCount = rs.getColNames().length;
     }
 
+	void onStatementClosed() {
+		closed = true;
+	}
+
     override void close() {
-        stmt.closeResultSet();
-        closed = true;
+        checkClosed();
+       	stmt.closeResultSet();
+       	closed = true;
     }
     override bool first() {
+		checkClosed();
         currentRowIndex = 0;
         return currentRowIndex >= 0 && currentRowIndex < rowCount;
     }
     override bool isFirst() {
-        return rowCount > 0 && currentRowIndex == 0;
+		checkClosed();
+		return rowCount > 0 && currentRowIndex == 0;
     }
     override bool isLast() {
-        return rowCount > 0 && currentRowIndex == rowCount - 1;
+		checkClosed();
+		return rowCount > 0 && currentRowIndex == rowCount - 1;
     }
     override bool next() {
-        if (currentRowIndex + 1 >= rowCount)
+		checkClosed();
+		if (currentRowIndex + 1 >= rowCount)
             return false;
         currentRowIndex++;
         return true;
     }
     
     override int findColumn(string columnName) {
-        int * p = (columnName in columnMap);
+		checkClosed();
+		int * p = (columnName in columnMap);
         if (!p)
             throw new SQLException("Column " ~ columnName ~ " not found");
         return *p + 1;
@@ -239,13 +291,14 @@ public:
 			// TODO: check field encoding
 			return decodeTextBlob(v.get!(ubyte[]));
 		}
-		return v.toString();
+        return v.toString();
     }
     override string getString(string columnName) {
         return getString(findColumn(columnName));
     }
     override bool wasNull() {
-        return lastIsNull;
+		checkClosed();
+		return lastIsNull;
     }
 }
 
