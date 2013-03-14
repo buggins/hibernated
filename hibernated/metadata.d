@@ -7,6 +7,7 @@ import std.string;
 import std.traits;
 import std.typecons;
 import std.typetuple;
+import std.variant;
 
 import ddbc.core;
 
@@ -26,6 +27,8 @@ class PropertyInfo {
 public:
 	alias void function(Object, DataSetReader, int index) ReaderFunc;
 	alias void function(Object, DataSetWriter, int index) WriterFunc;
+	alias Variant function(Object) GetVariantFunc;
+	alias void function(Object, Variant value) SetVariantFunc;
 	string propertyName;
 	string columnName;
 	Type columnType;
@@ -35,7 +38,9 @@ public:
 	bool nullable;
 	ReaderFunc readFunc;
 	WriterFunc writeFunc;
-	this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, ReaderFunc reader, WriterFunc writer) {
+	GetVariantFunc getFunc;
+	SetVariantFunc setFunc;
+	this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc) {
 		this.propertyName = propertyName;
 		this.columnName = columnName;
 		this.columnType = columnType;
@@ -45,6 +50,8 @@ public:
 		this.nullable = nullable;
 		this.readFunc = reader;
 		this.writeFunc = writer;
+		this.getFunc = getFunc;
+		this.setFunc = setFunc;
 	}
 }
 
@@ -65,13 +72,17 @@ class EntityInfo {
 		foreach(i, p; properties) {
 			map[p.propertyName] = p;
             if (p.key) {
-                keyIndex = i;
+                keyIndex = cast(int)i;
                 keyProperty = p;
             }
         }
 		this.propertyMap = map;
         enforceEx!HibernatedException(keyProperty !is null, "No key specified for entity " ~ name);
 	}
+	Variant getPrimaryKey(Object obj) { return keyProperty.getFunc(obj); }
+	void setPrimaryKey(Object obj, Variant value) { keyProperty.setFunc(obj, value); }
+	Variant getPropertyValue(Object obj, string propertyName) { return findProperty(propertyName).getFunc(obj); }
+	void setPropertyValue(Object obj, string propertyName, Variant value) { return findProperty(propertyName).setFunc(obj, value); }
 	PropertyInfo[] getProperties() { return properties; }
 	PropertyInfo[string] getPropertyMap() { return propertyMap; }
 	ulong getPropertyCount() { return properties.length; }
@@ -239,6 +250,14 @@ string getPropertyWriteCode(T, string m)() {
 	return "entity." ~ m ~ " = " ~ getColumnTypeDatasetReadCode!(T, m)() ~ ";";
 }
 
+string getPropertyVariantWriteCode(T, string m)() {
+	alias typeof(__traits(getMember, T, m)) ti;
+	static if (is(ti == function)) {
+		return "entity." ~ getterNameToSetterName(m) ~ "(" ~ getColumnTypeVariantReadCode!(T, m)() ~ ");";
+	}
+	return "entity." ~ m ~ " = " ~ getColumnTypeVariantReadCode!(T, m)() ~ ";";
+}
+
 string getColumnTypeName(T, string m)() {
 	alias typeof(__traits(getMember, T, m)) ti;
 	static if (is(ti == int)) {
@@ -289,6 +308,31 @@ string getColumnTypeDatasetReadCode(T, string m)() {
 	return null;
 }
 
+string getColumnTypeVariantReadCode(T, string m)() {
+	alias typeof(__traits(getMember, T, m)) ti;
+	static if (is(ti == int)) {
+		return "value.get!(int)";
+	}
+	static if (is(ti == long)) {
+		return "value.get!(long)";
+	}
+	static if (is(ti == string)) {
+		return "value.get!(string)";
+	}
+	static if (is(ti == function)) {
+		static if (is(ReturnType!(ti) == int)) {
+			return "value.get!(int)";
+		}
+		static if (is(ReturnType!(ti) == long)) {
+			return "value.get!(long)";
+		}
+		static if (is(ReturnType!(ti) == string)) {
+			return "value.get!(string)";
+		}
+	}
+	return null;
+}
+
 string getColumnTypeDatasetWriteCode(T, string m)() {
 	alias typeof(__traits(getMember, T, m)) ti;
 	immutable string readCode = getPropertyReadCode!(T,m)();
@@ -330,6 +374,7 @@ string getPropertyDef(T, immutable string m)() {
 	immutable string datasetReadCode = getColumnTypeDatasetReadCode!(T,m)();
 	immutable string propertyWriteCode = getPropertyWriteCode!(T,m)();
 	immutable string datasetWriteCode = getColumnTypeDatasetWriteCode!(T,m)();
+	immutable string propertyVariantSetCode = getPropertyVariantWriteCode!(T,m)();
 	immutable string readerFuncDef = "\n" ~
 		"function(Object obj, DataSetReader r, int index) { \n" ~ 
 		"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
@@ -339,6 +384,18 @@ string getPropertyDef(T, immutable string m)() {
 		"function(Object obj, DataSetWriter r, int index) { \n" ~ 
 			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
 			"    " ~ datasetWriteCode ~ " \n" ~
+			" }\n";
+	immutable string getVariantFuncDef = "\n" ~
+		"function(Object obj) { \n" ~ 
+			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+			"    Variant v; \n" ~
+			"    v = " ~ propertyReadCode ~ "; \n" ~
+			"    return v; \n" ~
+			" }\n";
+	immutable string setVariantFuncDef = "\n" ~
+		"function(Object obj, Variant value) { \n" ~ 
+			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+			"    " ~ propertyVariantSetCode ~ "\n" ~
 			" }\n";
 
 //	pragma(msg, propertyReadCode);
@@ -354,6 +411,8 @@ string getPropertyDef(T, immutable string m)() {
 			(isGenerated ? "true" : "false")  ~ ", " ~ (nullable ? "true" : "false") ~ ", " ~ 
 			readerFuncDef ~ ", " ~
 			writerFuncDef ~ ", " ~
+			getVariantFuncDef ~ ", " ~
+			setVariantFuncDef ~ ", " ~
 			")";
 }
 
@@ -549,7 +608,7 @@ class SchemaInfoImpl(T...) : SchemaInfo {
 unittest {
 
 	EntityInfo entity = new EntityInfo("user", "users",  [
-	                                                     new PropertyInfo("id", "id", new IntegerType(), 0, true, true, false, null, null)
+	                                                     new PropertyInfo("id", "id", new IntegerType(), 0, true, true, false, null, null, null, null)
 	                                                     ], null);
 
 	assert(entity.properties.length == 1);
@@ -559,11 +618,11 @@ unittest {
 //	immutable string infos = entityListDef!(User, Customer)();
 
 	EntityInfo ei = new EntityInfo("User", "users", [
-	                                                                 new PropertyInfo("id", "id_column", new IntegerType(), 0, true, true, false, null, null),
-                                                                      new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, null, null),
-                                                                      new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, null, null),
-                                                                      new PropertyInfo("login", "login", new StringType(), 0, false, false, true, null, null),
-                                                                      new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true, null, null)], null);
+	                                                 new PropertyInfo("id", "id_column", new IntegerType(), 0, true, true, false, null, null, null, null),
+	                                                 new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, null, null, null, null),
+	                                                 new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, null, null, null, null),
+	                                                 new PropertyInfo("login", "login", new StringType(), 0, false, false, true, null, null, null, null),
+	                                                 new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true, null, null, null, null)], null);
 
 	//void function(User, DataSetReader, int) readFunc = function(User entity, DataSetReader reader, int index) { };
 
@@ -574,15 +633,15 @@ unittest {
 
 	EntityInfo[] entities3 =  [
 	                                                                 new EntityInfo("User", "users", [
-	                                                                 new PropertyInfo("id", "id_column", new IntegerType(), 0, true, true, false, null, null),
-	                                                                  new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, null, null),
-	                                                                  new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, null, null),
-	                                                                  new PropertyInfo("login", "login", new StringType(), 0, false, false, true, null, null),
-	                                                                  new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true, null, null)], null)
+	                                 new PropertyInfo("id", "id_column", new IntegerType(), 0, true, true, false, null, null, null, null),
+	                                 new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, null, null, null, null),
+	                                 new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, null, null, null, null),
+	                                 new PropertyInfo("login", "login", new StringType(), 0, false, false, true, null, null, null, null),
+	                                 new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true, null, null, null, null)], null)
 	                                                                 ,
 	                                                                 new EntityInfo("Customer", "customer", [
-                                                                     new PropertyInfo("id", "id", new IntegerType(), 0, true, true, true, null, null),
-                                                                     new PropertyInfo("name", "name", new StringType(), 0, false, false, true, null, null)], null)
+	                                        new PropertyInfo("id", "id", new IntegerType(), 0, true, true, true, null, null, null, null),
+	                                        new PropertyInfo("name", "name", new StringType(), 0, false, false, true, null, null, null, null)], null)
 	                                                                 ];
 
 
