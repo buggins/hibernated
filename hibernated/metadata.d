@@ -10,6 +10,7 @@ import std.typetuple;
 import ddbc.core;
 
 import hibernated.annotations;
+import hibernated.core;
 import hibernated.type;
 
 //interface ClassMetadata {
@@ -67,6 +68,7 @@ class EntityInfo {
 	ulong getPropertyCount() { return properties.length; }
 	PropertyInfo getProperty(int propertyIndex) { return properties[propertyIndex]; }
 	PropertyInfo findProperty(string propertyName) { return propertyMap[propertyName]; }
+
 	Object createEntity() { return Object.factory(classInfo.name); }
 }
 
@@ -353,9 +355,10 @@ string getEntityDef(T)() {
 	string generatedEntityInfo;
 	string generatedPropertyInfo;
 
-	immutable string typeName = T.stringof;
+    immutable string typeName = fullyQualifiedName!T;
 
 	static assert (hasHibernatedEntityAnnotation!T(), "Type " ~ typeName ~ " has no Entity annotation");
+    pragma(msg, "Entity type name: " ~ typeName);
 
 	immutable string entityName = getEntityName!T();
 	immutable string tableName = getTableName!T();
@@ -411,7 +414,7 @@ string entityListDef(T ...)() {
 			res ~= ",\n";
 		res ~= def;
 	}
-	return 
+	string code = 
 		"static this() {\n" ~
 		"    entities = [\n" ~ res ~ "];\n" ~
 		"    EntityInfo [string] map;\n" ~
@@ -423,30 +426,33 @@ string entityListDef(T ...)() {
 		"    entityMap = map;\n" ~
 		"    classMap = typemap;\n" ~
 		"}";
+    return code;
 }
 
-abstract class SchemaInfo {
-	public EntityInfo [] getEntities();
-	public EntityInfo [string] getEntityMap();
-	public EntityInfo [TypeInfo_Class] getClassMap();
-	public EntityInfo findEntity(string entityName);
-	public EntityInfo getEntity(int entityIndex);
-	public int getEntityCount();
-	public EntityInfo findEntityByClass(Object obj) {
-//		writeln("search for " ~ obj.classinfo.name);
-//		return getEntityMap()[obj.classinfo.name];
-		if ((obj.classinfo in getClassMap()) is null)
-			throw new Exception("Class " ~ obj.classinfo.toString() ~ " not found in map of size " ~ to!string(getClassMap().length));
-		EntityInfo ei = getClassMap()[obj.classinfo];
-		return ei;
-	}
-	public void readAllColumns(Object obj, DataSetReader r, int startColumn) {
-		EntityInfo ei = findEntityByClass(obj);
+interface EntityMetaData {
+    public EntityInfo [] getEntities();
+    public EntityInfo [string] getEntityMap();
+    public EntityInfo [TypeInfo_Class] getClassMap();
+    public EntityInfo findEntity(string entityName);
+    public EntityInfo findEntity(TypeInfo_Class entityClass);
+    public EntityInfo findEntityForObject(Object obj);
+    public EntityInfo getEntity(int entityIndex);
+    public int getEntityCount();
+    public Object createEntity(string entityName);
+    public void readAllColumns(Object obj, DataSetReader r, int startColumn);
+    public string generateFindAllForEntity(string entityName);
+}
+
+abstract class SchemaInfo : EntityMetaData {
+
+    public void readAllColumns(Object obj, DataSetReader r, int startColumn) {
+		EntityInfo ei = findEntityForObject(obj);
 		for (int i = 0; i<ei.getPropertyCount(); i++) {
 			ei.getProperty(i).readFunc(obj, r, startColumn + i);
 		}
 	}
-	public string generateFindAllForEntity(string entityName) {
+
+    public string generateFindAllForEntity(string entityName) {
 		EntityInfo ei = findEntity(entityName);
 		string query;
 		for (int i = 0; i<ei.getPropertyCount(); i++) {
@@ -462,72 +468,49 @@ class SchemaInfoImpl(T...) : SchemaInfo {
 	static EntityInfo [string] entityMap;
 	static EntityInfo [] entities;
 	static EntityInfo [TypeInfo_Class] classMap;
-	mixin(entityListDef!(T)());
+    pragma(msg, entityListDef!(T)());
+    mixin(entityListDef!(T)());
 
-	override public EntityInfo[] getEntities()  { return entities; }
-	override public EntityInfo[string] getEntityMap()  { return entityMap; }
-	override public EntityInfo findEntity(string entityName)  { return entityMap[entityName]; }
-	override public EntityInfo getEntity(int entityIndex)  { return entities[entityIndex]; }
-	override public EntityInfo [TypeInfo_Class] getClassMap()  { return classMap; }
-	override public int getEntityCount()  { return cast(int)entities.length; }
-}
+    public int getEntityCount()  { return cast(int)entities.length; }
 
-//class MetadataInfo(T) {
-//	string name;
-//	static string fields = GenerateFieldList!(T);
-//}
-
-@Entity
-@Table("users")
-class User {
-	
-	@Id @Generated
-	@Column("id_column")
-	int id;
-	
-	@Column("name_column")
-	string name;
-	
-	// no column name
-	@Column
-	string flags;
-	
-	// annotated getter
-	private string login;
-	@Column
-	public string getLogin() { return login; }
-	public void setLogin(string login) { this.login = login; }
-	
-	// no (), no column name
-	@Column
-	int testColumn;
-}
-
-@Entity
-@Table("customer")
-class Customer {
-	@Id @Generated
-	@Column
-	int id;
-	@Column
-	string name;
-}
-
-@Entity
-@Table("t1")
-class T1 {
-	@Id @Generated
-	@Column
-	int id;
-	@Column
-	string name;
-	@Column
-	long flags;
-	@Column
-	string comment;
-	override string toString() {
-		return "id=" ~ to!string(id) ~ ", name=" ~ name ~ ", flags=" ~ to!string(flags) ~ ", comment=" ~ comment;
-	}
+    public EntityInfo[] getEntities()  { return entities; }
+	public EntityInfo[string] getEntityMap()  { return entityMap; }
+    public EntityInfo [TypeInfo_Class] getClassMap() { return classMap; }
+    public EntityInfo findEntity(string entityName)  { 
+        try {
+            return entityMap[entityName]; 
+        } catch (Exception e) {
+            throw new HibernatedException("Cannot find entity by name " ~ entityName, e);
+        }
+    }
+    public EntityInfo findEntity(TypeInfo_Class entityClass) { 
+        try {
+            return classMap[entityClass]; 
+        } catch (Exception e) {
+            throw new HibernatedException("Cannot find entity by class " ~ entityClass.toString(), e);
+        }
+    }
+    public EntityInfo getEntity(int entityIndex) { 
+        try {
+            return entities[entityIndex]; 
+        } catch (Exception e) {
+            throw new HibernatedException("Cannot get entity by index " ~ to!string(entityIndex), e);
+        }
+    }
+    public Object createEntity(string entityName) { 
+        try {
+            return entityMap[entityName].createEntity(); 
+        } catch (Exception e) {
+            throw new HibernatedException("Cannot find entity by name " ~ entityName, e);
+        }
+    }
+    public EntityInfo findEntityForObject(Object obj) {
+        try {
+            return classMap[obj.classinfo];
+        } catch (Exception e) {
+            throw new HibernatedException("Cannot find entity metadata for " ~ obj.classinfo.toString(), e);
+        }
+    }
 }
 
 
@@ -550,7 +533,7 @@ unittest {
                                                                       new PropertyInfo("login", "login", new StringType(), 0, false, false, true, null, null),
                                                                       new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true, null, null)], null);
 
-	void function(User, DataSetReader, int) readFunc = function(User entity, DataSetReader reader, int index) { };
+	//void function(User, DataSetReader, int) readFunc = function(User entity, DataSetReader reader, int index) { };
 
 	assert(ei.findProperty("name").columnName == "name_column");
 	assert(ei.getProperties()[0].columnName == "id_column");
@@ -571,8 +554,70 @@ unittest {
 	                                                                 ];
 
 
+}
+
+version(unittest) {
+    @Entity
+    @Table("users")
+    class User {
+        
+        @Id @Generated
+        @Column("id_column")
+        int id;
+        
+        @Column("name_column")
+        string name;
+        
+        // no column name
+        @Column
+        string flags;
+        
+        // annotated getter
+        private string login;
+        @Column
+        public string getLogin() { return login; }
+        public void setLogin(string login) { this.login = login; }
+        
+        // no (), no column name
+        @Column
+        int testColumn;
+    }
+    
+    
+    @Entity
+    @Table("customer")
+    class Customer {
+        @Id @Generated
+        @Column
+        int id;
+        @Column
+        string name;
+    }
+    
+    @Entity
+    @Table("t1")
+    class T1 {
+        @Id @Generated
+        @Column
+        int id;
+        @Column
+        string name;
+        @Column
+        long flags;
+        @Column
+        string comment;
+        override string toString() {
+            return "id=" ~ to!string(id) ~ ", name=" ~ name ~ ", flags=" ~ to!string(flags) ~ ", comment=" ~ comment;
+        }
+    }
+    
+}
+
+
+unittest {
 	// Checking generated metadata
-	SchemaInfo schema = new SchemaInfoImpl!(User, Customer);
+	EntityMetaData schema = new SchemaInfoImpl!(User, Customer);
+
 	assert(schema.getEntityCount() == 2);
 	assert(schema.findEntity("User").findProperty("name").columnName == "name_column");
 	assert(schema.findEntity("User").getProperties()[0].columnName == "id_column");
@@ -583,6 +628,11 @@ unittest {
 	assert(schema.findEntity("Customer").findProperty("id").key == true);
 
 	assert(schema.findEntity("User").findProperty("id").readFunc !is null);
+
+    auto e2 = schema.createEntity("User");
+    assert(e2 !is null);
+    User e2user = cast(User)e2;
+    assert(e2user !is null);
 
 	Object e1 = schema.findEntity("User").createEntity();
 	assert(e1 !is null);
