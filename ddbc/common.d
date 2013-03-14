@@ -2,6 +2,7 @@ module ddbc.common;
 import ddbc.core;
 import std.algorithm;
 import std.exception;
+import std.variant;
 
 class DataSourceImpl : DataSource {
 	Driver driver;
@@ -195,6 +196,13 @@ public:
 	override string getString(string columnName) {
 		return getString(findColumn(columnName));
 	}
+    override Variant getVariant(int columnIndex) {
+        throw new SQLException("Method not implemented");
+    }
+    override Variant getVariant(string columnName) {
+        return getVariant(findColumn(columnName));
+    }
+
 	override bool wasNull() {
 		throw new SQLException("Method not implemented");
 	}

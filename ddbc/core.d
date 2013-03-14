@@ -1,6 +1,7 @@
 module ddbc.core;
 
 import std.exception;
+import std.variant;
 
 class SQLException : Exception {
     private Exception causedBy;
@@ -115,6 +116,7 @@ interface DataSetReader {
 	double getDouble(int columnIndex);
 	float getFloat(int columnIndex);
 	string getString(int columnIndex);
+    Variant getVariant(int columnIndex);
 	bool isNull(int columnIndex);
 	bool wasNull();
 }
@@ -132,7 +134,8 @@ interface DataSetWriter {
 	void setUbyte(int parameterIndex, ubyte x);
 	void setUbytes(int parameterIndex, ubyte[] x);
 	void setString(int parameterIndex, string x);
-	
+    void setVariant(int columnIndex, Variant x);
+
 	void setNull(int parameterIndex);
 	void setNull(int parameterIndex, int sqlType);
 }
@@ -167,7 +170,9 @@ interface ResultSet : DataSetReader {
 	double getDouble(int columnIndex);
 	float getFloat(int columnIndex);
 	string getString(int columnIndex);
-	bool isNull(int columnIndex);
+    Variant getVariant(int columnIndex);
+
+    bool isNull(int columnIndex);
 	bool wasNull();
 
 	// additional methods
@@ -185,6 +190,7 @@ interface ResultSet : DataSetReader {
 	double getDouble(string columnName);
 	float getFloat(string columnName);
     string getString(string columnName);
+    Variant getVariant(string columnName);
 }
 
 interface Statement {
@@ -220,6 +226,7 @@ interface PreparedStatement : Statement, DataSetWriter {
 	void setUbyte(int parameterIndex, ubyte x);
 	void setUbytes(int parameterIndex, ubyte[] x);
 	void setString(int parameterIndex, string x);
+    void setVariant(int parameterIndex, Variant x);
 
 	void setNull(int parameterIndex);
 	void setNull(int parameterIndex, int sqlType);

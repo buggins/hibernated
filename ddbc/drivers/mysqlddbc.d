@@ -453,6 +453,16 @@ public:
         else
             cmd.param(parameterIndex-1) = x;
     }
+    override void setVariant(int parameterIndex, Variant x) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
+        checkIndex(parameterIndex);
+        if (x == null)
+            setNull(parameterIndex);
+        else
+            cmd.param(parameterIndex-1) = x;
+    }
     override void setNull(int parameterIndex) {
         checkClosed();
         lock();
@@ -745,6 +755,17 @@ public:
 			return decodeTextBlob(v.get!(ubyte[]));
 		}
         return v.toString();
+    }
+    override Variant getVariant(int columnIndex) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
+        Variant v = getValue(columnIndex);
+        if (lastIsNull) {
+            Variant vnull = null;
+            return vnull;
+        }
+        return v;
     }
     override bool wasNull() {
         checkClosed();
