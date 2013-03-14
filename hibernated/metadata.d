@@ -23,12 +23,15 @@ import hibernated.type;
 
 
 
+/// Metadata of entity property
 class PropertyInfo {
 public:
 	alias void function(Object, DataSetReader, int index) ReaderFunc;
 	alias void function(Object, DataSetWriter, int index) WriterFunc;
 	alias Variant function(Object) GetVariantFunc;
 	alias void function(Object, Variant value) SetVariantFunc;
+	alias bool function(Object) KeyIsSetFunc;
+	alias bool function(Object) IsNullFunc;
 	string propertyName;
 	string columnName;
 	Type columnType;
@@ -40,7 +43,9 @@ public:
 	WriterFunc writeFunc;
 	GetVariantFunc getFunc;
 	SetVariantFunc setFunc;
-	this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc) {
+	KeyIsSetFunc keyIsSetFunc;
+	IsNullFunc isNullFunc;
+	this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, KeyIsSetFunc keyIsSetFunc, IsNullFunc isNullFunc) {
 		this.propertyName = propertyName;
 		this.columnName = columnName;
 		this.columnType = columnType;
@@ -52,9 +57,12 @@ public:
 		this.writeFunc = writer;
 		this.getFunc = getFunc;
 		this.setFunc = setFunc;
+		this.keyIsSetFunc = keyIsSetFunc;
+		this.isNullFunc = isNullFunc;
 	}
 }
 
+/// Metadata of single entity
 class EntityInfo {
 	string name;
 	string tableName;
@@ -79,16 +87,29 @@ class EntityInfo {
 		this.propertyMap = map;
         enforceEx!HibernatedException(keyProperty !is null, "No key specified for entity " ~ name);
 	}
-	Variant getPrimaryKey(Object obj) { return keyProperty.getFunc(obj); }
-	void setPrimaryKey(Object obj, Variant value) { keyProperty.setFunc(obj, value); }
+	/// returns key value as Variant
+	Variant getKey(Object obj) { return keyProperty.getFunc(obj); }
+	/// sets key value from Variant
+	void setKey(Object obj, Variant value) { keyProperty.setFunc(obj, value); }
+	/// checks if primary key is set (for non-nullable member types like int or long, 0 is considered as non-set)
+	bool isKeySet(Object obj) { return keyProperty.keyIsSetFunc(obj); }
+	/// checks if property value is null
+	bool isNull(Object obj) { return keyProperty.isNullFunc(obj); }
+	/// returns property value as Variant
 	Variant getPropertyValue(Object obj, string propertyName) { return findProperty(propertyName).getFunc(obj); }
+	/// sets property value from Variant
 	void setPropertyValue(Object obj, string propertyName, Variant value) { return findProperty(propertyName).setFunc(obj, value); }
+	/// returns all properties as array
 	PropertyInfo[] getProperties() { return properties; }
+	/// returns map of property name to property metadata
 	PropertyInfo[string] getPropertyMap() { return propertyMap; }
+	/// returns number of properties
 	ulong getPropertyCount() { return properties.length; }
+	/// returns property by index
 	PropertyInfo getProperty(int propertyIndex) { return properties[propertyIndex]; }
+	/// returns property by name, throws exception if not found
 	PropertyInfo findProperty(string propertyName) { return propertyMap[propertyName]; }
-
+	/// create instance of entity object (using default constructor)
 	Object createEntity() { return Object.factory(classInfo.name); }
 }
 
@@ -234,6 +255,32 @@ string getPropertyName(T, string m)() {
 	return m;
 }
 
+enum PropertyMemberKind : int {
+	FIELD_MEMBER,    // int field;
+	GETTER_MEMBER,   // getField() + setField() or isField() and setField()
+	PROPERTY_MEMBER, // @property int field() { return _field; }
+}
+
+PropertyMemberKind getPropertyMemberKind(T, string m)() {
+	alias typeof(__traits(getMember, T, m)) ti;
+	static if (is(ti == function)) {
+		static if (functionAttributes!ti & FA.property)
+			return PROPERTY_MEMBER;
+		else
+			return GETTER_MEMBER;
+	}
+	return FIELD_MEMBER;
+}
+
+enum PropertyMemberType : int {
+	INT_TYPE,
+	LONG_TYPE,
+	STRING_TYPE,
+	GETTER_INT_TYPE,
+	GETTER_LONG_TYPE,
+	GETTER_STRING_TYPE,
+}
+
 string getPropertyReadCode(T, string m)() {
 	alias typeof(__traits(getMember, T, m)) ti;
 	static if (is(ti == function)) {
@@ -241,6 +288,59 @@ string getPropertyReadCode(T, string m)() {
 	}
 	return "entity." ~ m;
 }
+
+string getColumnTypeKeyIsSetCode(T, string m)() {
+	alias typeof(__traits(getMember, T, m)) ti;
+	static if (is(ti == int)) {
+		return "(entity." ~ m ~ " != 0)";
+	}
+	static if (is(ti == long)) {
+		return "(entity." ~ m ~ " != 0)";
+	}
+	static if (is(ti == string)) {
+		return "(entity." ~ m ~ " !is null)";
+	}
+	static if (is(ti == function)) {
+		immutable getter = "(entity." ~ m ~ "()";
+		static if (is(ReturnType!(ti) == int)) {
+			return getter ~ " != 0)";
+		}
+		static if (is(ReturnType!(ti) == long)) {
+			return getter ~ " != 0)";
+		}
+		static if (is(ReturnType!(ti) == string)) {
+			return getter ~ " !is null)";
+		}
+	}
+	return null;
+}
+
+string getColumnTypeIsNullCode(T, string m)() {
+	alias typeof(__traits(getMember, T, m)) ti;
+	static if (is(ti == int)) {
+		return "false";
+	}
+	static if (is(ti == long)) {
+		return "false";
+	}
+	static if (is(ti == string)) {
+		return "(entity." ~ m ~ " is null)";
+	}
+	static if (is(ti == function)) {
+		immutable getter = "(entity." ~ m ~ "()";
+		static if (is(ReturnType!(ti) == int)) {
+			return "false";
+		}
+		static if (is(ReturnType!(ti) == long)) {
+			return "false";
+		}
+		static if (is(ReturnType!(ti) == string)) {
+			return getter ~ " is null)";
+		}
+	}
+	return null;
+}
+
 
 string getPropertyWriteCode(T, string m)() {
 	alias typeof(__traits(getMember, T, m)) ti;
@@ -311,23 +411,23 @@ string getColumnTypeDatasetReadCode(T, string m)() {
 string getColumnTypeVariantReadCode(T, string m)() {
 	alias typeof(__traits(getMember, T, m)) ti;
 	static if (is(ti == int)) {
-		return "value.get!(int)";
+		return "(value == null ? 0 : value.get!(int))";
 	}
 	static if (is(ti == long)) {
-		return "value.get!(long)";
+		return "(value == null ? 0 : value.get!(long))";
 	}
 	static if (is(ti == string)) {
-		return "value.get!(string)";
+		return "(value == null ? null : value.get!(string))";
 	}
 	static if (is(ti == function)) {
 		static if (is(ReturnType!(ti) == int)) {
-			return "value.get!(int)";
+			return "(value == null ? 0 : value.get!(int))";
 		}
 		static if (is(ReturnType!(ti) == long)) {
-			return "value.get!(long)";
+			return "(value == null ? 0 : value.get!(long))";
 		}
 		static if (is(ReturnType!(ti) == string)) {
-			return "value.get!(string)";
+			return "(value == null ? null : value.get!(string))";
 		}
 	}
 	return null;
@@ -375,6 +475,8 @@ string getPropertyDef(T, immutable string m)() {
 	immutable string propertyWriteCode = getPropertyWriteCode!(T,m)();
 	immutable string datasetWriteCode = getColumnTypeDatasetWriteCode!(T,m)();
 	immutable string propertyVariantSetCode = getPropertyVariantWriteCode!(T,m)();
+	immutable string keyIsSetCode = getColumnTypeKeyIsSetCode!(T,m)();
+	immutable string isNullCode = getColumnTypeIsNullCode!(T,m)();
 	immutable string readerFuncDef = "\n" ~
 		"function(Object obj, DataSetReader r, int index) { \n" ~ 
 		"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
@@ -397,13 +499,23 @@ string getPropertyDef(T, immutable string m)() {
 			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
 			"    " ~ propertyVariantSetCode ~ "\n" ~
 			" }\n";
+	immutable string keyIsSetFuncDef = "\n" ~
+		"function(Object obj) { \n" ~ 
+			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+			"    return " ~ keyIsSetCode ~ ";\n" ~
+			" }\n";
+	immutable string isNullFuncDef = "\n" ~
+		"function(Object obj) { \n" ~ 
+			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+			"    return " ~ isNullCode ~ ";\n" ~
+			" }\n";
 
 //	pragma(msg, propertyReadCode);
 //	pragma(msg, datasetReadCode);
 //	pragma(msg, propertyWriteCode);
 //	pragma(msg, datasetWriteCode);
-	pragma(msg, readerFuncDef);
-	pragma(msg, writerFuncDef);
+//	pragma(msg, readerFuncDef);
+//	pragma(msg, writerFuncDef);
 
 	static assert (typeName != null, "Cannot determine column type for member " ~ m ~ " of type " ~ T.stringof);
 	return "    new PropertyInfo(\"" ~ propertyName ~ "\", \"" ~ columnName ~ "\", " ~ typeName ~ ", " ~ 
@@ -413,6 +525,8 @@ string getPropertyDef(T, immutable string m)() {
 			writerFuncDef ~ ", " ~
 			getVariantFuncDef ~ ", " ~
 			setVariantFuncDef ~ ", " ~
+			keyIsSetFuncDef ~ ", " ~
+			isNullFuncDef ~
 			")";
 }
 
@@ -608,7 +722,7 @@ class SchemaInfoImpl(T...) : SchemaInfo {
 unittest {
 
 	EntityInfo entity = new EntityInfo("user", "users",  [
-	                                                     new PropertyInfo("id", "id", new IntegerType(), 0, true, true, false, null, null, null, null)
+	                                                      new PropertyInfo("id", "id", new IntegerType(), 0, true, true, false, null, null, null, null, null, null)
 	                                                     ], null);
 
 	assert(entity.properties.length == 1);
@@ -618,11 +732,11 @@ unittest {
 //	immutable string infos = entityListDef!(User, Customer)();
 
 	EntityInfo ei = new EntityInfo("User", "users", [
-	                                                 new PropertyInfo("id", "id_column", new IntegerType(), 0, true, true, false, null, null, null, null),
-	                                                 new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, null, null, null, null),
-	                                                 new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, null, null, null, null),
-	                                                 new PropertyInfo("login", "login", new StringType(), 0, false, false, true, null, null, null, null),
-	                                                 new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true, null, null, null, null)], null);
+	                                                 new PropertyInfo("id", "id_column", new IntegerType(), 0, true, true, false, null, null, null, null, null, null),
+	                                                 new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, null, null, null, null, null, null),
+	                                                 new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, null, null, null, null, null, null),
+	                                                 new PropertyInfo("login", "login", new StringType(), 0, false, false, true, null, null, null, null, null, null),
+	                                                 new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true, null, null, null, null, null, null)], null);
 
 	//void function(User, DataSetReader, int) readFunc = function(User entity, DataSetReader reader, int index) { };
 
@@ -633,15 +747,15 @@ unittest {
 
 	EntityInfo[] entities3 =  [
 	                                                                 new EntityInfo("User", "users", [
-	                                 new PropertyInfo("id", "id_column", new IntegerType(), 0, true, true, false, null, null, null, null),
-	                                 new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, null, null, null, null),
-	                                 new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, null, null, null, null),
-	                                 new PropertyInfo("login", "login", new StringType(), 0, false, false, true, null, null, null, null),
-	                                 new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true, null, null, null, null)], null)
+	                                 new PropertyInfo("id", "id_column", new IntegerType(), 0, true, true, false, null, null, null, null, null, null),
+	                                 new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, null, null, null, null, null, null),
+	                                 new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, null, null, null, null, null, null),
+	                                 new PropertyInfo("login", "login", new StringType(), 0, false, false, true, null, null, null, null, null, null),
+	                                 new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true, null, null, null, null, null, null)], null)
 	                                                                 ,
 	                                                                 new EntityInfo("Customer", "customer", [
-	                                        new PropertyInfo("id", "id", new IntegerType(), 0, true, true, true, null, null, null, null),
-	                                        new PropertyInfo("name", "name", new StringType(), 0, false, false, true, null, null, null, null)], null)
+	                                        new PropertyInfo("id", "id", new IntegerType(), 0, true, true, true, null, null, null, null, null, null),
+	                                        new PropertyInfo("name", "name", new StringType(), 0, false, false, true, null, null, null, null, null, null)], null)
 	                                                                 ];
 
 
@@ -731,3 +845,9 @@ unittest {
 	assert(e1user !is null);
 	e1user.id = 25;
 }
+
+unittest {
+
+}
+
+
