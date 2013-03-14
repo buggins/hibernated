@@ -1,6 +1,7 @@
 module hibernated.metadata;
 
 import std.conv;
+import std.exception;
 import std.stdio;
 import std.string;
 import std.traits;
@@ -53,15 +54,23 @@ class EntityInfo {
 	PropertyInfo [] properties;
 	PropertyInfo [string] propertyMap;
 	TypeInfo_Class classInfo;
+    int keyIndex;
+    PropertyInfo keyProperty;
 	public this(string name, string tableName, PropertyInfo [] properties, TypeInfo_Class classInfo) {
 		this.name = name;
 		this.tableName = tableName;
 		this.properties = properties;
 		this.classInfo = classInfo;
 		PropertyInfo[string] map;
-		foreach(p; properties)
+		foreach(i, p; properties) {
 			map[p.propertyName] = p;
+            if (p.key) {
+                keyIndex = i;
+                keyProperty = p;
+            }
+        }
 		this.propertyMap = map;
+        enforceEx!HibernatedException(keyProperty !is null, "No key specified for entity " ~ name);
 	}
 	PropertyInfo[] getProperties() { return properties; }
 	PropertyInfo[string] getPropertyMap() { return propertyMap; }
@@ -410,6 +419,9 @@ string entityListDef(T ...)() {
 	string res;
 	foreach(t; T) {
 		immutable string def = getEntityDef!t;
+
+        pragma(msg, def);
+
 		if (res.length > 0)
 			res ~= ",\n";
 		res ~= def;
@@ -441,9 +453,27 @@ interface EntityMetaData {
     public Object createEntity(string entityName);
     public void readAllColumns(Object obj, DataSetReader r, int startColumn);
     public string generateFindAllForEntity(string entityName);
+    public string getAllFieldList(EntityInfo ei);
+    public string getAllFieldList(string entityName);
+    public string generateFindByPkForEntity(EntityInfo ei);
+    public string generateFindByPkForEntity(string entityName);
 }
 
 abstract class SchemaInfo : EntityMetaData {
+
+    public string getAllFieldList(EntityInfo ei) {
+        string query;
+        for (int i = 0; i < ei.getPropertyCount(); i++) {
+            if (query.length != 0)
+                query ~= ", ";
+            query ~= ei.getProperty(i).columnName;
+        }
+        return query;
+    }
+
+    public string getAllFieldList(string entityName) {
+        return getAllFieldList(findEntity(entityName));
+    }
 
     public void readAllColumns(Object obj, DataSetReader r, int startColumn) {
 		EntityInfo ei = findEntityForObject(obj);
@@ -454,14 +484,16 @@ abstract class SchemaInfo : EntityMetaData {
 
     public string generateFindAllForEntity(string entityName) {
 		EntityInfo ei = findEntity(entityName);
-		string query;
-		for (int i = 0; i<ei.getPropertyCount(); i++) {
-			if (query.length != 0)
-				query ~= ", ";
-			query ~= ei.getProperty(i).columnName;
-		}
-		return "SELECT " ~ query ~ " FROM " ~ ei.tableName;
+        return "SELECT " ~ getAllFieldList(ei) ~ " FROM " ~ ei.tableName;
 	}
+
+    public string generateFindByPkForEntity(EntityInfo ei) {
+        return "SELECT " ~ getAllFieldList(ei) ~ " FROM " ~ ei.tableName ~ " WHERE " ~ ei.keyProperty.columnName ~ " = ?";
+    }
+
+    public string generateFindByPkForEntity(string entityName) {
+        return generateFindByPkForEntity(findEntity(entityName));
+    }
 }
 
 class SchemaInfoImpl(T...) : SchemaInfo {
@@ -549,7 +581,7 @@ unittest {
 	                                                                  new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true, null, null)], null)
 	                                                                 ,
 	                                                                 new EntityInfo("Customer", "customer", [
-                                                                     new PropertyInfo("id", "id", new IntegerType(), 0, false, false, true, null, null),
+                                                                     new PropertyInfo("id", "id", new IntegerType(), 0, true, true, true, null, null),
                                                                      new PropertyInfo("name", "name", new StringType(), 0, false, false, true, null, null)], null)
 	                                                                 ];
 

@@ -11,3 +11,4 @@ class HibernatedException : Exception {
     this(Exception causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); this.causedBy = causedBy; }
     Exception getCausedBy() { return causedBy; }
 }
+
