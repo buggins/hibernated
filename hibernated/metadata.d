@@ -258,205 +258,345 @@ string getPropertyName(T, string m)() {
 enum PropertyMemberKind : int {
 	FIELD_MEMBER,    // int field;
 	GETTER_MEMBER,   // getField() + setField() or isField() and setField()
-	PROPERTY_MEMBER, // @property int field() { return _field; }
+	PROPERTY_MEMBER  // @property int field() { return _field; }
 }
+
+bool hasPercentSign(immutable string str) {
+	foreach(ch; str) {
+		if (ch == '%')
+			return true;
+	}
+	return false;
+}
+
+string substituteParam(immutable string fmt, immutable string value) {
+	if (hasPercentSign(fmt))
+		return format(fmt, value);
+	else
+		return fmt;
+}
+
+static immutable string[] PropertyMemberKind_ReadCode = [
+	"entity.%s",
+    "entity.%s()",
+ 	"entity.%s",
+];
 
 PropertyMemberKind getPropertyMemberKind(T, string m)() {
 	alias typeof(__traits(getMember, T, m)) ti;
 	static if (is(ti == function)) {
-		static if (functionAttributes!ti & FA.property)
-			return PROPERTY_MEMBER;
+		static if (functionAttributes!ti & FunctionAttribute.property)
+			return PropertyMemberKind.PROPERTY_MEMBER;
 		else
-			return GETTER_MEMBER;
+			return PropertyMemberKind.GETTER_MEMBER;
+	} else {
+		return PropertyMemberKind.FIELD_MEMBER;
 	}
-	return FIELD_MEMBER;
 }
 
 enum PropertyMemberType : int {
-	INT_TYPE,
-	LONG_TYPE,
-	STRING_TYPE,
-	GETTER_INT_TYPE,
-	GETTER_LONG_TYPE,
-	GETTER_STRING_TYPE,
+	BYTE_TYPE,    // byte
+	SHORT_TYPE,   // short
+	INT_TYPE,     // int
+	LONG_TYPE,    // long
+	UBYTE_TYPE,   // ubyte
+	USHORT_TYPE,  // ushort
+	UINT_TYPE,    // uint
+	ULONG_TYPE,   // ulong
+	NULLABLE_BYTE_TYPE,  // Nullable!byte
+	NULLABLE_SHORT_TYPE, // Nullable!short
+	NULLABLE_INT_TYPE,   // Nullable!int
+	NULLABLE_LONG_TYPE,  // Nullable!long
+	NULLABLE_UBYTE_TYPE, // Nullable!ubyte
+	NULLABLE_USHORT_TYPE,// Nullable!ushort
+	NULLABLE_UINT_TYPE,  // Nullable!uint
+	NULLABLE_ULONG_TYPE, // Nullable!ulong
+	STRING_TYPE   // string
 }
+
+PropertyMemberType getPropertyMemberType(T, string m)() {
+	alias typeof(__traits(getMember, T, m)) ti;
+    static if (is(ti == function)) {
+		pragma(msg, "is function");
+		assert (is(ti == function));
+		static if (is(ReturnType!(ti) == byte)) {
+			return PropertyMemberType.BYTE_TYPE;
+		} else if (is(ReturnType!(ti) == short)) {
+			return PropertyMemberType.SHORT_TYPE;
+		} else if (is(ReturnType!(ti) == int)) {
+			return PropertyMemberType.INT_TYPE;
+		} else if (is(ReturnType!(ti) == long)) {
+			return PropertyMemberType.LONG_TYPE;
+		} else if (is(ReturnType!(ti) == ubyte)) {
+			return PropertyMemberType.UBYTE_TYPE;
+		} else if (is(ReturnType!(ti) == ushort)) {
+			return PropertyMemberType.USHORT_TYPE;
+		} else if (is(ReturnType!(ti) == uint)) {
+			return PropertyMemberType.UINT_TYPE;
+		} else if (is(ReturnType!(ti) == ulong)) {
+			return PropertyMemberType.ULONG_TYPE;
+		} else if (is(ReturnType!(ti) == Nullable!byte)) {
+			return PropertyMemberType.NULLABLE_BYTE_TYPE;
+		} else if (is(ReturnType!(ti) == Nullable!short)) {
+			return PropertyMemberType.NULLABLE_SHORT_TYPE;
+		} else if (is(ReturnType!(ti) == Nullable!int)) {
+			return PropertyMemberType.NULLABLE_INT_TYPE;
+		} else if (is(ReturnType!(ti) == Nullable!long)) {
+			return PropertyMemberType.NULLABLE_LONG_TYPE;
+		} else if (is(ReturnType!(ti) == Nullable!ubyte)) {
+			return PropertyMemberType.NULLABLE_UBYTE_TYPE;
+		} else if (is(ReturnType!(ti) == Nullable!ushort)) {
+			return PropertyMemberType.NULLABLE_USHORT_TYPE;
+		} else if (is(ReturnType!(ti) == Nullable!uint)) {
+			return PropertyMemberType.NULLABLE_UINT_TYPE;
+		} else if (is(ReturnType!(ti) == Nullable!ulong)) {
+			return PropertyMemberType.NULLABLE_ULONG_TYPE;
+		} else if (is(ReturnType!(ti) == string)) {
+			return PropertyMemberType.STRING_TYPE;
+		} else {
+			assert (false, "Member " ~ m ~ " of class " ~ T.stringof ~ " has unsupported type " ~ ti.stringof);
+		}
+	} else if (is(ti == byte)) {
+		return PropertyMemberType.BYTE_TYPE;
+	} else if (is(ti == short)) {
+		return PropertyMemberType.SHORT_TYPE;
+	} else if (is(ti == int)) {
+		pragma(msg, "is int");
+		return PropertyMemberType.INT_TYPE;
+	} else if (is(ti == long)) {
+		return PropertyMemberType.LONG_TYPE;
+	} else if (is(ti == ubyte)) {
+		return PropertyMemberType.UBYTE_TYPE;
+	} else if (is(ti == ushort)) {
+		return PropertyMemberType.USHORT_TYPE;
+	} else if (is(ti == uint)) {
+		return PropertyMemberType.UINT_TYPE;
+	} else if (is(ti == ulong)) {
+		return PropertyMemberType.ULONG_TYPE;
+	} else if (is(ti == Nullable!byte)) {
+		return PropertyMemberType.NULLABLE_BYTE_TYPE;
+	} else if (is(ti == Nullable!short)) {
+		return PropertyMemberType.NULLABLE_SHORT_TYPE;
+	} else if (is(ti == Nullable!int)) {
+		return PropertyMemberType.NULLABLE_INT_TYPE;
+	} else if (is(ti == Nullable!long)) {
+		return PropertyMemberType.NULLABLE_LONG_TYPE;
+	} else if (is(ti == Nullable!ubyte)) {
+		return PropertyMemberType.NULLABLE_UBYTE_TYPE;
+	} else if (is(ti == Nullable!ushort)) {
+		return PropertyMemberType.NULLABLE_USHORT_TYPE;
+	} else if (is(ti == Nullable!uint)) {
+		return PropertyMemberType.NULLABLE_UINT_TYPE;
+	} else if (is(ti == Nullable!ulong)) {
+		return PropertyMemberType.NULLABLE_ULONG_TYPE;
+	} else if (is(ti == string)) {
+		return PropertyMemberType.STRING_TYPE;
+	} else {
+		assert (false, "Member " ~ m ~ " of class " ~ T.stringof ~ " has unsupported type " ~ ti.stringof);
+	}
+	//static assert (false, "Member " ~ m ~ " of class " ~ T.stringof ~ " has unsupported type " ~ ti.stringof);
+}
+
 
 string getPropertyReadCode(T, string m)() {
-	alias typeof(__traits(getMember, T, m)) ti;
-	static if (is(ti == function)) {
-		return "entity." ~ m ~ "()";
-	}
-	return "entity." ~ m;
+	return substituteParam(PropertyMemberKind_ReadCode[getPropertyMemberKind!(T,m)()], m);
 }
+
+static immutable string[] ColumnTypeKeyIsSetCode = 
+	[
+	 "(%s != 0)", //BYTE_TYPE,    // byte
+	 "(%s != 0)", //SHORT_TYPE,   // short
+	 "(%s != 0)", //INT_TYPE,     // int
+	 "(%s != 0)", //LONG_TYPE,    // long
+	 "(%s != 0)", //UBYTE_TYPE,   // ubyte
+	 "(%s != 0)", //USHORT_TYPE,  // ushort
+	 "(%s != 0)", //UINT_TYPE,    // uint
+	 "(%s != 0)", //ULONG_TYPE,   // ulong
+	 "(!%s.isNull)", //NULLABLE_BYTE_TYPE,  // Nullable!byte
+	 "(!%s.isNull)", //NULLABLE_SHORT_TYPE, // Nullable!short
+	 "(!%s.isNull)", //NULLABLE_INT_TYPE,   // Nullable!int
+	 "(!%s.isNull)", //NULLABLE_LONG_TYPE,  // Nullable!long
+	 "(!%s.isNull)", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
+	 "(!%s.isNull)", //NULLABLE_USHORT_TYPE,// Nullable!ushort
+	 "(!%s.isNull)", //NULLABLE_UINT_TYPE,  // Nullable!uint
+	 "(!%s.isNull)", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+	 "(%s !is null)", //STRING_TYPE   // string
+	 ];
 
 string getColumnTypeKeyIsSetCode(T, string m)() {
-	alias typeof(__traits(getMember, T, m)) ti;
-	static if (is(ti == int)) {
-		return "(entity." ~ m ~ " != 0)";
-	}
-	static if (is(ti == long)) {
-		return "(entity." ~ m ~ " != 0)";
-	}
-	static if (is(ti == string)) {
-		return "(entity." ~ m ~ " !is null)";
-	}
-	static if (is(ti == function)) {
-		immutable getter = "(entity." ~ m ~ "()";
-		static if (is(ReturnType!(ti) == int)) {
-			return getter ~ " != 0)";
-		}
-		static if (is(ReturnType!(ti) == long)) {
-			return getter ~ " != 0)";
-		}
-		static if (is(ReturnType!(ti) == string)) {
-			return getter ~ " !is null)";
-		}
-	}
-	return null;
+	return substituteParam(ColumnTypeKeyIsSetCode[getPropertyMemberType!(T,m)()], getPropertyReadCode!(T,m)());
 }
+
+static immutable string[] ColumnTypeIsNullCode = 
+	[
+	 "(false)", //BYTE_TYPE,    // byte
+	 "(false)", //SHORT_TYPE,   // short
+	 "(false)", //INT_TYPE,     // int
+	 "(false)", //LONG_TYPE,    // long
+	 "(false)", //UBYTE_TYPE,   // ubyte
+	 "(false)", //USHORT_TYPE,  // ushort
+	 "(false)", //UINT_TYPE,    // uint
+	 "(false)", //ULONG_TYPE,   // ulong
+	 "(%s.isNull)", //NULLABLE_BYTE_TYPE,  // Nullable!byte
+	 "(%s.isNull)", //NULLABLE_SHORT_TYPE, // Nullable!short
+	 "(%s.isNull)", //NULLABLE_INT_TYPE,   // Nullable!int
+	 "(%s.isNull)", //NULLABLE_LONG_TYPE,  // Nullable!long
+	 "(%s.isNull)", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
+	 "(%s.isNull)", //NULLABLE_USHORT_TYPE,// Nullable!ushort
+	 "(%s.isNull)", //NULLABLE_UINT_TYPE,  // Nullable!uint
+	 "(%s.isNull)", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+	 "(%s is null)", //STRING_TYPE   // string
+	 ];
 
 string getColumnTypeIsNullCode(T, string m)() {
-	alias typeof(__traits(getMember, T, m)) ti;
-	static if (is(ti == int)) {
-		return "false";
-	}
-	static if (is(ti == long)) {
-		return "false";
-	}
-	static if (is(ti == string)) {
-		return "(entity." ~ m ~ " is null)";
-	}
-	static if (is(ti == function)) {
-		immutable getter = "(entity." ~ m ~ "()";
-		static if (is(ReturnType!(ti) == int)) {
-			return "false";
-		}
-		static if (is(ReturnType!(ti) == long)) {
-			return "false";
-		}
-		static if (is(ReturnType!(ti) == string)) {
-			return getter ~ " is null)";
-		}
-	}
-	return null;
+	return substituteParam(ColumnTypeIsNullCode[getPropertyMemberType!(T,m)()], getPropertyReadCode!(T,m)());
 }
 
+static immutable string[] ColumnTypeSetNullCode = 
+	[
+	 "byte nv = 0;", //BYTE_TYPE,    // byte
+	 "short nv = 0;", //SHORT_TYPE,   // short
+	 "int nv = 0;", //INT_TYPE,     // int
+	 "long nv = 0;", //LONG_TYPE,    // long
+	 "ubyte nv = 0;", //UBYTE_TYPE,   // ubyte
+	 "ushort nv = 0;", //USHORT_TYPE,  // ushort
+	 "uint nv = 0;", //UINT_TYPE,    // uint
+	 "ulong nv = 0;", //ULONG_TYPE,   // ulong
+	 "Nullable!byte nv;", //NULLABLE_BYTE_TYPE,  // Nullable!byte
+	 "Nullable!short nv;", //NULLABLE_SHORT_TYPE, // Nullable!short
+	 "Nullable!int nv;", //NULLABLE_INT_TYPE,   // Nullable!int
+	 "Nullable!long nv;", //NULLABLE_LONG_TYPE,  // Nullable!long
+	 "Nullable!ubyte nv;", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
+	 "Nullable!ushort nv;", //NULLABLE_USHORT_TYPE,// Nullable!ushort
+	 "Nullable!uint nv;", //NULLABLE_UINT_TYPE,  // Nullable!uint
+	 "Nullable!ulong nv;", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+	 "string nv = null;", //STRING_TYPE   // string
+	 ];
 
 string getPropertyWriteCode(T, string m)() {
-	alias typeof(__traits(getMember, T, m)) ti;
-	static if (is(ti == function)) {
-		return "entity." ~ getterNameToSetterName(m) ~ "(" ~ getColumnTypeDatasetReadCode!(T, m)() ~ ");";
+	immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
+	immutable string nullValueCode = ColumnTypeSetNullCode[getPropertyMemberType!(T,m)()];
+	immutable string datasetReader = "(r.isNull(index) ? " ~ getColumnTypeDatasetReadCode!(T, m)() ~ " : nv)";
+	static if (kind == PropertyMemberKind.FIELD_MEMBER) {
+		return nullValueCode ~ "entity." ~ m ~ " = " ~ datasetReader ~ ";";
+	} else if (kind == PropertyMemberKind.GETTER_MEMBER) {
+		return nullValueCode ~ "entity." ~ getterNameToSetterName(m) ~ "(" ~ datasetReader ~ ");";
+	} else if (kind == PropertyMemberKind.PROPERTY_MEMBER) {
+		return nullValueCode ~ "entity." ~ m ~ " = " ~ datasetReader ~ ";";
+	} else {
+		assert(0);
 	}
-	return "entity." ~ m ~ " = " ~ getColumnTypeDatasetReadCode!(T, m)() ~ ";";
 }
 
 string getPropertyVariantWriteCode(T, string m)() {
-	alias typeof(__traits(getMember, T, m)) ti;
-	static if (is(ti == function)) {
-		return "entity." ~ getterNameToSetterName(m) ~ "(" ~ getColumnTypeVariantReadCode!(T, m)() ~ ");";
+	immutable memberType = getPropertyMemberType!(T,m)();
+	immutable string nullValueCode = ColumnTypeSetNullCode[memberType];
+	immutable string variantReadCode = ColumnTypeVariantReadCode[memberType];
+	static if (getPropertyMemberKind!(T, m)() == PropertyMemberKind.GETTER_MEMBER) {
+		return nullValueCode ~ "entity." ~ getterNameToSetterName(m) ~ "(" ~ variantReadCode ~ ");";
+	} else {
+		return nullValueCode ~ "entity." ~ m ~ " = " ~ variantReadCode ~ ";";
 	}
-	return "entity." ~ m ~ " = " ~ getColumnTypeVariantReadCode!(T, m)() ~ ";";
 }
+
+static immutable string[] ColumnTypeConstructorCode = 
+	[
+	 "new IntegerType()", //BYTE_TYPE,    // byte
+	 "new IntegerType()", //SHORT_TYPE,   // short
+	 "new IntegerType()", //INT_TYPE,     // int
+	 "new BigIntegerType()", //LONG_TYPE,    // long
+	 "new IntegerType()", //UBYTE_TYPE,   // ubyte
+	 "new IntegerType()", //USHORT_TYPE,  // ushort
+	 "new IntegerType()", //UINT_TYPE,    // uint
+	 "new BigIntegerType()", //ULONG_TYPE,   // ulong
+	 "new IntegerType()", //NULLABLE_BYTE_TYPE,  // Nullable!byte
+	 "new IntegerType()", //NULLABLE_SHORT_TYPE, // Nullable!short
+	 "new IntegerType()", //NULLABLE_INT_TYPE,   // Nullable!int
+	 "new BigIntegerType()", //NULLABLE_LONG_TYPE,  // Nullable!long
+	 "new IntegerType()", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
+	 "new IntegerType()", //NULLABLE_USHORT_TYPE,// Nullable!ushort
+	 "new IntegerType()", //NULLABLE_UINT_TYPE,  // Nullable!uint
+	 "new BigIntegerType()", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+	 "new StringType()", //STRING_TYPE   // string
+	 ];
 
 string getColumnTypeName(T, string m)() {
-	alias typeof(__traits(getMember, T, m)) ti;
-	static if (is(ti == int)) {
-		return "new IntegerType()";
-	}
-	static if (is(ti == long)) {
-		return "new BigIntegerType()";
-	}
-	static if (is(ti == string)) {
-		return "new StringType()";
-	}
-	static if (is(ti == function)) {
-		static if (is(ReturnType!(ti) == int)) {
-			return "new IntegerType()";
-		}
-		static if (is(ReturnType!(ti) == long)) {
-			return "new IntegerType()";
-		}
-		static if (is(ReturnType!(ti) == string)) {
-			return "new StringType()";
-		}
-	}
-	return null;
+	return ColumnTypeConstructorCode[getPropertyMemberType!(T,m)()];
 }
+
+static immutable string[] ColumnTypeDatasetReaderCode = 
+	[
+	 "r.getByte(index)", //BYTE_TYPE,    // byte
+	 "r.getShort(index)", //SHORT_TYPE,   // short
+	 "r.getInt(index)", //INT_TYPE,     // int
+	 "r.getLong(index)", //LONG_TYPE,    // long
+	 "r.getUbyte(index)", //UBYTE_TYPE,   // ubyte
+	 "r.getUshort(index)", //USHORT_TYPE,  // ushort
+	 "r.getUint(index)", //UINT_TYPE,    // uint
+	 "r.getUlong(index)", //ULONG_TYPE,   // ulong
+	 "r.getByte(index)", //NULLABLE_BYTE_TYPE,  // Nullable!byte
+	 "r.getShort(index)", //NULLABLE_SHORT_TYPE, // Nullable!short
+	 "r.getInt(index)", //NULLABLE_INT_TYPE,   // Nullable!int
+	 "r.getLong(index)", //NULLABLE_LONG_TYPE,  // Nullable!long
+	 "r.getUbyte(index)", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
+	 "r.getUshort(index)", //NULLABLE_USHORT_TYPE,// Nullable!ushort
+	 "r.getUint(index)", //NULLABLE_UINT_TYPE,  // Nullable!uint
+	 "r.getUlong(index)", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+	 "r.getString(index)", //STRING_TYPE   // string
+	 ];
 
 string getColumnTypeDatasetReadCode(T, string m)() {
-	alias typeof(__traits(getMember, T, m)) ti;
-	static if (is(ti == int)) {
-		return "r.getInt(index)";
-	}
-	static if (is(ti == long)) {
-		return "r.getLong(index)";
-	}
-	static if (is(ti == string)) {
-		return "r.getString(index)";
-	}
-	static if (is(ti == function)) {
-		static if (is(ReturnType!(ti) == int)) {
-			return "r.getInt(index)";
-		}
-		static if (is(ReturnType!(ti) == long)) {
-			return "r.getLong(index)";
-		}
-		static if (is(ReturnType!(ti) == string)) {
-			return "r.getString(index)";
-		}
-	}
-	return null;
+	return ColumnTypeDatasetReaderCode[getPropertyMemberType!(T,m)()];
 }
 
-string getColumnTypeVariantReadCode(T, string m)() {
-	alias typeof(__traits(getMember, T, m)) ti;
-	static if (is(ti == int)) {
-		return "(value == null ? 0 : value.get!(int))";
-	}
-	static if (is(ti == long)) {
-		return "(value == null ? 0 : value.get!(long))";
-	}
-	static if (is(ti == string)) {
-		return "(value == null ? null : value.get!(string))";
-	}
-	static if (is(ti == function)) {
-		static if (is(ReturnType!(ti) == int)) {
-			return "(value == null ? 0 : value.get!(int))";
-		}
-		static if (is(ReturnType!(ti) == long)) {
-			return "(value == null ? 0 : value.get!(long))";
-		}
-		static if (is(ReturnType!(ti) == string)) {
-			return "(value == null ? null : value.get!(string))";
-		}
-	}
-	return null;
-}
+static immutable string[] ColumnTypeVariantReadCode = 
+	[
+	 "(value == null ? nv : value.get!(byte))", //BYTE_TYPE,    // byte
+	 "(value == null ? nv : value.get!(short))", //SHORT_TYPE,   // short
+	 "(value == null ? nv : value.get!(int))", //INT_TYPE,     // int
+	 "(value == null ? nv : value.get!(long))", //LONG_TYPE,    // long
+	 "(value == null ? nv : value.get!(ubyte))", //UBYTE_TYPE,   // ubyte
+	 "(value == null ? nv : value.get!(ushort))", //USHORT_TYPE,  // ushort
+	 "(value == null ? nv : value.get!(uint))", //UINT_TYPE,    // uint
+	 "(value == null ? nv : value.get!(ulong))", //ULONG_TYPE,   // ulong
+	 "(value == null ? nv : value.get!(byte))", //NULLABLE_BYTE_TYPE,  // Nullable!byte
+	 "(value == null ? nv : value.get!(short))", //NULLABLE_SHORT_TYPE, // Nullable!short
+	 "(value == null ? nv : value.get!(int))", //NULLABLE_INT_TYPE,   // Nullable!int
+	 "(value == null ? nv : value.get!(long))", //NULLABLE_LONG_TYPE,  // Nullable!long
+	 "(value == null ? nv : value.get!(ubyte))", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
+	 "(value == null ? nv : value.get!(ushort))", //NULLABLE_USHORT_TYPE,// Nullable!ushort
+	 "(value == null ? nv : value.get!(uint))", //NULLABLE_UINT_TYPE,  // Nullable!uint
+	 "(value == null ? nv : value.get!(ulong))", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+	 "(value == null ? nv : value.get!(string))", //STRING_TYPE   // string
+	 ];
+
+static immutable string[] DatasetWriteCode = 
+	[
+	 "r.setByte(index, %s);", //BYTE_TYPE,    // byte
+	 "r.setShort(index, %s);", //SHORT_TYPE,   // short
+	 "r.setInt(index, %s);", //INT_TYPE,     // int
+	 "r.setLong(index, %s);", //LONG_TYPE,    // long
+	 "r.setUbyte(index, %s);", //UBYTE_TYPE,   // ubyte
+	 "r.setUshort(index, %s);", //USHORT_TYPE,  // ushort
+	 "r.setUint(index, %s);", //UINT_TYPE,    // uint
+	 "r.setUlong(index, %s);", //ULONG_TYPE,   // ulong
+	 "r.setByte(index, %s);", //NULLABLE_BYTE_TYPE,  // Nullable!byte
+	 "r.setShort(index, %s);", //NULLABLE_SHORT_TYPE, // Nullable!short
+	 "r.setInt(index, %s);", //NULLABLE_INT_TYPE,   // Nullable!int
+	 "r.setLong(index, %s);", //NULLABLE_LONG_TYPE,  // Nullable!long
+	 "r.setUbyte(index, %s);", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
+	 "r.setUshort(index, %s);", //NULLABLE_USHORT_TYPE,// Nullable!ushort
+	 "r.setUint(index, %s);", //NULLABLE_UINT_TYPE,  // Nullable!uint
+	 "r.setUlong(index, %s);", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+	 "r.setString(index, %s);", //STRING_TYPE   // string
+	 ];
 
 string getColumnTypeDatasetWriteCode(T, string m)() {
 	alias typeof(__traits(getMember, T, m)) ti;
+	immutable string isNullCode = getColumnTypeIsNullCode!(T,m)();
 	immutable string readCode = getPropertyReadCode!(T,m)();
-	static if (is(ti == int)) {
-		return "r.setInt(index, " ~ readCode ~ ");";
-	}
-	static if (is(ti == long)) {
-		return "r.setLong(index, " ~ readCode ~ ");";
-	}
-	static if (is(ti == string)) {
-		return "r.setString(index, " ~ readCode ~ ");";
-	}
-	static if (is(ti == function)) {
-		static if (is(ReturnType!(ti) == int)) {
-			return "r.setInt(index, " ~ readCode ~ ");";
-		}
-		static if (is(ReturnType!(ti) == long)) {
-			return "r.setLong(index, " ~ readCode ~ ");";
-		}
-		static if (is(ReturnType!(ti) == string)) {
-			return "r.setString(index, " ~ readCode ~ ");";
-		}
-	}
-	return null;
+	immutable string setDataCode = DatasetWriteCode[getPropertyMemberType!(T,m)()];
+	return "if (" ~ isNullCode ~ ") r.setNull(index); else " ~ substituteParam(setDataCode, readCode);
 }
 
 string getPropertyDef(T, immutable string m)() {
@@ -844,6 +984,7 @@ unittest {
 	User e1user = cast(User)e1;
 	assert(e1user !is null);
 	e1user.id = 25;
+
 }
 
 unittest {
