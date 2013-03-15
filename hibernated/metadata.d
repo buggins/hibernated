@@ -536,14 +536,14 @@ static immutable string[] ColumnTypeDatasetReaderCode =
 	 "r.getUshort(index)", //USHORT_TYPE,  // ushort
 	 "r.getUint(index)", //UINT_TYPE,    // uint
 	 "r.getUlong(index)", //ULONG_TYPE,   // ulong
-	 "r.getByte(index)", //NULLABLE_BYTE_TYPE,  // Nullable!byte
-	 "r.getShort(index)", //NULLABLE_SHORT_TYPE, // Nullable!short
-	 "r.getInt(index)", //NULLABLE_INT_TYPE,   // Nullable!int
-	 "r.getLong(index)", //NULLABLE_LONG_TYPE,  // Nullable!long
-	 "r.getUbyte(index)", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
-	 "r.getUshort(index)", //NULLABLE_USHORT_TYPE,// Nullable!ushort
-	 "r.getUint(index)", //NULLABLE_UINT_TYPE,  // Nullable!uint
-	 "r.getUlong(index)", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+	 "Nullable!byte(r.getByte(index))", //NULLABLE_BYTE_TYPE,  // Nullable!byte
+     "Nullable!short(r.getShort(index))", //NULLABLE_SHORT_TYPE, // Nullable!short
+     "Nullable!int(r.getInt(index))", //NULLABLE_INT_TYPE,   // Nullable!int
+     "Nullable!long(r.getLong(index))", //NULLABLE_LONG_TYPE,  // Nullable!long
+     "Nullable!ubyte(r.getUbyte(index))", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
+     "Nullable!ushort(r.getUshort(index))", //NULLABLE_USHORT_TYPE,// Nullable!ushort
+     "Nullable!uint(r.getUint(index))", //NULLABLE_UINT_TYPE,  // Nullable!uint
+     "Nullable!ulong(r.getUlong(index))", //NULLABLE_ULONG_TYPE, // Nullable!ulong
 	 "r.getString(index)", //STRING_TYPE   // string
 	 ];
 
@@ -963,8 +963,10 @@ version(unittest) {
         @Column
         string getComment() { return comment; }
         void setComment(string v) { comment = v; }
+
+        // long column which can hold NULL value
         @Column("customer_fk")
-        string customerId;
+        Nullable!long customerId;
 
         override string toString() {
             return "id=" ~ to!string(id) ~ ", name=" ~ name ~ ", flags=" ~ to!string(flags) ~ ", comment=" ~ comment ~ ", customerId=" ~ to!string(customerId);
@@ -1032,6 +1034,7 @@ version(unittest) {
          "INSERT INTO users SET id=3, name='user 3', flags=NULL, comment='this user belongs to customer 2', customer_fk=2",
          "INSERT INTO users SET id=4, name='user 4', flags=44,   comment=NULL, customer_fk=3",
          "INSERT INTO users SET id=5, name='user 5', flags=55,   comment='this user belongs to customer 3, too', customer_fk=3",
+         "INSERT INTO users SET id=6, name='user 6', flags=66,   comment='for checking of Nullable!long reading', customer_fk=null",
          ];
 
     void recreateTestSchema() {
@@ -1093,21 +1096,31 @@ unittest {
         //writeln("Loaded value: " ~ u1.toString);
         assert(u1.id == 1);
         assert(u1.name == "user 1");
+
         User u2 = cast(User)sess.load("User", Variant(2));
         assert(u2.name == "user 2");
         assert(u2.flags == 22); // NULL is loaded as 0 if property cannot hold nulls
+
         User u3 = cast(User)sess.get("User", Variant(3));
         assert(u3.name == "user 3");
         assert(u3.flags == 0); // NULL is loaded as 0 if property cannot hold nulls
         assert(u3.getComment() !is null);
+
         User u4 = new User();
         sess.load(u4, Variant(4));
         assert(u4.name == "user 4");
         assert(u4.getComment() is null);
+
         User u5 = new User();
         u5.id = 5;
         sess.refresh(u5);
         assert(u5.name == "user 5");
+        assert(!u5.customerId.isNull);
+
+        User u6 = cast(User)sess.load("User", Variant(6));
+        assert(u6.name == "user 6");
+        assert(u6.customerId.isNull);
+
     }
 }
 
