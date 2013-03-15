@@ -910,9 +910,9 @@ unittest {
             assert(rowIndex == index);
             long id = rs.getLong(1);
             assert(id == index);
-            writeln("field2 = '" ~ rs.getString(2) ~ "'");
-            writeln("field3 = '" ~ rs.getString(3) ~ "'");
-            writeln("wasNull = " ~ to!string(rs.wasNull()));
+            //writeln("field2 = '" ~ rs.getString(2) ~ "'");
+            //writeln("field3 = '" ~ rs.getString(3) ~ "'");
+            //writeln("wasNull = " ~ to!string(rs.wasNull()));
             if (id == 4) {
                 assert(rs.getString(2) == "name4_x");
                 assert(rs.isNull(3));

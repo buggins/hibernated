@@ -162,7 +162,9 @@ class SessionImpl : Session {
         scope(exit) rs.close();
         if (rs.next()) {
             Object obj = info.createEntity();
+            //writeln("reading columns");
             metaData.readAllColumns(obj, rs, 1);
+            //writeln("value: " ~ obj.toString);
             return obj;
         } else {
             // not found!

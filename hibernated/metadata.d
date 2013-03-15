@@ -15,6 +15,9 @@ import ddbc.common;
 import hibernated.annotations;
 import hibernated.core;
 import hibernated.type;
+import hibernated.session;
+import hibernated.dialect;
+import hibernated.dialects.mysqldialect;
 
 //interface ClassMetadata {
 //	immutable string getEntityName();
@@ -318,7 +321,6 @@ enum PropertyMemberType : int {
 PropertyMemberType getPropertyMemberType(T, string m)() {
 	alias typeof(__traits(getMember, T, m)) ti;
     static if (is(ti == function)) {
-		pragma(msg, "is function");
 		assert (is(ti == function));
 		static if (is(ReturnType!(ti) == byte)) {
 			return PropertyMemberType.BYTE_TYPE;
@@ -362,7 +364,6 @@ PropertyMemberType getPropertyMemberType(T, string m)() {
 	} else if (is(ti == short)) {
 		return PropertyMemberType.SHORT_TYPE;
 	} else if (is(ti == int)) {
-		pragma(msg, "is int");
 		return PropertyMemberType.INT_TYPE;
 	} else if (is(ti == long)) {
 		return PropertyMemberType.LONG_TYPE;
@@ -477,7 +478,7 @@ static immutable string[] ColumnTypeSetNullCode =
 string getPropertyWriteCode(T, string m)() {
 	immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
 	immutable string nullValueCode = ColumnTypeSetNullCode[getPropertyMemberType!(T,m)()];
-	immutable string datasetReader = "(r.isNull(index) ? " ~ getColumnTypeDatasetReadCode!(T, m)() ~ " : nv)";
+	immutable string datasetReader = "(!r.isNull(index) ? " ~ getColumnTypeDatasetReadCode!(T, m)() ~ " : nv)";
 	static if (kind == PropertyMemberKind.FIELD_MEMBER) {
 		return nullValueCode ~ "entity." ~ m ~ " = " ~ datasetReader ~ ";";
 	} else if (kind == PropertyMemberKind.GETTER_MEMBER) {
@@ -945,25 +946,25 @@ version(unittest) {
     class User {
         
         @Id @Generated
-        @Column("id_column")
-        int id;
+        @Column("id")
+        long id;
         
-        @Column("name_column")
+        @Column("name")
         string name;
-        
-        // no column name
+
         @Column
-        string flags;
-        
-        // annotated getter
-        private string login;
+        int flags;
+
         @Column
-        public string getLogin() { return login; }
-        public void setLogin(string login) { this.login = login; }
-        
-        // no (), no column name
-        @Column
-        int testColumn;
+        string comment;
+
+        @Column("customer_fk")
+        string customerId;
+
+        override string toString() {
+            return "id=" ~ to!string(id) ~ ", name=" ~ name ~ ", flags=" ~ to!string(flags) ~ ", comment=" ~ comment ~ ", customerId=" ~ to!string(customerId);
+        }
+
     }
     
     
@@ -998,36 +999,49 @@ version(unittest) {
 	import ddbc.common;
 
 
-	string[] UNIT_TEST_INIT_DB_SCRIPT = 
+    string[] UNIT_TEST_DROP_TABLES_SCRIPT = 
+        [
+         "DROP TABLE IF EXISTS users",
+         "DROP TABLE IF EXISTS customers",
+         ];
+    string[] UNIT_TEST_CREATE_TABLES_SCRIPT = 
 	[
-		 "DROP TABLE IF EXISTS users",
-		 "CREATE TABLE users (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, comments TEXT)",
-		 "DROP TABLE IF EXISTS customers",
-		 "DROP TABLE IF EXISTS t1",
-		 ];
-	void recreateTestSchema() {
+         "CREATE TABLE IF NOT EXISTS users (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags INT, comment TEXT, customer_fk BIGINT NULL)",
+         "CREATE TABLE IF NOT EXISTS customers (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)",
+         "INSERT INTO customers SET id=1, name='customer 1'",
+         "INSERT INTO customers SET id=2, name='customer 2'",
+         "INSERT INTO customers SET id=3, name='customer 3'",
+         "INSERT INTO users SET id=1, name='user 1', comment='comments for user 1', customer_fk=1",
+         "INSERT INTO users SET id=2, name='user 2', comment='this user belongs to customer 1', customer_fk=1",
+         "INSERT INTO users SET id=3, name='user 3', comment='this user belongs to customer 2', customer_fk=2",
+         "INSERT INTO users SET id=4, name='user 4', comment='this user belongs to customer 3', customer_fk=3",
+         "INSERT INTO users SET id=5, name='user 5', comment='this user belongs to customer 3, too', customer_fk=3",
+         ];
+
+    void recreateTestSchema() {
         DataSource connectionPool = createUnitTestMySQLDataSource();
 		Connection conn = connectionPool.getConnection();
 		scope(exit) conn.close();
-		Statement stmt = conn.createStatement();
-		scope(exit) stmt.close();
+        unitTestExecuteBatch(conn, UNIT_TEST_DROP_TABLES_SCRIPT);
+        unitTestExecuteBatch(conn, UNIT_TEST_CREATE_TABLES_SCRIPT);
 	}
-
 
 }
 
 
 unittest {
+
 	// Checking generated metadata
 	EntityMetaData schema = new SchemaInfoImpl!(User, Customer);
 
 	assert(schema.getEntityCount() == 2);
-	assert(schema.findEntity("User").findProperty("name").columnName == "name_column");
-	assert(schema.findEntity("User").getProperties()[0].columnName == "id_column");
+	assert(schema.findEntity("User").findProperty("name").columnName == "name");
+	assert(schema.findEntity("User").getProperties()[0].columnName == "id");
 	assert(schema.findEntity("User").getProperty(2).propertyName == "flags");
 	assert(schema.findEntity("User").findProperty("id").generated == true);
 	assert(schema.findEntity("User").findProperty("id").key == true);
-	assert(schema.findEntity("Customer").findProperty("id").generated == true);
+    assert(schema.findEntity("User").findProperty("name").key == false);
+    assert(schema.findEntity("Customer").findProperty("id").generated == true);
 	assert(schema.findEntity("Customer").findProperty("id").key == true);
 
 	assert(schema.findEntity("User").findProperty("id").readFunc !is null);
@@ -1043,10 +1057,31 @@ unittest {
 	assert(e1user !is null);
 	e1user.id = 25;
 
+
+
 }
 
 unittest {
+    if (MYSQL_TESTS_ENABLED) {
+        recreateTestSchema();
+        
+        // Checking generated metadata
+        EntityMetaData schema = new SchemaInfoImpl!(User, Customer, T1);
+        Dialect dialect = new MySQLDialect();
+        DataSource ds = createUnitTestMySQLDataSource();
+        SessionFactory factory = new SessionFactoryImpl(schema, dialect, ds);
+        Session sess = factory.openSession();
+        scope(exit) sess.close();
 
+        User u1 = cast(User)sess.load("User", Variant(1));
+        writeln("Loaded value: " ~ u1.toString);
+        assert(u1.id == 1);
+        assert(u1.name == "user 1");
+        User u2 = cast(User)sess.load("User", Variant(2));
+        assert(u2.name == "user 2");
+        User u3 = cast(User)sess.get("User", Variant(3));
+        assert(u3.name == "user 3");
+    }
 }
 
 
