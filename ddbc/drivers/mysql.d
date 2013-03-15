@@ -947,6 +947,11 @@ SQLValue consumeIfComplete()(ref ubyte[] packet, SQLType sqlType, bool binary, b
             assert(!lcb.isIncomplete);
             SQLValue result;
             result.isIncomplete = false;
+            if (lcb.isNull) {
+                result.isNull = false;
+                result.value = null;
+                return result;
+            }
             result.isNull = false;
             result.value = packet.consume(cast(size_t)lcb.value);
             return result;
@@ -2649,7 +2654,7 @@ public:
             } while(sqlValue.isIncomplete);
             assert(!sqlValue.isIncomplete);
 
-            if(sqlValue.isNull)
+            if(sqlValue.isNull || sqlValue.value == null)
             {
                 assert(!binary);
                 assert(!_nulls[i]);
