@@ -273,11 +273,30 @@ bool hasPercentSign(immutable string str) {
 	return false;
 }
 
+int percentSignCount(immutable string str) {
+    string res;
+    foreach(ch; str) {
+        if (ch == '%')
+            res ~= "%";
+    }
+    return res.length;
+}
+
 string substituteParam(immutable string fmt, immutable string value) {
 	if (hasPercentSign(fmt))
 		return format(fmt, value);
 	else
 		return fmt;
+}
+
+string substituteParamTwice(immutable string fmt, immutable string value) {
+    immutable int paramCount = percentSignCount(fmt);
+    if (paramCount == 1)
+        return format(fmt, value);
+    else if (paramCount == 2)
+        return format(fmt, value, value);
+    else
+        return fmt;
 }
 
 static immutable string[] PropertyMemberKind_ReadCode = [
@@ -475,6 +494,27 @@ static immutable string[] ColumnTypeSetNullCode =
 	 "string nv = null;", //STRING_TYPE   // string
 	 ];
 
+static immutable string[] ColumnTypePropertyToVariant = 
+    [
+     "Variant(%s)", //BYTE_TYPE,    // byte
+     "Variant(%s)", //SHORT_TYPE,   // short
+     "Variant(%s)", //INT_TYPE,     // int
+     "Variant(%s)", //LONG_TYPE,    // long
+     "Variant(%s)", //UBYTE_TYPE,   // ubyte
+     "Variant(%s)", //USHORT_TYPE,  // ushort
+     "Variant(%s)", //UINT_TYPE,    // uint
+     "Variant(%s)", //ULONG_TYPE,   // ulong
+     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_BYTE_TYPE,  // Nullable!byte
+     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_SHORT_TYPE, // Nullable!short
+     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_INT_TYPE,   // Nullable!int
+     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_LONG_TYPE,  // Nullable!long
+     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
+     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_USHORT_TYPE,// Nullable!ushort
+     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_UINT_TYPE,  // Nullable!uint
+     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+     "Variant(%s)", //STRING_TYPE   // string
+     ];
+
 string getPropertyWriteCode(T, string m)() {
 	immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
 	immutable string nullValueCode = ColumnTypeSetNullCode[getPropertyMemberType!(T,m)()];
@@ -499,6 +539,12 @@ string getPropertyVariantWriteCode(T, string m)() {
 	} else {
 		return nullValueCode ~ "entity." ~ m ~ " = " ~ variantReadCode ~ ";";
 	}
+}
+
+string getPropertyVariantReadCode(T, string m)() {
+    immutable memberType = getPropertyMemberType!(T,m)();
+    immutable string propertyReadCode = getPropertyReadCode!(T,m)();
+    return substituteParamTwice(ColumnTypePropertyToVariant[memberType], propertyReadCode);
 }
 
 static immutable string[] ColumnTypeConstructorCode = 
@@ -617,6 +663,7 @@ string getPropertyDef(T, immutable string m)() {
 	immutable string propertyWriteCode = getPropertyWriteCode!(T,m)();
 	immutable string datasetWriteCode = getColumnTypeDatasetWriteCode!(T,m)();
 	immutable string propertyVariantSetCode = getPropertyVariantWriteCode!(T,m)();
+    immutable string propertyVariantGetCode = getPropertyVariantReadCode!(T,m)();
 	immutable string keyIsSetCode = getColumnTypeKeyIsSetCode!(T,m)();
 	immutable string isNullCode = getColumnTypeIsNullCode!(T,m)();
 	immutable string readerFuncDef = "\n" ~
@@ -632,9 +679,7 @@ string getPropertyDef(T, immutable string m)() {
 	immutable string getVariantFuncDef = "\n" ~
 		"function(Object obj) { \n" ~ 
 			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
-			"    Variant v; \n" ~
-			"    v = " ~ propertyReadCode ~ "; \n" ~
-			"    return v; \n" ~
+            "    return " ~ propertyVariantGetCode ~ "; \n" ~
 			" }\n";
 	immutable string setVariantFuncDef = "\n" ~
 		"function(Object obj, Variant value) { \n" ~ 
@@ -772,9 +817,20 @@ interface EntityMetaData {
     public string getAllFieldList(string entityName);
     public string generateFindByPkForEntity(EntityInfo ei);
     public string generateFindByPkForEntity(string entityName);
+    public Variant getPropertyValue(Object obj, string propertyName);
+    public void setPropertyValue(Object obj, string propertyName, Variant value);
 }
 
 abstract class SchemaInfo : EntityMetaData {
+
+    override public Variant getPropertyValue(Object obj, string propertyName) {
+        return findEntityForObject(obj).getPropertyValue(obj, propertyName);
+    }
+
+    override public void setPropertyValue(Object obj, string propertyName, Variant value) {
+        findEntityForObject(obj).setPropertyValue(obj, propertyName, value);
+    }
+
 
     public string getAllFieldList(EntityInfo ei) {
         string query;
@@ -823,6 +879,7 @@ class SchemaInfoImpl(T...) : SchemaInfo {
     public EntityInfo[] getEntities()  { return entities; }
 	public EntityInfo[string] getEntityMap()  { return entityMap; }
     public EntityInfo [TypeInfo_Class] getClassMap() { return classMap; }
+
     public EntityInfo findEntity(string entityName)  { 
         try {
             return entityMap[entityName]; 
@@ -939,6 +996,7 @@ unittest {
 
 
 }
+
 
 version(unittest) {
     @Entity
@@ -1069,6 +1127,16 @@ unittest {
     assert(e2 !is null);
     User e2user = cast(User)e2;
     assert(e2user !is null);
+
+    e2user.customerId = 25;
+    Variant v = schema.getPropertyValue(e2user, "customerId");
+    writeln("v=" ~ v.toString());
+    assert(v == 25);
+    e2user.customerId.nullify;
+    assert(schema.getPropertyValue(e2user, "customerId") is Variant(null));
+    schema.setPropertyValue(e2user, "customerId", Variant(42));
+    assert(e2user.customerId == 42);
+    assert(schema.getPropertyValue(e2user, "customerId") == 42);
 
 	Object e1 = schema.findEntity("User").createEntity();
 	assert(e1 !is null);
