@@ -1074,13 +1074,20 @@ unittest {
         scope(exit) sess.close();
 
         User u1 = cast(User)sess.load("User", Variant(1));
-        writeln("Loaded value: " ~ u1.toString);
+        //writeln("Loaded value: " ~ u1.toString);
         assert(u1.id == 1);
         assert(u1.name == "user 1");
         User u2 = cast(User)sess.load("User", Variant(2));
         assert(u2.name == "user 2");
         User u3 = cast(User)sess.get("User", Variant(3));
         assert(u3.name == "user 3");
+        User u4 = new User();
+        sess.load(u4, Variant(4));
+        assert(u4.name == "user 4");
+        User u5 = new User();
+        u5.id = 5;
+        sess.refresh(u5);
+        assert(u5.name == "user 5");
     }
 }
 

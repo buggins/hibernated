@@ -39,6 +39,8 @@ interface Session
 	Object get(string entityName, Variant id);
     /// Read the persistent state associated with the given identifier into the given transient instance.
     Object load(string entityName, Variant id);
+    /// Read the persistent state associated with the given identifier into the given transient instance
+    void load(Object obj, Variant id);
     /// Re-read the state of the given instance from the underlying database.
 	void refresh(Object obj);
     /// Persist the given transient instance, first assigning a generated identifier.
@@ -179,8 +181,47 @@ class SessionImpl : Session {
         return obj;
     }
 
+    /// Read the persistent state associated with the given identifier into the given transient instance
+    override void load(Object obj, Variant id) {
+        EntityInfo info = metaData.findEntityForObject(obj);
+        string query = metaData.generateFindByPkForEntity(info);
+        //writeln("Finder query: " ~ query);
+        PreparedStatement stmt = conn.prepareStatement(query);
+        scope(exit) stmt.close();
+        stmt.setVariant(1, id);
+        ResultSet rs = stmt.executeQuery();
+        //writeln("returned rows: " ~ to!string(rs.getFetchSize()));
+        scope(exit) rs.close();
+        if (rs.next()) {
+            //writeln("reading columns");
+            metaData.readAllColumns(obj, rs, 1);
+            //writeln("value: " ~ obj.toString);
+        } else {
+            // not found!
+            enforceEx!HibernatedException(false, "Entity " ~ info.name ~ " with id " ~ to!string(id) ~ " not found");
+        }
+    }
+
     override void refresh(Object obj) {
-        throw new HibernatedException("Method not implemented");
+        EntityInfo info = metaData.findEntityForObject(obj);
+        string query = metaData.generateFindByPkForEntity(info);
+        enforceEx!HibernatedException(info.isKeySet(obj), "Cannot refresh entity " ~ info.name ~ ": no Id specified");
+        Variant id = info.getKey(obj);
+        //writeln("Finder query: " ~ query);
+        PreparedStatement stmt = conn.prepareStatement(query);
+        scope(exit) stmt.close();
+        stmt.setVariant(1, id);
+        ResultSet rs = stmt.executeQuery();
+        //writeln("returned rows: " ~ to!string(rs.getFetchSize()));
+        scope(exit) rs.close();
+        if (rs.next()) {
+            //writeln("reading columns");
+            metaData.readAllColumns(obj, rs, 1);
+            //writeln("value: " ~ obj.toString);
+        } else {
+            // not found!
+            enforceEx!HibernatedException(false, "Entity " ~ info.name ~ " with id " ~ to!string(id) ~ " not found");
+        }
     }
 
     override Object save(Object obj) {
