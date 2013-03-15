@@ -816,9 +816,11 @@ class MySQLDriver : Driver {
     public static string generateUrl(string host, ushort port, string dbname) {
         return "mysql://" ~ host ~ ":" ~ to!string(port) ~ "/" ~ dbname;
     }
-    public static setUserAndPassword(ref string[string] params, string username, string password) {
+	public static string[string] setUserAndPassword(string username, string password) {
+		string[string] params;
         params["user"] = username;
         params["password"] = password;
+		return params;
     }
     override ddbc.core.Connection connect(string url, string[string] params) {
         //writeln("MySQLDriver.connect " ~ url);

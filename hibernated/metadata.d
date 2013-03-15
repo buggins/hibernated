@@ -861,6 +861,43 @@ class SchemaInfoImpl(T...) : SchemaInfo {
 
 unittest {
 
+	@Entity
+	@Table("users")
+	static class User {
+		
+		@Id @Generated
+		@Column("id_column")
+		int id;
+		
+		@Column("name_column")
+		string name;
+		
+		// no column name
+		@Column
+		string flags;
+		
+		// annotated getter
+		private string login;
+		@Column
+		public string getLogin() { return login; }
+		public void setLogin(string login) { this.login = login; }
+		
+		// no (), no column name
+		@Column
+		int testColumn;
+	}
+	
+	
+	@Entity
+	@Table("customer")
+	static class Customer {
+		@Id @Generated
+		@Column
+		int id;
+		@Column
+		string name;
+	}
+
 	EntityInfo entity = new EntityInfo("user", "users",  [
 	                                                      new PropertyInfo("id", "id", new IntegerType(), 0, true, true, false, null, null, null, null, null, null)
 	                                                     ], null);
@@ -930,7 +967,7 @@ version(unittest) {
     
     
     @Entity
-    @Table("customer")
+    @Table("customers")
     class Customer {
         @Id @Generated
         @Column
@@ -955,7 +992,39 @@ version(unittest) {
             return "id=" ~ to!string(id) ~ ", name=" ~ name ~ ", flags=" ~ to!string(flags) ~ ", comment=" ~ comment;
         }
     }
-    
+
+	import ddbc.drivers.mysqlddbc;
+	import ddbc.common;
+
+	const string MYSQL_UNITTEST_HOST = "localhost";
+	const int    MYSQL_UNITTEST_PORT = 3306;
+	const string MYSQL_UNITTEST_USER = "testuser";
+	const string MYSQL_UNITTEST_PASSWORD = "testpassword";
+	const string MYSQL_UNITTEST_DB = "testdb";
+
+	DataSource createUnitTestDataSource() {
+		MySQLDriver driver = new MySQLDriver();
+		string url = MySQLDriver.generateUrl(MYSQL_UNITTEST_HOST, MYSQL_UNITTEST_PORT, MYSQL_UNITTEST_DB);
+		string[string] params = MySQLDriver.setUserAndPassword(MYSQL_UNITTEST_USER, MYSQL_UNITTEST_PASSWORD);
+		return new ConnectionPoolDataSourceImpl(driver, url, params);
+	}
+
+	string[] UNIT_TEST_INIT_DB_SCRIPT = 
+	[
+		 "DROP TABLE IF EXISTS users",
+		 "CREATE TABLE users (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, comments TEXT)",
+		 "DROP TABLE IF EXISTS customers",
+		 "DROP TABLE IF EXISTS t1",
+		 ];
+	void recreateTestSchema() {
+		DataSource connectionPool = createUnitTestDataSource();
+		Connection conn = connectionPool.getConnection();
+		scope(exit) conn.close();
+		Statement stmt = conn.createStatement();
+		scope(exit) stmt.close();
+	}
+
+
 }
 
 
