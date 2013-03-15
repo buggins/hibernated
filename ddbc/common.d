@@ -351,3 +351,12 @@ class ResultSetMetaDataImpl : ResultSetMetaData {
 	// Indicates whether it is possible for a write on the designated column to succeed.
 	override bool isWritable(int column) { return col(column).isWritable; }
 }
+
+version (unittest) {
+    void unitTestExecuteBatch(Connection conn, string[] queries) {
+        Statement stmt = conn.createStatement();
+        foreach(query; queries) {
+            stmt.executeUpdate(query);
+        }
+    }
+}

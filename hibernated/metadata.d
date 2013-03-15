@@ -10,6 +10,7 @@ import std.typetuple;
 import std.variant;
 
 import ddbc.core;
+import ddbc.common;
 
 import hibernated.annotations;
 import hibernated.core;
@@ -996,18 +997,6 @@ version(unittest) {
 	import ddbc.drivers.mysqlddbc;
 	import ddbc.common;
 
-	const string MYSQL_UNITTEST_HOST = "localhost";
-	const int    MYSQL_UNITTEST_PORT = 3306;
-	const string MYSQL_UNITTEST_USER = "testuser";
-	const string MYSQL_UNITTEST_PASSWORD = "testpassword";
-	const string MYSQL_UNITTEST_DB = "testdb";
-
-	DataSource createUnitTestDataSource() {
-		MySQLDriver driver = new MySQLDriver();
-		string url = MySQLDriver.generateUrl(MYSQL_UNITTEST_HOST, MYSQL_UNITTEST_PORT, MYSQL_UNITTEST_DB);
-		string[string] params = MySQLDriver.setUserAndPassword(MYSQL_UNITTEST_USER, MYSQL_UNITTEST_PASSWORD);
-		return new ConnectionPoolDataSourceImpl(driver, url, params);
-	}
 
 	string[] UNIT_TEST_INIT_DB_SCRIPT = 
 	[
@@ -1017,7 +1006,7 @@ version(unittest) {
 		 "DROP TABLE IF EXISTS t1",
 		 ];
 	void recreateTestSchema() {
-		DataSource connectionPool = createUnitTestDataSource();
+        DataSource connectionPool = createUnitTestMySQLDataSource();
 		Connection conn = connectionPool.getConnection();
 		scope(exit) conn.close();
 		Statement stmt = conn.createStatement();

@@ -11,6 +11,37 @@ import ddbc.common;
 import ddbc.core;
 import ddbc.drivers.mysql;
 
+version(unittest) {
+    /*
+        To allow unit tests using MySQL server,
+        run mysql client using admin privileges, e.g. for MySQL server on localhost:
+        > mysql -uroot
+
+        Create test user and test DB:
+        mysql> GRANT ALL PRIVILEGES ON *.* TO testuser@'%' IDENTIFIED BY 'testpassword';
+        mysql> GRANT ALL PRIVILEGES ON *.* TO testuser@'localhost' IDENTIFIED BY 'testpassword';
+        mysql> CREATE DATABASE testdb;
+     */
+    /// change to false to disable tests on real MySQL server
+    immutable bool MYSQL_TESTS_ENABLED = true;
+    /// change parameters if necessary
+    const string MYSQL_UNITTEST_HOST = "localhost";
+    const int    MYSQL_UNITTEST_PORT = 3306;
+    const string MYSQL_UNITTEST_USER = "testuser";
+    const string MYSQL_UNITTEST_PASSWORD = "testpassword";
+    const string MYSQL_UNITTEST_DB = "testdb";
+
+    static if (MYSQL_TESTS_ENABLED) {
+        /// use this data source for tests
+        DataSource createUnitTestMySQLDataSource() {
+            MySQLDriver driver = new MySQLDriver();
+            string url = MySQLDriver.generateUrl(MYSQL_UNITTEST_HOST, MYSQL_UNITTEST_PORT, MYSQL_UNITTEST_DB);
+            string[string] params = MySQLDriver.setUserAndPassword(MYSQL_UNITTEST_USER, MYSQL_UNITTEST_PASSWORD);
+            return new ConnectionPoolDataSourceImpl(driver, url, params);
+        }
+    }
+}
+
 class MySQLConnection : ddbc.core.Connection {
 private:
     string url;
@@ -752,7 +783,7 @@ public:
 		if (v.convertsTo!(ubyte[])) {
 			// assume blob encoding is utf-8
 			// TODO: check field encoding
-			return decodeTextBlob(v.get!(ubyte[]));
+            return decodeTextBlob(v.get!(ubyte[]));
 		}
         return v.toString();
     }
@@ -825,5 +856,85 @@ class MySQLDriver : Driver {
     override ddbc.core.Connection connect(string url, string[string] params) {
         //writeln("MySQLDriver.connect " ~ url);
         return new MySQLConnection(url, params);
+    }
+}
+
+unittest {
+    if (MYSQL_TESTS_ENABLED) {
+
+        import std.conv;
+
+        DataSource ds = createUnitTestMySQLDataSource();
+
+        auto conn = ds.getConnection();
+        scope(exit) conn.close();
+        auto stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        assert(stmt.executeUpdate("DROP TABLE IF EXISTS ddbct1") == 0);
+        assert(stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (id bigint not null primary key, name varchar(250), comment mediumtext)") == 0);
+        assert(stmt.executeUpdate("INSERT INTO ddbct1 SET id=1, name='name1', comment='comment for line 1'") == 1);
+        assert(stmt.executeUpdate("INSERT INTO ddbct1 SET id=2, name='name2', comment='comment for line 2 - can be very long'") == 1);
+        assert(stmt.executeUpdate("INSERT INTO ddbct1 SET id=3, name='name3', comment='this is line 3'") == 1);
+        assert(stmt.executeUpdate("INSERT INTO ddbct1 SET id=4, name='name4', comment=NULL") == 1);
+        assert(stmt.executeUpdate("INSERT INTO ddbct1 SET id=5, name=NULL, comment=''") == 1);
+        assert(stmt.executeUpdate("INSERT INTO ddbct1 SET id=6, name='', comment=NULL") == 1);
+        assert(stmt.executeUpdate("UPDATE ddbct1 SET name=concat(name, '_x') WHERE id IN (3, 4)") == 2);
+        
+        PreparedStatement ps = conn.prepareStatement("UPDATE ddbct1 SET name=? WHERE id=?");
+        ps.setString(1, null);
+        ps.setLong(2, 3);
+        assert(ps.executeUpdate() == 1);
+        
+        auto rs = stmt.executeQuery("SELECT id, name name_alias, comment FROM ddbct1 ORDER BY id");
+
+        // testing result set meta data
+        ResultSetMetaData meta = rs.getMetaData();
+        assert(meta.getColumnCount() == 3);
+        assert(meta.getColumnName(1) == "id");
+        assert(meta.getColumnLabel(1) == "id");
+        assert(meta.isNullable(1) == false);
+        assert(meta.isNullable(2) == true);
+        assert(meta.isNullable(3) == true);
+        assert(meta.getColumnName(2) == "name");
+        assert(meta.getColumnLabel(2) == "name_alias");
+        assert(meta.getColumnName(3) == "comment");
+
+        int rowCount = rs.getFetchSize();
+        assert(rowCount == 6);
+        int index = 1;
+        while (rs.next()) {
+            assert(!rs.isNull(1));
+            ubyte[] bytes = rs.getBytes(3);
+            int rowIndex = rs.getRow();
+            assert(rowIndex == index);
+            long id = rs.getLong(1);
+            assert(id == index);
+            writeln("field2 = '" ~ rs.getString(2) ~ "'");
+            writeln("field3 = '" ~ rs.getString(3) ~ "'");
+            writeln("wasNull = " ~ to!string(rs.wasNull()));
+            if (id == 4) {
+                assert(rs.getString(2) == "name4_x");
+                assert(rs.isNull(3));
+            }
+            if (id == 5) {
+                assert(rs.isNull(2));
+                assert(!rs.isNull(3));
+            }
+            if (id == 6) {
+                assert(!rs.isNull(2));
+                assert(rs.isNull(3));
+            }
+            //writeln(to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ strNull(rs.getString(3)) ~ "\t[" ~ to!string(bytes.length) ~ "]");
+            index++;
+        }
+        
+        PreparedStatement ps2 = conn.prepareStatement("SELECT id, name, comment FROM ddbct1 WHERE id >= ?");
+        ps2.setLong(1, 3);
+        rs = ps2.executeQuery();
+        while (rs.next()) {
+            //writeln(to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ strNull(rs.getString(3)));
+            index++;
+        }
     }
 }
