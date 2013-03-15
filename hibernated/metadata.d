@@ -952,12 +952,17 @@ version(unittest) {
         @Column("name")
         string name;
 
+        // property column
+        private long _flags;
         @Column
-        int flags;
-
-        @Column
+        @property long flags() { return _flags; }
+        @property void flags(long v) { _flags = v; }
+        
+        // getter/setter property
         string comment;
-
+        @Column
+        string getComment() { return comment; }
+        void setComment(string v) { comment = v; }
         @Column("customer_fk")
         string customerId;
 
@@ -984,12 +989,23 @@ version(unittest) {
         @Id @Generated
         @Column
         int id;
+
         @Column
         string name;
+
+        // property column
+        private long _flags;
         @Column
-        long flags;
-        @Column
+        @property long flags() { return _flags; }
+        @property void flags(long v) { _flags = v; }
+
+        // getter/setter property
         string comment;
+        @Column
+        string getComment() { return comment; }
+        void setComment(string v) { comment = v; }
+
+
         override string toString() {
             return "id=" ~ to!string(id) ~ ", name=" ~ name ~ ", flags=" ~ to!string(flags) ~ ", comment=" ~ comment;
         }
@@ -1011,11 +1027,11 @@ version(unittest) {
          "INSERT INTO customers SET id=1, name='customer 1'",
          "INSERT INTO customers SET id=2, name='customer 2'",
          "INSERT INTO customers SET id=3, name='customer 3'",
-         "INSERT INTO users SET id=1, name='user 1', comment='comments for user 1', customer_fk=1",
-         "INSERT INTO users SET id=2, name='user 2', comment='this user belongs to customer 1', customer_fk=1",
-         "INSERT INTO users SET id=3, name='user 3', comment='this user belongs to customer 2', customer_fk=2",
-         "INSERT INTO users SET id=4, name='user 4', comment='this user belongs to customer 3', customer_fk=3",
-         "INSERT INTO users SET id=5, name='user 5', comment='this user belongs to customer 3, too', customer_fk=3",
+         "INSERT INTO users SET id=1, name='user 1', flags=11,   comment='comments for user 1', customer_fk=1",
+         "INSERT INTO users SET id=2, name='user 2', flags=22,   comment='this user belongs to customer 1', customer_fk=1",
+         "INSERT INTO users SET id=3, name='user 3', flags=NULL, comment='this user belongs to customer 2', customer_fk=2",
+         "INSERT INTO users SET id=4, name='user 4', flags=44,   comment=NULL, customer_fk=3",
+         "INSERT INTO users SET id=5, name='user 5', flags=55,   comment='this user belongs to customer 3, too', customer_fk=3",
          ];
 
     void recreateTestSchema() {
@@ -1079,11 +1095,15 @@ unittest {
         assert(u1.name == "user 1");
         User u2 = cast(User)sess.load("User", Variant(2));
         assert(u2.name == "user 2");
+        assert(u2.flags == 22); // NULL is loaded as 0 if property cannot hold nulls
         User u3 = cast(User)sess.get("User", Variant(3));
         assert(u3.name == "user 3");
+        assert(u3.flags == 0); // NULL is loaded as 0 if property cannot hold nulls
+        assert(u3.getComment() !is null);
         User u4 = new User();
         sess.load(u4, Variant(4));
         assert(u4.name == "user 4");
+        assert(u4.getComment() is null);
         User u5 = new User();
         u5.id = 5;
         sess.refresh(u5);
