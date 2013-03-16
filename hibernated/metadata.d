@@ -281,7 +281,7 @@ int percentSignCount(immutable string str) {
         if (ch == '%')
             res ~= "%";
     }
-    return res.length;
+    return cast(int)res.length;
 }
 
 string substituteParam(immutable string fmt, immutable string value) {
@@ -292,7 +292,7 @@ string substituteParam(immutable string fmt, immutable string value) {
 }
 
 string substituteParamTwice(immutable string fmt, immutable string value) {
-    immutable int paramCount = percentSignCount(fmt);
+	immutable int paramCount = cast(int)percentSignCount(fmt);
     if (paramCount == 1)
         return format(fmt, value);
     else if (paramCount == 2)
@@ -814,12 +814,15 @@ interface EntityMetaData {
     public int getEntityCount();
     public Object createEntity(string entityName);
     public void readAllColumns(Object obj, DataSetReader r, int startColumn);
-    public string generateFindAllForEntity(string entityName);
+	public void writeAllColumns(Object obj, DataSetWriter w, int startColumn);
+	public string generateFindAllForEntity(string entityName);
     public string getAllFieldList(EntityInfo ei);
     public string getAllFieldList(string entityName);
     public string generateFindByPkForEntity(EntityInfo ei);
     public string generateFindByPkForEntity(string entityName);
-    public Variant getPropertyValue(Object obj, string propertyName);
+	public string generateInsertAllFieldsForEntity(EntityInfo ei);
+	public string generateInsertAllFieldsForEntity(string entityName);
+	public Variant getPropertyValue(Object obj, string propertyName);
     public void setPropertyValue(Object obj, string propertyName, Variant value);
 }
 
@@ -844,7 +847,17 @@ abstract class SchemaInfo : EntityMetaData {
         return query;
     }
 
-    public string getAllFieldList(string entityName) {
+	public string getAllFieldPlaceholderList(EntityInfo ei) {
+		string query;
+		for (int i = 0; i < ei.getPropertyCount(); i++) {
+			if (query.length != 0)
+				query ~= ", ";
+			query ~= '?';
+		}
+		return query;
+	}
+	
+	public string getAllFieldList(string entityName) {
         return getAllFieldList(findEntity(entityName));
     }
 
@@ -852,6 +865,13 @@ abstract class SchemaInfo : EntityMetaData {
 		EntityInfo ei = findEntityForObject(obj);
 		for (int i = 0; i<ei.getPropertyCount(); i++) {
 			ei.getProperty(i).readFunc(obj, r, startColumn + i);
+		}
+	}
+
+	public void writeAllColumns(Object obj, DataSetWriter w, int startColumn) {
+		EntityInfo ei = findEntityForObject(obj);
+		for (int i = 0; i<ei.getPropertyCount(); i++) {
+			ei.getProperty(i).writeFunc(obj, w, startColumn + i);
 		}
 	}
 
@@ -864,9 +884,17 @@ abstract class SchemaInfo : EntityMetaData {
         return "SELECT " ~ getAllFieldList(ei) ~ " FROM " ~ ei.tableName ~ " WHERE " ~ ei.keyProperty.columnName ~ " = ?";
     }
 
+	public string generateInsertAllFieldsForEntity(EntityInfo ei) {
+		return "INSERT INTO " ~ ei.tableName ~ "(" ~ getAllFieldList(ei) ~ ") VALUES (" ~ getAllFieldPlaceholderList(ei) ~ ")";
+	}
+
     public string generateFindByPkForEntity(string entityName) {
         return generateFindByPkForEntity(findEntity(entityName));
     }
+
+	public string generateInsertAllFieldsForEntity(string entityName){
+		return generateInsertAllFieldsForEntity(findEntity(entityName));
+	}
 }
 
 class SchemaInfoImpl(T...) : SchemaInfo {
@@ -1132,7 +1160,6 @@ unittest {
 
     e2user.customerId = 25;
     Variant v = schema.getPropertyValue(e2user, "customerId");
-    writeln("v=" ~ v.toString());
     assert(v == 25);
     e2user.customerId.nullify;
     assert(schema.getPropertyValue(e2user, "customerId") is Variant(null));
@@ -1191,7 +1218,16 @@ unittest {
         assert(u6.name == "user 6");
         assert(u6.customerId.isNull);
 
-    }
+		// check Session.save() when id is filled
+		Customer c4 = new Customer();
+		c4.id = 4;
+		c4.name = "Customer_4";
+		sess.save(c4);
+
+		Customer c4_check = cast(Customer)sess.load("Customer", Variant(4));
+		assert(c4.id == c4_check.id);
+		assert(c4.name == c4_check.name);
+	}
 }
 
 

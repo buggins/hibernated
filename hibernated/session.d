@@ -237,7 +237,12 @@ class SessionImpl : Session {
                 throw new HibernatedException("Key is not set and no generator is specified");
             }
         } else {
-            return obj;
+			string query = metaData.generateInsertAllFieldsForEntity(info);;
+			PreparedStatement stmt = conn.prepareStatement(query);
+			scope(exit) stmt.close();
+			metaData.writeAllColumns(obj, stmt, 1);
+			stmt.executeUpdate();
+			return obj;
         }
     }
 
