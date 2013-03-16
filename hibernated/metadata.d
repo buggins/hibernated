@@ -95,7 +95,9 @@ class EntityInfo {
 	Variant getKey(Object obj) { return keyProperty.getFunc(obj); }
 	/// sets key value from Variant
 	void setKey(Object obj, Variant value) { keyProperty.setFunc(obj, value); }
-	/// checks if primary key is set (for non-nullable member types like int or long, 0 is considered as non-set)
+    /// returns property info for key property
+    PropertyInfo getKeyProperty() { return keyProperty; }
+    /// checks if primary key is set (for non-nullable member types like int or long, 0 is considered as non-set)
 	bool isKeySet(Object obj) { return keyProperty.keyIsSetFunc(obj); }
 	/// checks if property value is null
 	bool isNull(Object obj) { return keyProperty.isNullFunc(obj); }

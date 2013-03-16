@@ -202,6 +202,7 @@ class SessionImpl : Session {
         }
     }
 
+    /// Re-read the state of the given instance from the underlying database.
     override void refresh(Object obj) {
         EntityInfo info = metaData.findEntityForObject(obj);
         string query = metaData.generateFindByPkForEntity(info);
@@ -224,8 +225,20 @@ class SessionImpl : Session {
         }
     }
 
+    /// Persist the given transient instance, first assigning a generated identifier.
     override Object save(Object obj) {
-        throw new HibernatedException("Method not implemented");
+        EntityInfo info = metaData.findEntityForObject(obj);
+        bool generatedKey = false;
+        if (!info.isKeySet(obj)) {
+            if (info.getKeyProperty().generated) {
+                generatedKey = true;
+                throw new HibernatedException("Key is not set, but generated values are not supported so far");
+            } else {
+                throw new HibernatedException("Key is not set and no generator is specified");
+            }
+        } else {
+            return obj;
+        }
     }
 
     override string update(Object object) {
