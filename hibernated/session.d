@@ -44,9 +44,11 @@ interface Session
     /// Re-read the state of the given instance from the underlying database.
 	void refresh(Object obj);
     /// Persist the given transient instance, first assigning a generated identifier.
-	Object save(Object obj);
-    /// Update the persistent instance with the identifier of the given detached instance.
-	string update(Object object);
+	Variant save(Object obj);
+	/// Persist the given transient instance.
+	void persist(Object obj);
+	/// Update the persistent instance with the identifier of the given detached instance.
+	void update(Object object);
     /// renamed from Session.delete
     void remove(Object object);
 
@@ -225,14 +227,17 @@ class SessionImpl : Session {
         }
     }
 
-    /// Persist the given transient instance, first assigning a generated identifier.
-    override Object save(Object obj) {
+    /// Persist the given transient instance, first assigning a generated identifier if not assigned; returns generated value
+    override Variant save(Object obj) {
         EntityInfo info = metaData.findEntityForObject(obj);
-        bool generatedKey = false;
         if (!info.isKeySet(obj)) {
             if (info.getKeyProperty().generated) {
-                generatedKey = true;
-                throw new HibernatedException("Key is not set, but generated values are not supported so far");
+				string query = metaData.generateInsertNoKeyForEntity(info);
+				PreparedStatement stmt = conn.prepareStatement(query);
+				scope(exit) stmt.close();
+				metaData.writeAllColumnsExceptKey(obj, stmt, 1);
+				stmt.executeUpdate();
+				return info.getKey(obj);
             } else {
                 throw new HibernatedException("Key is not set and no generator is specified");
             }
@@ -242,18 +247,40 @@ class SessionImpl : Session {
 			scope(exit) stmt.close();
 			metaData.writeAllColumns(obj, stmt, 1);
 			stmt.executeUpdate();
-			return obj;
+			return info.getKey(obj);
         }
     }
 
-    override string update(Object object) {
-        throw new HibernatedException("Method not implemented");
-    }
+	/// Persist the given transient instance.
+	override void persist(Object obj) {
+		EntityInfo info = metaData.findEntityForObject(obj);
+		enforceEx!HibernatedException(info.isKeySet(obj), "Cannot persist entity w/o key assigned");
+		string query = metaData.generateInsertAllFieldsForEntity(info);;
+		PreparedStatement stmt = conn.prepareStatement(query);
+		scope(exit) stmt.close();
+		metaData.writeAllColumns(obj, stmt, 1);
+		stmt.executeUpdate();
+	}
+
+    override void update(Object obj) {
+		EntityInfo info = metaData.findEntityForObject(obj);
+		enforceEx!HibernatedException(info.isKeySet(obj), "Cannot persist entity w/o key assigned");
+		string query = metaData.generateUpdateForEntity(info);;
+		PreparedStatement stmt = conn.prepareStatement(query);
+		scope(exit) stmt.close();
+		metaData.writeAllColumnsExceptKey(obj, stmt, 1);
+		info.keyProperty.writeFunc(obj, stmt, cast(int)(info.getPropertyCountExceptKey() + 1));
+		stmt.executeUpdate();
+	}
 
     // renamed from Session.delete since delete is D keyword
-    override void remove(Object object) {
-        throw new HibernatedException("Method not implemented");
-    }
+    override void remove(Object obj) {
+		EntityInfo info = metaData.findEntityForObject(obj);
+		string query = "DELETE FROM " ~ info.tableName ~ " WHERE " ~ info.getKeyProperty().columnName ~ "=?";
+		PreparedStatement stmt = conn.prepareStatement(query);
+		info.getKeyProperty().writeFunc(obj, stmt, 1);
+		stmt.executeUpdate();
+	}
 }
 
 class SessionFactoryImpl : SessionFactory {

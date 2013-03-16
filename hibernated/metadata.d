@@ -111,6 +111,8 @@ class EntityInfo {
 	PropertyInfo[string] getPropertyMap() { return propertyMap; }
 	/// returns number of properties
 	ulong getPropertyCount() { return properties.length; }
+	/// returns number of properties
+	ulong getPropertyCountExceptKey() { return properties.length - 1; }
 	/// returns property by index
 	PropertyInfo getProperty(int propertyIndex) { return properties[propertyIndex]; }
 	/// returns property by name, throws exception if not found
@@ -812,9 +814,10 @@ interface EntityMetaData {
     public EntityInfo findEntityForObject(Object obj);
     public EntityInfo getEntity(int entityIndex);
     public int getEntityCount();
-    public Object createEntity(string entityName);
+	public Object createEntity(string entityName);
     public void readAllColumns(Object obj, DataSetReader r, int startColumn);
 	public void writeAllColumns(Object obj, DataSetWriter w, int startColumn);
+	public void writeAllColumnsExceptKey(Object obj, DataSetWriter w, int startColumn);
 	public string generateFindAllForEntity(string entityName);
     public string getAllFieldList(EntityInfo ei);
     public string getAllFieldList(string entityName);
@@ -822,6 +825,8 @@ interface EntityMetaData {
     public string generateFindByPkForEntity(string entityName);
 	public string generateInsertAllFieldsForEntity(EntityInfo ei);
 	public string generateInsertAllFieldsForEntity(string entityName);
+	public string generateInsertNoKeyForEntity(EntityInfo ei);
+	public string generateUpdateForEntity(EntityInfo ei);
 	public Variant getPropertyValue(Object obj, string propertyName);
     public void setPropertyValue(Object obj, string propertyName, Variant value);
 }
@@ -847,9 +852,46 @@ abstract class SchemaInfo : EntityMetaData {
         return query;
     }
 
+	public string getAllFieldListExceptKeyForUpdate(EntityInfo ei) {
+		string query;
+		for (int i = 0; i < ei.getPropertyCount(); i++) {
+			if (ei.getProperty(i).key)
+				continue;
+			if (query.length != 0)
+				query ~= ", ";
+			query ~= ei.getProperty(i).columnName;
+			query ~= "=?";
+		}
+		return query;
+	}
+	
+	public string getAllFieldListExceptKey(EntityInfo ei) {
+		string query;
+		for (int i = 0; i < ei.getPropertyCount(); i++) {
+			if (ei.getProperty(i).key)
+				continue;
+			if (query.length != 0)
+				query ~= ", ";
+			query ~= ei.getProperty(i).columnName;
+		}
+		return query;
+	}
+	
 	public string getAllFieldPlaceholderList(EntityInfo ei) {
 		string query;
 		for (int i = 0; i < ei.getPropertyCount(); i++) {
+			if (query.length != 0)
+				query ~= ", ";
+			query ~= '?';
+		}
+		return query;
+	}
+	
+	public string getAllFieldPlaceholderListExceptKey(EntityInfo ei) {
+		string query;
+		for (int i = 0; i < ei.getPropertyCount(); i++) {
+			if (ei.getProperty(i).key)
+				continue;
 			if (query.length != 0)
 				query ~= ", ";
 			query ~= '?';
@@ -875,6 +917,17 @@ abstract class SchemaInfo : EntityMetaData {
 		}
 	}
 
+	public void writeAllColumnsExceptKey(Object obj, DataSetWriter w, int startColumn) {
+		EntityInfo ei = findEntityForObject(obj);
+		int index = 0;
+		for (int i = 0; i<ei.getPropertyCount(); i++) {
+			if (ei.getProperty(i).key)
+				continue;
+			ei.getProperty(i).writeFunc(obj, w, startColumn + index);
+			index++;
+		}
+	}
+
     public string generateFindAllForEntity(string entityName) {
 		EntityInfo ei = findEntity(entityName);
         return "SELECT " ~ getAllFieldList(ei) ~ " FROM " ~ ei.tableName;
@@ -888,7 +941,15 @@ abstract class SchemaInfo : EntityMetaData {
 		return "INSERT INTO " ~ ei.tableName ~ "(" ~ getAllFieldList(ei) ~ ") VALUES (" ~ getAllFieldPlaceholderList(ei) ~ ")";
 	}
 
-    public string generateFindByPkForEntity(string entityName) {
+	public string generateInsertNoKeyForEntity(EntityInfo ei) {
+		return "INSERT INTO " ~ ei.tableName ~ "(" ~ getAllFieldListExceptKey(ei) ~ ") VALUES (" ~ getAllFieldPlaceholderListExceptKey(ei) ~ ")";
+	}
+
+	public string generateUpdateForEntity(EntityInfo ei) {
+		return "UPDATE " ~ ei.tableName ~ " SET " ~ getAllFieldListExceptKeyForUpdate(ei) ~ " WHERE " ~ ei.getKeyProperty().columnName ~ "=?";
+	}
+
+	public string generateFindByPkForEntity(string entityName) {
         return generateFindByPkForEntity(findEntity(entityName));
     }
 
@@ -914,35 +975,35 @@ class SchemaInfoImpl(T...) : SchemaInfo {
         try {
             return entityMap[entityName]; 
         } catch (Exception e) {
-            throw new HibernatedException("Cannot find entity by name " ~ entityName, e);
+            throw new HibernatedException("Cannot find entity by name " ~ entityName);
         }
     }
     public EntityInfo findEntity(TypeInfo_Class entityClass) { 
         try {
             return classMap[entityClass]; 
         } catch (Exception e) {
-            throw new HibernatedException("Cannot find entity by class " ~ entityClass.toString(), e);
+            throw new HibernatedException("Cannot find entity by class " ~ entityClass.toString());
         }
     }
     public EntityInfo getEntity(int entityIndex) { 
         try {
             return entities[entityIndex]; 
         } catch (Exception e) {
-            throw new HibernatedException("Cannot get entity by index " ~ to!string(entityIndex), e);
+            throw new HibernatedException("Cannot get entity by index " ~ to!string(entityIndex));
         }
     }
     public Object createEntity(string entityName) { 
         try {
             return entityMap[entityName].createEntity(); 
         } catch (Exception e) {
-            throw new HibernatedException("Cannot find entity by name " ~ entityName, e);
+            throw new HibernatedException("Cannot find entity by name " ~ entityName);
         }
     }
     public EntityInfo findEntityForObject(Object obj) {
         try {
             return classMap[obj.classinfo];
         } catch (Exception e) {
-            throw new HibernatedException("Cannot find entity metadata for " ~ obj.classinfo.toString(), e);
+            throw new HibernatedException("Cannot find entity metadata for " ~ obj.classinfo.toString());
         }
     }
 }
@@ -1227,6 +1288,17 @@ unittest {
 		Customer c4_check = cast(Customer)sess.load("Customer", Variant(4));
 		assert(c4.id == c4_check.id);
 		assert(c4.name == c4_check.name);
+
+		sess.remove(c4);
+
+		c4 = cast(Customer)sess.get("Customer", Variant(4));
+		assert (c4 is null);
+
+		Customer c5 = new Customer();
+		c5.name = "Customer_5";
+		sess.save(c5);
+		
+
 	}
 }
 
