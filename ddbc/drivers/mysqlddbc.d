@@ -303,7 +303,17 @@ public:
 		cmd.execSQL(rowsAffected);
         return cast(int)rowsAffected;
     }
-    override void close() {
+	override int executeUpdate(string query, out Variant insertId) {
+		checkClosed();
+		lock();
+		scope(exit) unlock();
+		cmd = new Command(conn.getConnection(), query);
+		ulong rowsAffected = 0;
+		cmd.execSQL(rowsAffected);
+		insertId = Variant(cmd.lastInsertID);
+		return cast(int)rowsAffected;
+	}
+	override void close() {
         checkClosed();
         lock();
         scope(exit) unlock();
@@ -374,6 +384,17 @@ public:
         cmd.execPrepared(rowsAffected);
         return cast(int)rowsAffected;
     }
+
+	override int executeUpdate(out Variant insertId) {
+		checkClosed();
+		lock();
+		scope(exit) unlock();
+		ulong rowsAffected = 0;
+		cmd.execPrepared(rowsAffected);
+		insertId = cmd.lastInsertID;
+		return cast(int)rowsAffected;
+	}
+
     override ddbc.core.ResultSet executeQuery() {
         checkClosed();
         lock();
@@ -872,7 +893,7 @@ unittest {
         scope(exit) stmt.close();
 
         assert(stmt.executeUpdate("DROP TABLE IF EXISTS ddbct1") == 0);
-        assert(stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (id bigint not null primary key, name varchar(250), comment mediumtext)") == 0);
+        assert(stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (id bigint not null primary key AUTO_INCREMENT, name varchar(250), comment mediumtext)") == 0);
         assert(stmt.executeUpdate("INSERT INTO ddbct1 SET id=1, name='name1', comment='comment for line 1'") == 1);
         assert(stmt.executeUpdate("INSERT INTO ddbct1 SET id=2, name='name2', comment='comment for line 2 - can be very long'") == 1);
         assert(stmt.executeUpdate("INSERT INTO ddbct1 SET id=3, name='name3', comment='this is line 3'") == 1);
@@ -930,11 +951,29 @@ unittest {
         }
         
         PreparedStatement ps2 = conn.prepareStatement("SELECT id, name, comment FROM ddbct1 WHERE id >= ?");
+		scope(exit) ps2.close();
         ps2.setLong(1, 3);
         rs = ps2.executeQuery();
         while (rs.next()) {
             //writeln(to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ strNull(rs.getString(3)));
             index++;
         }
-    }
+
+		// checking last insert ID for prepared statement
+		PreparedStatement ps3 = conn.prepareStatement("INSERT INTO ddbct1 (name) values ('New String 1')");
+		scope(exit) ps3.close();
+		Variant newId;
+		assert(ps3.executeUpdate(newId) == 1);
+		//writeln("Generated insert id = " ~ newId.toString());
+		assert(newId.get!ulong > 0);
+
+		// checking last insert ID for normal statement
+		Statement stmt4 = conn.createStatement();
+		scope(exit) stmt4.close();
+		Variant newId2;
+		assert(stmt.executeUpdate("INSERT INTO ddbct1 (name) values ('New String 2')", newId2) == 1);
+		//writeln("Generated insert id = " ~ newId2.toString());
+		assert(newId2.get!ulong > 0);
+
+	}
 }
