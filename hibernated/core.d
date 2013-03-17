@@ -1,5 +1,9 @@
 module hibernated.core;
 
+import std.ascii;
+import std.exception;
+import std.string;
+
 import hibernated.annotations;
 import hibernated.metadata;
 import hibernated.type;
@@ -9,3 +13,207 @@ class HibernatedException : Exception {
     this(Exception causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
 }
 
+class SyntaxError : HibernatedException {
+	this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
+}
+
+class Query {
+	EntityMetaData metadata;
+	this(EntityMetaData metadata, string query) {
+		this.metadata = metadata;
+		parse(query.dup);
+	}
+
+	static KeywordType isKeyword(char[] str) {
+		char[] s = toUpper(str);
+		final switch (s) {
+			case "SELECT": return KeywordType.SELECT;
+			case "FROM": return KeywordType.FROM;
+			case "WHERE": return KeywordType.WHERE;
+			case "ORDER": return KeywordType.ORDER;
+			case "BY": return KeywordType.BY;
+			case "ASC": return KeywordType.ASC;
+			case "DESC": return KeywordType.DESC;
+			case "JOIN": return KeywordType.JOIN;
+			case "INNER": return KeywordType.INNER;
+			case "OUTER": return KeywordType.OUTER;
+			case "LEFT": return KeywordType.LEFT;
+			case "RIGHT": return KeywordType.RIGHT;
+			case "LIKE": return KeywordType.LIKE;
+			case "IN": return KeywordType.IN;
+			case "IS": return KeywordType.IS;
+			case "NOT": return KeywordType.NOT;
+			case "NULL": return KeywordType.NULL;
+			case "AS": return KeywordType.AS;
+			case "AND": return KeywordType.AND;
+			case "OR": return KeywordType.OR;
+			case "BETWEEN": return KeywordType.BETWEEN;
+		}
+		return KeywordType.NONE;
+	}
+ 	
+	Token[] parse(char[] s) {
+		Token[] res;
+		int startpos = 0;
+		int state = 0;
+		int len = cast(int)s.length;
+		for (int i=0; i<len; i++) {
+			char ch = s[i];
+			char ch2 = i < len - 1 ? s[i + 1] : 0;
+			char ch3 = i < len - 2 ? s[i + 2] : 0;
+			char[] text;
+			bool quotedIdent = ch == '`';
+			startpos = i;
+			if (isAlpha(ch) || ch=='_' || quotedIdent) {
+				if (quotedIdent) {
+					i++;
+					enforceEx!SyntaxError(i < len - 1, "Invalid quoted identifier near " ~ cast(string)s[startpos .. $]);
+				}
+				// && state == 0
+				for(int j=i; j<len; j++) {
+					if (isAlphaNum(s[j])) {
+						text ~= s[j];
+						i = j;
+					} else {
+						break;
+					}
+				}
+				enforceEx!SyntaxError(text.length > 0, "Invalid quoted identifier near " ~ cast(string)s[startpos .. $]);
+				if (quotedIdent) {
+					enforceEx!SyntaxError(i < len - 1 && s[i + 1] == '`', "Invalid quoted identifier near " ~ cast(string)s[startpos .. $]);
+					i++;
+				}
+				KeywordType keywordId = isKeyword(text);
+				if (keywordId != KeywordType.NONE && !quotedIdent)
+					res ~= new Token(keywordId, text);
+				else
+					res ~= new Token(TokenType.Ident, text);
+			} else if (isWhite(ch)) {
+				for(int j=i; j<len; j++) {
+					if (isWhite(s[j])) {
+						text ~= s[j];
+						i = j;
+					} else {
+						break;
+					}
+				}
+				// don't add whitespace to lexer results
+			} else if (ch == '\'') {
+				// string constant
+				i++;
+				for(int j=i; j<len; j++) {
+					if (s[j] != '\'') {
+						text ~= s[j];
+						i = j;
+					} else {
+						break;
+					}
+				}
+				enforceEx!SyntaxError(i < len - 1 && s[i + 1] == '\'', "Unfinished string near " ~ cast(string)s[startpos .. $]);
+				res ~= new Token(TokenType.String, text);
+			} else if (isDigit(ch)) {
+				// number
+				for(int j=i; j<len; j++) {
+					if (isDigit(s[j])) {
+						text ~= s[j];
+						i = j;
+					} else {
+						break;
+					}
+				}
+				if (i < len - 1 && s[i + 1] == '.') {
+					text ~= '.';
+					i++;
+					for(int j = i; j<len; j++) {
+						if (isDigit(s[j])) {
+							text ~= s[j];
+							i = j;
+						} else {
+							break;
+						}
+					}
+				}
+				if (i < len - 1 && toLower(s[i + 1]) == 'e') {
+					text ~= s[i+1];
+					i++;
+					if (i < len - 1 && (s[i + 1] == '-' || s[i + 1] == '+')) {
+						text ~= s[i+1];
+						i++;
+					}
+					enforceEx!SyntaxError(i < len - 1 && isDigit(s[i]), "Invalid number near " ~ cast(string)s[startpos .. $]);
+					for(int j = i; j<len; j++) {
+						if (isDigit(s[j])) {
+							text ~= s[j];
+							i = j;
+						} else {
+							break;
+						}
+					}
+				}
+				enforceEx!SyntaxError(i >= len - 1 || !isAlpha(s[i]), "Invalid number near " ~ cast(string)s[startpos .. $]);
+				res ~= new Token(TokenType.Number, text);
+			} else if (ch == '.') {
+				res ~= new Token(TokenType.Dot, ".");
+			} else if (ch == '(') {
+				res ~= new Token(TokenType.OpenBracket, "(");
+			} else if (ch == ')') {
+				res ~= new Token(TokenType.CloseBracket, ")");
+			}
+		}
+		return res;
+	}
+}
+
+enum KeywordType {
+	NONE,
+	SELECT,
+	FROM,
+	WHERE,
+	ORDER,
+	BY,
+	ASC,
+	DESC,
+	JOIN,
+	INNER,
+	OUTER,
+	LEFT,
+	RIGHT,
+	LIKE,
+	IN,
+	IS,
+	NOT,
+	NULL,
+	AS,
+	AND,
+	OR,
+	BETWEEN,
+}
+
+enum TokenType {
+	Keyword,
+	Ident,
+	Number,
+	String,
+	Dot,
+	OpenBracket,
+	CloseBracket,
+}
+
+class Token {
+	TokenType type;
+	KeywordType keyword;
+	char[] text;
+	this(TokenType type, string text) {
+		this.type = type;
+		this.text = text.dup;
+	}
+	this(TokenType type, char[] text) {
+		this.type = type;
+		this.text = text;
+	}
+	this(KeywordType keyword, char[] text) {
+		this.type = TokenType.Keyword;
+		this.keyword = keyword;
+		this.text = text;
+	}
+}
