@@ -236,7 +236,9 @@ class SessionImpl : Session {
 				PreparedStatement stmt = conn.prepareStatement(query);
 				scope(exit) stmt.close();
 				metaData.writeAllColumnsExceptKey(obj, stmt, 1);
-				stmt.executeUpdate();
+				Variant generatedKey;
+				stmt.executeUpdate(generatedKey);
+				info.setKey(obj, generatedKey);
 				return info.getKey(obj);
             } else {
                 throw new HibernatedException("Key is not set and no generator is specified");

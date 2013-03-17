@@ -603,22 +603,22 @@ string getColumnTypeDatasetReadCode(T, string m)() {
 
 static immutable string[] ColumnTypeVariantReadCode = 
 	[
-	 "(value == null ? nv : value.get!(byte))", //BYTE_TYPE,    // byte
-	 "(value == null ? nv : value.get!(short))", //SHORT_TYPE,   // short
-	 "(value == null ? nv : value.get!(int))", //INT_TYPE,     // int
-	 "(value == null ? nv : value.get!(long))", //LONG_TYPE,    // long
-	 "(value == null ? nv : value.get!(ubyte))", //UBYTE_TYPE,   // ubyte
-	 "(value == null ? nv : value.get!(ushort))", //USHORT_TYPE,  // ushort
-	 "(value == null ? nv : value.get!(uint))", //UINT_TYPE,    // uint
-	 "(value == null ? nv : value.get!(ulong))", //ULONG_TYPE,   // ulong
-	 "(value == null ? nv : value.get!(byte))", //NULLABLE_BYTE_TYPE,  // Nullable!byte
-	 "(value == null ? nv : value.get!(short))", //NULLABLE_SHORT_TYPE, // Nullable!short
-	 "(value == null ? nv : value.get!(int))", //NULLABLE_INT_TYPE,   // Nullable!int
-	 "(value == null ? nv : value.get!(long))", //NULLABLE_LONG_TYPE,  // Nullable!long
-	 "(value == null ? nv : value.get!(ubyte))", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
-	 "(value == null ? nv : value.get!(ushort))", //NULLABLE_USHORT_TYPE,// Nullable!ushort
-	 "(value == null ? nv : value.get!(uint))", //NULLABLE_UINT_TYPE,  // Nullable!uint
-	 "(value == null ? nv : value.get!(ulong))", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+	 "(value == null ? nv : (value.convertsTo!(byte) ? value.get!(byte) : (value.convertsTo!(long) ? to!byte(value.get!(long)) : to!byte((value.get!(ulong))))))", //BYTE_TYPE,    // byte
+	 "(value == null ? nv : (value.convertsTo!(shirt) ? value.get!(short) : (value.convertsTo!(long) ? to!short(value.get!(long)) : to!short((value.get!(ulong))))))", //SHORT_TYPE,   // short
+	 "(value == null ? nv : (value.convertsTo!(int) ? value.get!(int) : (value.convertsTo!(long) ? to!int(value.get!(long)) : to!int((value.get!(ulong))))))", //INT_TYPE,     // int
+	 "(value == null ? nv : (value.convertsTo!(long) ? value.get!(long) : to!long(value.get!(ulong))))", //LONG_TYPE,    // long
+	 "(value == null ? nv : (value.convertsTo!(ubyte) ? value.get!(ubyte) : (value.convertsTo!(ulong) ? to!ubyte(value.get!(ulong)) : to!ubyte((value.get!(long))))))", //UBYTE_TYPE,   // ubyte
+	 "(value == null ? nv : (value.convertsTo!(ushort) ? value.get!(ushort) : (value.convertsTo!(ulong) ? to!ushort(value.get!(ulong)) : to!ushort((value.get!(long))))))", //USHORT_TYPE,  // ushort
+	 "(value == null ? nv : (value.convertsTo!(uint) ? value.get!(uint) : (value.convertsTo!(ulong) ? to!uint(value.get!(ulong)) : to!uint((value.get!(long))))))", //UINT_TYPE,    // uint
+	 "(value == null ? nv : (value.convertsTo!(ulong) ? value.get!(ulong) : to!ulong(value.get!(long))))", //ULONG_TYPE,   // ulong
+	 "(value == null ? nv : (value.convertsTo!(byte) ? value.get!(byte) : (value.convertsTo!(long) ? to!byte(value.get!(long)) : to!byte((value.get!(ulong))))))", //NULLABLE_BYTE_TYPE,  // Nullable!byte
+	 "(value == null ? nv : (value.convertsTo!(shirt) ? value.get!(short) : (value.convertsTo!(long) ? to!short(value.get!(long)) : to!short((value.get!(ulong))))))", //NULLABLE_SHORT_TYPE, // Nullable!short
+	 "(value == null ? nv : (value.convertsTo!(int) ? value.get!(int) : (value.convertsTo!(long) ? to!int(value.get!(long)) : to!int((value.get!(ulong))))))", //NULLABLE_INT_TYPE,   // Nullable!int
+	 "(value == null ? nv : (value.convertsTo!(long) ? value.get!(long) : to!long(value.get!(ulong))))", //NULLABLE_LONG_TYPE,  // Nullable!long
+	 "(value == null ? nv : (value.convertsTo!(ubyte) ? value.get!(ubyte) : (value.convertsTo!(ulong) ? to!ubyte(value.get!(ulong)) : to!ubyte((value.get!(long))))))", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
+	 "(value == null ? nv : (value.convertsTo!(ushort) ? value.get!(ushort) : (value.convertsTo!(ulong) ? to!ushort(value.get!(ulong)) : to!ushort((value.get!(long))))))", //NULLABLE_USHORT_TYPE,// Nullable!ushort
+	 "(value == null ? nv : (value.convertsTo!(uint) ? value.get!(uint) : (value.convertsTo!(ulong) ? to!uint(value.get!(ulong)) : to!uint((value.get!(long))))))", //NULLABLE_UINT_TYPE,  // Nullable!uint
+	 "(value == null ? nv : (value.convertsTo!(ulong) ? value.get!(ulong) : to!ulong(value.get!(long))))", //NULLABLE_ULONG_TYPE, // Nullable!ulong
 	 "(value == null ? nv : value.get!(string))", //STRING_TYPE   // string
 	 ];
 
