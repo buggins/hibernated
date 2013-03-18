@@ -50,6 +50,8 @@ enum KeywordType {
 	AND,
 	OR,
 	BETWEEN,
+	DIV,
+	MOD,
 }
 
 KeywordType isKeyword(string str) {
@@ -79,6 +81,8 @@ KeywordType isKeyword(char[] str) {
     if (s=="AND") return KeywordType.AND;
     if (s=="OR") return KeywordType.OR;
     if (s=="BETWEEN") return KeywordType.BETWEEN;
+	if (s=="DIV") return KeywordType.DIV;
+	if (s=="MOD") return KeywordType.MOD;
 	return KeywordType.NONE;
 }
 
@@ -89,20 +93,58 @@ unittest {
 	assert(isKeyword("blabla") == KeywordType.NONE);
 }
 
+enum OperatorType {
+	NONE,
+	EQ, // ==
+	NE, // != <>
+	LT, // <
+	GT, // >
+	LE, // <=
+	GE, // >=
+	MUL,// *
+	ADD,// +
+	SUB,// -
+	DIV,// /
+}
+
+OperatorType isOperator(char[] s, ref int i) {
+	int len = cast(int)s.length;
+	char ch = s[i];
+	char ch2 = i < len - 1 ? s[i + 1] : 0;
+	//char ch3 = i < len - 2 ? s[i + 2] : 0;
+	if (ch == '=' && ch2 == '=') { i++; return OperatorType.EQ; } // ==
+	if (ch == '!' && ch2 == '=') { i++; return OperatorType.NE; } // !=
+	if (ch == '<' && ch2 == '>') { i++; return OperatorType.NE; } // <>
+	if (ch == '<' && ch2 == '=') { i++; return OperatorType.LE; } // <=
+	if (ch == '>' && ch2 == '=') { i++; return OperatorType.GE; } // >=
+	if (ch == '=') return OperatorType.EQ; // =
+	if (ch == '<') return OperatorType.LT; // <
+	if (ch == '>') return OperatorType.GT; // <
+	if (ch == '*') return OperatorType.MUL; // <
+	if (ch == '+') return OperatorType.ADD; // <
+	if (ch == '-') return OperatorType.SUB; // <
+	if (ch == '/') return OperatorType.DIV; // <
+	return OperatorType.NONE;
+}
+
+
 enum TokenType {
-	Keyword,
-	Ident,
-	Number,
-	String,
-	Dot,
-	OpenBracket,
-	CloseBracket,
+	Keyword,      // WHERE
+	Ident,        // ident
+	Number,       // 25   13.5e-10
+	String,       // 'string'
+	Operator,     // == != <= >= < > + - * /
+	Dot,          // .
+	OpenBracket,  // (
+	CloseBracket, // )
 }
 
 class Token {
 	TokenType type;
-	KeywordType keyword;
+	KeywordType keyword = KeywordType.NONE;
+	OperatorType operator = OperatorType.NONE;
 	char[] text;
+	char[] spaceAfter;
 	this(TokenType type, string text) {
 		this.type = type;
 		this.text = text.dup;
@@ -116,6 +158,15 @@ class Token {
 		this.keyword = keyword;
 		this.text = text;
 	}
+	this(OperatorType op, char[] text) {
+		this.type = TokenType.Operator;
+		this.operator = op;
+		this.text = text;
+	}
+}
+
+Token[] tokenize(string s) {
+	return tokenize(s.dup);
 }
 
 Token[] tokenize(char[] s) {
@@ -130,7 +181,12 @@ Token[] tokenize(char[] s) {
 		char[] text;
 		bool quotedIdent = ch == '`';
 		startpos = i;
-		if (isAlpha(ch) || ch=='_' || quotedIdent) {
+		OperatorType op = isOperator(s, i);
+		if (op != OperatorType.NONE) {
+			// operator
+			res ~= new Token(op, s[startpos .. i + 1]);
+		} else if (isAlpha(ch) || ch=='_' || quotedIdent) {
+			// identifier or keyword
 			if (quotedIdent) {
 				i++;
 				enforceEx!SyntaxError(i < len - 1, "Invalid quoted identifier near " ~ cast(string)s[startpos .. $]);
@@ -155,6 +211,7 @@ Token[] tokenize(char[] s) {
 			else
 				res ~= new Token(TokenType.Ident, text);
 		} else if (isWhite(ch)) {
+			// whitespace
 			for(int j=i; j<len; j++) {
 				if (isWhite(s[j])) {
 					text ~= s[j];
@@ -163,7 +220,11 @@ Token[] tokenize(char[] s) {
 					break;
 				}
 			}
-			// don't add whitespace to lexer results
+			// don't add whitespace to lexer results as separate token
+			// add as spaceAfter
+			if (res.length > 0) {
+				res[$ - 1].spaceAfter = text;
+			}
 		} else if (ch == '\'') {
 			// string constant
 			i++;
@@ -176,18 +237,12 @@ Token[] tokenize(char[] s) {
 				}
 			}
 			enforceEx!SyntaxError(i < len - 1 && s[i + 1] == '\'', "Unfinished string near " ~ cast(string)s[startpos .. $]);
+			i++;
 			res ~= new Token(TokenType.String, text);
-		} else if (isDigit(ch)) {
-			// number
-			for(int j=i; j<len; j++) {
-				if (isDigit(s[j])) {
-					text ~= s[j];
-					i = j;
-				} else {
-					break;
-				}
-			}
-			if (i < len - 1 && s[i + 1] == '.') {
+		} else if (isDigit(ch) || (ch == '.' && isDigit(ch2))) {
+			// numeric constant
+			if (ch == '.') {
+				// .25
 				text ~= '.';
 				i++;
 				for(int j = i; j<len; j++) {
@@ -196,6 +251,29 @@ Token[] tokenize(char[] s) {
 						i = j;
 					} else {
 						break;
+					}
+				}
+			} else {
+				// 123
+				for(int j=i; j<len; j++) {
+					if (isDigit(s[j])) {
+						text ~= s[j];
+						i = j;
+					} else {
+						break;
+					}
+				}
+				// .25
+				if (i < len - 1 && s[i + 1] == '.') {
+					text ~= '.';
+					i++;
+					for(int j = i; j<len; j++) {
+						if (isDigit(s[j])) {
+							text ~= s[j];
+							i = j;
+						} else {
+							break;
+						}
 					}
 				}
 			}
@@ -224,9 +302,21 @@ Token[] tokenize(char[] s) {
 			res ~= new Token(TokenType.OpenBracket, "(");
 		} else if (ch == ')') {
 			res ~= new Token(TokenType.CloseBracket, ")");
+		} else {
+			enforceEx!SyntaxError(false, "Invalid token near " ~ cast(string)s[startpos .. $]);
 		}
 	}
 	return res;
 }
 
-
+unittest {
+	Token[] tokens;
+	tokens = tokenize("SELECT a From User a where a.flags = 1 AND a.name='john' ORDER BY a.idx ASC");
+	assert(tokens.length == 23);
+	assert(tokens[0].type == TokenType.Keyword);
+	assert(tokens[2].type == TokenType.Keyword);
+	assert(tokens[5].type == TokenType.Keyword);
+	assert(tokens[5].text == "where");
+	assert(tokens[16].type == TokenType.String);
+	assert(tokens[16].text == "john");
+}
