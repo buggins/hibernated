@@ -116,7 +116,7 @@ class EntityInfo {
 	/// returns property by index
 	PropertyInfo getProperty(int propertyIndex) { return properties[propertyIndex]; }
 	/// returns property by name, throws exception if not found
-	PropertyInfo findProperty(string propertyName) { return propertyMap[propertyName]; }
+	PropertyInfo findProperty(string propertyName) { try { return propertyMap[propertyName]; } catch (Throwable e) { throw new HibernatedException("No property " ~ propertyName ~ " found in entity " ~ name); } }
 	/// create instance of entity object (using default constructor)
 	Object createEntity() { return Object.factory(classInfo.name); }
 }

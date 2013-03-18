@@ -3,7 +3,10 @@ module hibernated.core;
 import std.ascii;
 import std.algorithm;
 import std.exception;
+import std.array;
 import std.string;
+import std.conv;
+import std.stdio;
 
 import hibernated.annotations;
 import hibernated.metadata;
@@ -24,12 +27,25 @@ struct FromClauseItem {
 	string entityAlias;
 }
 
+struct OrderByClauseItem {
+	FromClauseItem * aliasPtr;
+	PropertyInfo prop;
+	bool asc;
+}
+
+struct SelectClauseItem {
+	FromClauseItem * aliasPtr;
+	PropertyInfo prop;
+}
+
 class QueryParser {
 	string query;
 	EntityMetaData metadata;
 	Token[] tokens;
 	FromClauseItem[] fromClause;
 	string[] parameterNames;
+	OrderByClauseItem[] orderByClause;
+	SelectClauseItem[] selectClause;
 	this(EntityMetaData metadata, string query) {
 		this.metadata = metadata;
 		this.query = query;
@@ -38,8 +54,9 @@ class QueryParser {
 	}
 
 	void parse() {
+		processParameterNames(0, cast(int)tokens.length); // replace pairs {: Ident} with single Parameter token
 		int len = cast(int)tokens.length;
-		processParameterNames(0, len); // replace pairs {: Ident} with single Parameter token
+		//writeln("Query tokens: " ~ to!string(len));
 		int fromPos = findKeyword(KeywordType.FROM);
 		int selectPos = findKeyword(KeywordType.SELECT);
 		int wherePos = findKeyword(KeywordType.WHERE);
@@ -57,8 +74,8 @@ class QueryParser {
 		int whereEnd = wherePos < 0 ? -1 : (orderPos >= 0 ? orderPos : len);
 		int orderEnd = orderPos < 0 ? -1 : len;
 		parseFromClause(fromPos + 1, fromEnd);
-		if (selectPos == 0 && selectPos < wherePos - 1)
-			parseSelectClause(selectPos + 1, wherePos);
+		if (selectPos == 0 && selectPos < fromPos - 1)
+			parseSelectClause(selectPos + 1, fromPos);
 		if (wherePos >= 0 && whereEnd > wherePos)
 			parseWhereClause(wherePos + 1, whereEnd);
 		if (orderPos >= 0 && orderEnd > orderPos)
@@ -82,7 +99,22 @@ class QueryParser {
 			}
 		}
 	}
-	
+
+	private void splitCommaDelimitedList(int start, int end, void delegate(int, int) callback) {
+		//writeln("SPLIT " ~ to!string(start) ~ " .. " ~ to!string(end));
+		int len = cast(int)tokens.length;
+		int p = start;
+		for (int i = start; i < end; i++) {
+			if (tokens[i].type == TokenType.Comma || i == end - 1) {
+				enforceEx!SyntaxError(tokens[i].type != TokenType.Comma || i != end - 1, "Invalid comma at end of list - in query " ~ query);
+				int endp = i < end - 1 ? i : end;
+				enforceEx!SyntaxError(endp > p, "Invalid comma delimited list - in query " ~ query);
+				callback(p, endp);
+				p = i + 1;
+			}
+		}
+	}
+
 	void parseFromClause(int start, int end) {
 		enforceEx!SyntaxError(start < end, "Invalid FROM clause in query " ~ query);
 		// minimal support:
@@ -116,15 +148,94 @@ class QueryParser {
 		for (int i = end - 2; i >= start; i--) {
 			if (tokens[i].type == TokenType.Colon) {
 				enforceEx!SyntaxError(tokens[i + 1].type == TokenType.Ident, "Parameter name expected after : in WHERE clause - in query " ~ query);
-				parameterNames ~= cast(string)tokens[i + 1].text;
+				insertInPlace(parameterNames, 0, cast(string)tokens[i + 1].text);
 				tokens[i + 1].type = TokenType.Parameter;
 				remove(tokens, i);
+				tokens.length--;
 			}
 		}
 	}
 
+	FromClauseItem * findFromClauseByAlias(string aliasName) {
+		foreach(ref m; fromClause) {
+			if (m.entityAlias == aliasName)
+				return &m;
+		}
+		throw new SyntaxError("Cannot find FROM alias by name " ~ aliasName ~ " - in query " ~ query);
+	}
+
+	void addSelectClauseItem(string aliasName, string propertyName) {
+		FromClauseItem * from = aliasName == null ? &fromClause[0] : findFromClauseByAlias(aliasName);
+		SelectClauseItem item;
+		item.aliasPtr = from;
+		item.prop = propertyName != null ? from.entity.findProperty(propertyName) : null;
+		selectClause ~= item;
+		//insertInPlace(selectClause, 0, item);
+	}
+
+	void addOrderByClauseItem(string aliasName, string propertyName, bool asc) {
+		FromClauseItem * from = aliasName == null ? &fromClause[0] : findFromClauseByAlias(aliasName);
+		OrderByClauseItem item;
+		item.aliasPtr = from;
+		item.prop = from.entity.findProperty(propertyName);
+		item.asc = asc;
+		orderByClause ~= item;
+		//insertInPlace(orderByClause, 0, item);
+	}
+	
+	void parseSelectClauseItem(int start, int end) {
+		// for each comma delimited item
+		// in current version it can only be
+		// {property}  or  {alias . property}
+		//writeln("SELECT ITEM: " ~ to!string(start) ~ " .. " ~ to!string(end));
+		if (start == end - 1) {
+			// no alias
+			enforceEx!SyntaxError(tokens[start].type == TokenType.Ident || tokens[start].type == TokenType.Alias, "Property name or alias expected in SELECT clause in query " ~ query);
+			if (tokens[start].type == TokenType.Ident)
+				addSelectClauseItem(null, cast(string)tokens[start].text);
+			else
+				addSelectClauseItem(cast(string)tokens[start].text, null);
+		} else if (start == end - 3) {
+			enforceEx!SyntaxError(tokens[start].type == TokenType.Alias, "Entity alias expected in SELECT clause in query " ~ query);
+			enforceEx!SyntaxError(tokens[start + 1].type == TokenType.Dot, "Dot expected after entity alias in SELECT clause in query " ~ query);
+			enforceEx!SyntaxError(tokens[start + 2].type == TokenType.Ident, "Property name expected after entity alias in SELECT clause in query " ~ query);
+			addSelectClauseItem(cast(string)tokens[start].text, cast(string)tokens[start + 2].text);
+		} else {
+			enforceEx!SyntaxError(false, "Invalid SELECT clause in query " ~ query);
+		}
+	}
+
+	void parseOrderByClauseItem(int start, int end) {
+		// for each comma delimited item
+		// in current version it can only be
+		// {property}  or  {alias . property} optionally followed by ASC or DESC
+		//writeln("ORDER BY ITEM: " ~ to!string(start) ~ " .. " ~ to!string(end));
+		bool asc = true;
+		if (tokens[end - 1].type == TokenType.Keyword && tokens[end - 1].keyword == KeywordType.ASC) {
+			end--;
+		} else if (tokens[end - 1].type == TokenType.Keyword && tokens[end - 1].keyword == KeywordType.DESC) {
+			asc = false;
+			end--;
+		}
+		enforceEx!SyntaxError(start < end, "Empty ORDER BY clause item in query " ~ query);
+		if (start == end - 1) {
+			// no alias
+			enforceEx!SyntaxError(tokens[start].type == TokenType.Ident, "Property name expected in ORDER BY clause in query " ~ query);
+			addOrderByClauseItem(null, cast(string)tokens[start].text, asc);
+		} else if (start == end - 3) {
+			enforceEx!SyntaxError(tokens[start].type == TokenType.Alias, "Entity alias expected in ORDER BY clause in query " ~ query);
+			enforceEx!SyntaxError(tokens[start + 1].type == TokenType.Dot, "Dot expected after entity alias in ORDER BY clause in query " ~ query);
+			enforceEx!SyntaxError(tokens[start + 2].type == TokenType.Ident, "Property name expected after entity alias in ORDER BY clause in query " ~ query);
+			addOrderByClauseItem(cast(string)tokens[start].text, cast(string)tokens[start + 2].text, asc);
+		} else {
+			//writeln("range: " ~ to!string(start) ~ " .. " ~ to!string(end));
+			enforceEx!SyntaxError(false, "Invalid ORDER BY clause (expected {property [ASC | DESC]} or {alias.property [ASC | DESC]} ) in query " ~ query);
+		}
+	}
+	
 	void parseSelectClause(int start, int end) {
 		enforceEx!SyntaxError(start < end, "Invalid SELECT clause in query " ~ query);
+		splitCommaDelimitedList(start, end, &parseSelectClauseItem);
 	}
 
 	void parseWhereClause(int start, int end) {
@@ -133,6 +244,7 @@ class QueryParser {
 	
 	void parseOrderClause(int start, int end) {
 		enforceEx!SyntaxError(start < end, "Invalid ORDER BY clause in query " ~ query);
+		splitCommaDelimitedList(start, end, &parseOrderByClauseItem);
 	}
 	
 	/// returns position of keyword in tokens array, -1 if not found
@@ -257,6 +369,7 @@ enum TokenType {
 	OpenBracket,  // (
 	CloseBracket, // )
 	Colon,        // :
+	Comma,        // ,
 	Entity,       // entity name
 	Field,        // field name of some entity
 	Alias,        // alias name of some entity
@@ -430,6 +543,8 @@ Token[] tokenize(char[] s) {
 			res ~= new Token(TokenType.CloseBracket, ")");
 		} else if (ch == ':') {
 			res ~= new Token(TokenType.Colon, ":");
+		} else if (ch == ',') {
+			res ~= new Token(TokenType.Comma, ",");
 		} else {
 			enforceEx!SyntaxError(false, "Invalid token near " ~ cast(string)s[startpos .. $]);
 		}
@@ -453,10 +568,23 @@ unittest {
 	assert(tokens[22].text == "ASC");
 
 	EntityMetaData schema = new SchemaInfoImpl!(User, Customer);
-	QueryParser parser = new QueryParser(schema, "SELECT a FROM User AS a WHERE id = :Id");
-	assert(parser.parameterNames.length == 1);
+	QueryParser parser = new QueryParser(schema, "SELECT a FROM User AS a WHERE id = :Id AND name != :skipName ORDER BY name, a.flags DESC");
+	assert(parser.parameterNames.length == 2);
+	//writeln("param1=" ~ parser.parameterNames[0]);
+	//writeln("param2=" ~ parser.parameterNames[1]);
 	assert(parser.parameterNames[0] == "Id");
+	assert(parser.parameterNames[1] == "skipName");
 	assert(parser.fromClause.length == 1);
 	assert(parser.fromClause[0].entity.name == "User");
 	assert(parser.fromClause[0].entityAlias == "a");
+	assert(parser.selectClause.length == 1);
+	assert(parser.selectClause[0].prop is null);
+	assert(parser.selectClause[0].aliasPtr.entity.name == "User");
+	assert(parser.orderByClause.length == 2);
+	assert(parser.orderByClause[0].prop.propertyName == "name");
+	assert(parser.orderByClause[0].aliasPtr.entity.name == "User");
+	assert(parser.orderByClause[0].asc == true);
+	assert(parser.orderByClause[1].prop.propertyName == "flags");
+	assert(parser.orderByClause[1].aliasPtr.entity.name == "User");
+	assert(parser.orderByClause[1].asc == false);
 }
