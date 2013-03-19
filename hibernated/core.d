@@ -297,7 +297,7 @@ class QueryParser {
 	}
 
 	void convertIsNullIsNotNull(ref Token[] items) {
-		for (int i=items.length - 2; i >= 0; i--) {
+		for (auto i=items.length - 2; i >= 0; i--) {
 			if (items[i].type != TokenType.Operator || items[i + 1].type != TokenType.Keyword)
 				continue;
 			if (items[i].operator == OperatorType.IS && items[i + 1].keyword == KeywordType.NULL) {
@@ -306,7 +306,7 @@ class QueryParser {
 				i-=2;
 			}
 		}
-		for (int i=items.length - 3; i >= 0; i--) {
+		for (auto i=items.length - 3; i >= 0; i--) {
 			if (items[i].type != TokenType.Operator || items[i + 1].type != TokenType.Operator || items[i + 2].type != TokenType.Keyword)
 				continue;
 			if (items[i].operator == OperatorType.IS && items[i + 1].operator == OperatorType.NOT && items[i + 2].keyword == KeywordType.NULL) {
