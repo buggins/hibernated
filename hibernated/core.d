@@ -416,6 +416,16 @@ class QueryParser {
 				enforceEx!SyntaxError(bestOpPosition > 0 && items[bestOpPosition - 1].isExpression(), "Syntax error in WHERE condition " ~ items[bestOpPosition].toString());
 				Token folded = new Token(t, items[bestOpPosition].text, items[bestOpPosition - 1]);
 				replaceInPlace(items, bestOpPosition - 1, bestOpPosition + 1, [folded]);
+			} else if (t == OperatorType.BETWEEN) {
+				// fold  X BETWEEN A AND B
+				enforceEx!SyntaxError(bestOpPosition > 0, "Syntax error in WHERE condition - no left arg for BETWEEN operator");
+				enforceEx!SyntaxError(bestOpPosition < items.length - 1, "Syntax error in WHERE condition - no min bound for BETWEEN operator");
+				enforceEx!SyntaxError(bestOpPosition < items.length - 3, "Syntax error in WHERE condition - no max bound for BETWEEN operator");
+				enforceEx!SyntaxError(items[bestOpPosition + 2].operator == OperatorType.AND, "Syntax error in WHERE condition - no max bound for BETWEEN operator");
+				Token folded = new Token(t, items[bestOpPosition].text, items[bestOpPosition - 1]);
+				folded.children ~= items[bestOpPosition + 1];
+				folded.children ~= items[bestOpPosition + 3];
+				replaceInPlace(items, bestOpPosition - 1, bestOpPosition + 4, [folded]);
 			} else {
 				// fold binary
 				enforceEx!SyntaxError(bestOpPosition > 0, "Syntax error in WHERE condition - no left arg for binary operator " ~ items[bestOpPosition].toString());
@@ -915,7 +925,7 @@ unittest {
 	assert(parser.orderByClause[1].aliasPtr.entity.name == "User");
 	assert(parser.orderByClause[1].asc == false);
 
-	parser = new QueryParser(schema, "SELECT a FROM User AS a WHERE ((id = :Id) OR (name LIKE 'a%' AND flags = (-5 + 7))) AND name != :skipName ORDER BY name, a.flags DESC");
+	parser = new QueryParser(schema, "SELECT a FROM User AS a WHERE ((id = :Id) OR (name LIKE 'a%' AND flags = (-5 + 7))) AND name != :skipName AND flags BETWEEN 2*2 AND 42/5 ORDER BY name, a.flags DESC");
 	assert(parser.whereClause !is null);
 	writeln(parser.whereClause.dump(0));
 
