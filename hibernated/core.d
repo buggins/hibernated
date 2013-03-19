@@ -46,10 +46,13 @@ class QueryParser {
 	string[] parameterNames;
 	OrderByClauseItem[] orderByClause;
 	SelectClauseItem[] selectClause;
+	Token whereClause; // AST for WHERE expression
+
+
 	this(EntityMetaData metadata, string query) {
 		this.metadata = metadata;
 		this.query = query;
-		tokens = tokenize(query.dup);
+		tokens = tokenize(query);
 		parse();
 	}
 
@@ -236,6 +239,153 @@ class QueryParser {
 
 	void parseWhereClause(int start, int end) {
 		enforceEx!SyntaxError(start < end, "Invalid WHERE clause in query " ~ query);
+		whereClause = new Token(TokenType.Expression, tokens, start, end);
+		convertFields(whereClause.children);
+		writeln("converting WHERE expression\n" ~ whereClause.dump(0));
+		convertUnaryPlusMinus(whereClause.children);
+		foldBraces(whereClause.children);
+		foldOperators(whereClause.children);
+		writeln("after conversion:\n" ~ whereClause.dump(0));
+	}
+
+	static void foldBraces(ref Token[] items) {
+		while (true) {
+			if (items.length == 0)
+				return;
+			int lastOpen = -1;
+			int firstClose = -1;
+			for (int i=0; i<items.length; i++) {
+				if (items[i].type == TokenType.OpenBracket) {
+					lastOpen = i;
+				} if (items[i].type == TokenType.CloseBracket) {
+					firstClose = i;
+					break;
+				}
+			}
+			if (lastOpen == -1 && firstClose == -1)
+				return;
+			//writeln("folding braces " ~ to!string(lastOpen) ~ " .. " ~ to!string(firstClose));
+			enforceEx!SyntaxError(lastOpen >= 0 && lastOpen < firstClose, "Unpaired braces in WHERE clause");
+			Token folded = new Token(TokenType.Braces, items, lastOpen + 1, firstClose);
+//			size_t oldlen = items.length;
+//			int removed = firstClose - lastOpen;
+			replaceInPlace(items, lastOpen, firstClose + 1, [folded]);
+//			assert(items.length == oldlen - removed);
+			foldBraces(folded.children);
+		}
+	}
+
+	void convertFields(ref Token[] items) {
+		while(true) {
+			int p = -1;
+			for (int i=0; i<items.length; i++) {
+				if (items[i].type != TokenType.Ident)
+					continue;
+				p = i;
+				break;
+			}
+			if (p == -1)
+				return;
+			// found identifier at position p
+			string[] idents;
+			int lastp = p;
+			idents ~= items[p].text;
+			for (int i=p + 1; i < items.length; i++) {
+				if (items[i].type != TokenType.Dot)
+					break;
+				enforceEx!SyntaxError(i < items.length - 1 && items[i + 1].type == TokenType.Ident, "Syntax error in WHERE condition - no property name after . for " ~ items[p].toString());
+				lastp = i;
+				idents ~= items[p].text;
+			}
+			string aliasName;
+			string propertyName;
+			string fullName;
+			if (idents.length == 1) {
+				aliasName = fromClause[0].entityAlias;
+				propertyName = idents[0];
+			} else if (idents.length == 2) {
+				aliasName = idents[0];
+				propertyName = idents[1];
+			} else {
+				enforceEx!SyntaxError(false, "Only one and two levels {property} and {entityAlias.property} supported for property reference in current version");
+			}
+			fullName = aliasName ~ "." ~ propertyName;
+			FromClauseItem * a = findAlias(aliasName);
+			enforceEx!SyntaxError(a != null, "Syntax error in WHERE condition - unknown alias " ~ aliasName);
+			EntityInfo ei = a.entity;
+			PropertyInfo pi = ei.findProperty(propertyName);
+			Token t = new Token(TokenType.Field, fullName);
+			t.entity = ei;
+			t.field = pi;
+			replaceInPlace(items, p, lastp + 1, [t]);
+		}
+	}
+
+	FromClauseItem * findAlias(string entityAlias) {
+		foreach(i, v; fromClause) {
+			if (v.entityAlias == entityAlias)
+				return &fromClause[i];
+		}
+		return null;
+	}
+
+	static void convertUnaryPlusMinus(ref Token[] items) {
+		foreach (t; items) {
+			if (t.children.length > 0)
+				convertUnaryPlusMinus(t.children);
+		}
+		for (int i=0; i<items.length; i++) {
+			if (items[i].type != TokenType.Operator)
+				continue;
+			OperatorType op = items[i].operator;
+			if (op == OperatorType.ADD || op == OperatorType.SUB) {
+				// convert + and - to unary form if necessary
+				if (i == 0 || !items[i - 1].isExpression()) {
+					items[i].operator = (op == OperatorType.ADD) ? OperatorType.UNARY_PLUS : OperatorType.UNARY_MINUS;
+				}
+			}
+		}
+	}
+
+	static void foldOperators(ref Token[] items) {
+		foreach (t; items) {
+			if (t.children.length > 0)
+				foldOperators(t.children);
+		}
+		while (true) {
+			//
+			int bestOpPosition = -1;
+			int bestOpPrecedency = -1;
+			OperatorType t = OperatorType.NONE;
+			for (int i=0; i<items.length; i++) {
+				if (items[i].type != TokenType.Operator)
+					continue;
+				int p = operatorPrecedency(items[i].operator);
+				if (p > bestOpPrecedency) {
+					bestOpPrecedency = p;
+					bestOpPosition = i;
+					t = items[i].operator;
+				}
+			}
+			if (bestOpPrecedency == -1)
+				return;
+			writeln("Found op " ~ items[bestOpPosition].toString() ~ " at position " ~ to!string(bestOpPosition) ~ " with priority " ~ to!string(bestOpPrecedency));
+			if (t == OperatorType.NOT || t == OperatorType.UNARY_PLUS || t == OperatorType.UNARY_MINUS) {
+				// fold unary
+				enforceEx!SyntaxError(bestOpPosition < items.length && items[bestOpPosition + 1].isExpression(), "Syntax error in WHERE condition" ~ items[bestOpPosition].toString());
+				Token folded = new Token(t, items[bestOpPosition].text, items[bestOpPosition + 1]);
+				replaceInPlace(items, bestOpPosition, bestOpPosition + 2, [folded]);
+			} else {
+				// fold binary
+				enforceEx!SyntaxError(bestOpPosition > 0, "Syntax error in WHERE condition - no left arg for binary operator " ~ items[bestOpPosition].toString());
+				enforceEx!SyntaxError(bestOpPosition < items.length - 1, "Syntax error in WHERE condition - no right arg for binary operator " ~ items[bestOpPosition].toString());
+				writeln("binary op " ~ items[bestOpPosition - 1].toString() ~ " " ~ items[bestOpPosition].toString() ~ " " ~ items[bestOpPosition + 1].toString());
+				enforceEx!SyntaxError(items[bestOpPosition - 1].isExpression(), "Syntax error in WHERE condition - wrong type of left arg for binary operator " ~ items[bestOpPosition].toString());
+				enforceEx!SyntaxError(items[bestOpPosition - 1].isExpression(), "Syntax error in WHERE condition - wrong type of right arg for binary operator " ~ items[bestOpPosition].toString());
+				Token folded = new Token(t, items[bestOpPosition].text, items[bestOpPosition - 1], items[bestOpPosition + 1]);
+				replaceInPlace(items, bestOpPosition - 1, bestOpPosition + 2, [folded]);
+			}
+		}
 	}
 	
 	void parseOrderClause(int start, int end) {
@@ -268,12 +418,12 @@ enum KeywordType {
 	OUTER,
 	LEFT,
 	RIGHT,
+	AS,
 	LIKE,
 	IN,
 	IS,
 	NOT,
 	NULL,
-	AS,
 	AND,
 	OR,
 	BETWEEN,
@@ -322,6 +472,8 @@ unittest {
 
 enum OperatorType {
 	NONE,
+
+	// symbolic
 	EQ, // ==
 	NE, // != <>
 	LT, // <
@@ -332,9 +484,66 @@ enum OperatorType {
 	ADD,// +
 	SUB,// -
 	DIV,// /
+
+	// from keywords
+	LIKE,
+	IN,
+	IS,
+	NOT,
+	AND,
+	OR,
+	BETWEEN,
+	IDIV,
+	MOD,
+
+	UNARY_PLUS,
+	UNARY_MINUS,
 }
 
-OperatorType isOperator(char[] s, ref int i) {
+OperatorType isOperator(KeywordType t) {
+	switch (t) {
+		case KeywordType.LIKE: return OperatorType.LIKE;
+		case KeywordType.IN: return OperatorType.IN;
+		case KeywordType.IS: return OperatorType.IS;
+		case KeywordType.NOT: return OperatorType.NOT;
+		case KeywordType.AND: return OperatorType.AND;
+		case KeywordType.OR: return OperatorType.OR;
+		case KeywordType.BETWEEN: return OperatorType.BETWEEN;
+		case KeywordType.DIV: return OperatorType.IDIV;
+		case KeywordType.MOD: return OperatorType.MOD;
+		default: return OperatorType.NONE;
+	}
+}
+
+int operatorPrecedency(OperatorType t) {
+	switch(t) {
+		case OperatorType.EQ: return 5; // ==
+		case OperatorType.NE: return 5; // != <>
+		case OperatorType.LT: return 5; // <
+		case OperatorType.GT: return 5; // >
+		case OperatorType.LE: return 5; // <=
+		case OperatorType.GE: return 5; // >=
+		case OperatorType.MUL: return 10; // *
+		case OperatorType.ADD: return 9; // +
+		case OperatorType.SUB: return 9; // -
+		case OperatorType.DIV: return 10; // /
+		// from keywords
+		case OperatorType.LIKE: return 11;
+		case OperatorType.IN: return 12;
+		case OperatorType.IS: return 13;
+		case OperatorType.NOT: return 6; // ???
+		case OperatorType.AND: return 4;
+		case OperatorType.OR:  return 3;
+		case OperatorType.BETWEEN: return 7; // ???
+		case OperatorType.IDIV: return 10;
+		case OperatorType.MOD: return 10;
+		case OperatorType.UNARY_PLUS: return 15;
+		case OperatorType.UNARY_MINUS: return 15;
+		default: return -1;
+	}
+}
+
+OperatorType isOperator(string s, ref int i) {
 	int len = cast(int)s.length;
 	char ch = s[i];
 	char ch2 = i < len - 1 ? s[i + 1] : 0;
@@ -364,47 +573,106 @@ enum TokenType {
 	Dot,          // .
 	OpenBracket,  // (
 	CloseBracket, // )
-	Colon,        // :
 	Comma,        // ,
 	Entity,       // entity name
 	Field,        // field name of some entity
 	Alias,        // alias name of some entity
 	Parameter,    // ident after :
+	// types of compound AST nodes
+	Expression,   // any expression
+	Braces,       // ( tokens )
+	CommaDelimitedList, // tokens, ... , tokens
+	OpExpr, // operator expression; current token == operator, children = params
 }
 
 class Token {
 	TokenType type;
 	KeywordType keyword = KeywordType.NONE;
 	OperatorType operator = OperatorType.NONE;
-	char[] text;
-	char[] spaceAfter;
+	string text;
+	string spaceAfter;
 	EntityInfo entity;
 	PropertyInfo field;
+	Token[] children;
 	this(TokenType type, string text) {
-		this.type = type;
-		this.text = text.dup;
-	}
-	this(TokenType type, char[] text) {
 		this.type = type;
 		this.text = text;
 	}
-	this(KeywordType keyword, char[] text) {
+	this(KeywordType keyword, string text) {
 		this.type = TokenType.Keyword;
 		this.keyword = keyword;
 		this.text = text;
 	}
-	this(OperatorType op, char[] text) {
+	this(OperatorType op, string text) {
 		this.type = TokenType.Operator;
 		this.operator = op;
 		this.text = text;
 	}
+	this(TokenType type, Token[] base, int start, int end) {
+		this.type = type;
+		this.children = new Token[end - start];
+		for (int i = start; i < end; i++)
+			children[i - start] = base[i];
+	}
+	// unary operator expression
+	this(OperatorType type, string text, Token right) {
+		this.type = TokenType.OpExpr;
+		this.operator = type;
+		this.children = new Token[1];
+		this.children[0] = right;
+	}
+	// binary operator expression
+	this(OperatorType type, string text, Token left, Token right) {
+		this.type = TokenType.OpExpr;
+		this.text = text;
+		this.operator = type;
+		this.children = new Token[2];
+		this.children[0] = left;
+		this.children[1] = right;
+	}
+	bool isExpression() {
+		return type==TokenType.Expression || type==TokenType.Braces || type==TokenType.OpExpr || type==TokenType.Parameter 
+			|| type==TokenType.Field || type==TokenType.String || type==TokenType.Number;
+	}
+	bool isCompound() {
+		return this.type >= TokenType.Expression;
+	}
+	string dump(int level) {
+		string res;
+		for (int i=0; i<level; i++)
+			res ~= "    ";
+		res ~= toString() ~ "\n";
+		foreach (c; children)
+			res ~= c.dump(level + 1);
+		return res;
+	}
+	override string toString() {
+		switch (type) {
+			case TokenType.Keyword:      // WHERE
+			case TokenType.Ident: return "id:" ~ text;        // ident
+			case TokenType.Number: return "n:" ~ text;       // 25   13.5e-10
+			case TokenType.String: return "s:'" ~ text ~ "'";       // 'string'
+			case TokenType.Operator: return "op:" ~ text;     // == != <= >= < > + - * /
+			case TokenType.Dot: return ".";          // .
+			case TokenType.OpenBracket: return "(";  // (
+			case TokenType.CloseBracket: return ")"; // )
+			case TokenType.Comma: return ".";        // ,
+			case TokenType.Entity: return "e:" ~ entity.name;       // entity name
+			case TokenType.Field: return "f:" ~ field.propertyName;        // field name of some entity
+			case TokenType.Alias: return "a:" ~ text;        // alias name of some entity
+			case TokenType.Parameter: return "p:" ~ text;    // ident after :
+				// types of compound AST nodes
+			case TokenType.Expression: return "expr";   // any expression
+			case TokenType.Braces: return "()";       // ( tokens )
+			case TokenType.CommaDelimitedList: return ",,,"; // tokens, ... , tokens
+			case TokenType.OpExpr: return "" ~ text;
+			default: return "UNKNOWN";
+		}
+	}
+	
 }
 
 Token[] tokenize(string s) {
-	return tokenize(s.dup);
-}
-
-Token[] tokenize(char[] s) {
 	Token[] res;
 	int startpos = 0;
 	int state = 0;
@@ -413,7 +681,7 @@ Token[] tokenize(char[] s) {
 		char ch = s[i];
 		char ch2 = i < len - 1 ? s[i + 1] : 0;
 		char ch3 = i < len - 2 ? s[i + 2] : 0;
-		char[] text;
+		string text;
 		bool quotedIdent = ch == '`';
 		startpos = i;
 		OperatorType op = isOperator(s, i);
@@ -455,9 +723,13 @@ Token[] tokenize(char[] s) {
 				i++;
 			}
 			KeywordType keywordId = isKeyword(text);
-			if (keywordId != KeywordType.NONE && !quotedIdent)
-				res ~= new Token(keywordId, text);
-			else
+			if (keywordId != KeywordType.NONE && !quotedIdent) {
+				OperatorType keywordOp = isOperator(keywordId);
+				if (keywordOp != OperatorType.NONE)
+					res ~= new Token(keywordOp, text); // operator keyword
+				else
+					res ~= new Token(keywordId, text);
+			} else
 				res ~= new Token(TokenType.Ident, text);
 		} else if (isWhite(ch)) {
 			// whitespace
@@ -551,8 +823,6 @@ Token[] tokenize(char[] s) {
 			res ~= new Token(TokenType.OpenBracket, "(");
 		} else if (ch == ')') {
 			res ~= new Token(TokenType.CloseBracket, ")");
-		} else if (ch == ':') {
-			res ~= new Token(TokenType.Colon, ":");
 		} else if (ch == ',') {
 			res ~= new Token(TokenType.Comma, ",");
 		} else {
@@ -597,4 +867,9 @@ unittest {
 	assert(parser.orderByClause[1].prop.propertyName == "flags");
 	assert(parser.orderByClause[1].aliasPtr.entity.name == "User");
 	assert(parser.orderByClause[1].asc == false);
+
+	parser = new QueryParser(schema, "SELECT a FROM User AS a WHERE ((id = :Id) OR (name LIKE 'a%' AND flags = 1)) AND name != :skipName ORDER BY name, a.flags DESC");
+	assert(parser.whereClause !is null);
+	writeln(parser.whereClause.dump(0));
+
 }
