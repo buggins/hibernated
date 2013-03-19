@@ -145,13 +145,9 @@ class QueryParser {
 
 	// in pairs {: Ident} replace type of ident with Parameter 
 	void processParameterNames(int start, int end) {
-		for (int i = end - 2; i >= start; i--) {
-			if (tokens[i].type == TokenType.Colon) {
-				enforceEx!SyntaxError(tokens[i + 1].type == TokenType.Ident, "Parameter name expected after : in WHERE clause - in query " ~ query);
-				insertInPlace(parameterNames, 0, cast(string)tokens[i + 1].text);
-				tokens[i + 1].type = TokenType.Parameter;
-				remove(tokens, i);
-				tokens.length--;
+		for (int i = start; i < end; i++) {
+			if (tokens[i].type == TokenType.Parameter) {
+				parameterNames ~= cast(string)tokens[i].text;
 			}
 		}
 	}
@@ -424,6 +420,20 @@ Token[] tokenize(char[] s) {
 		if (op != OperatorType.NONE) {
 			// operator
 			res ~= new Token(op, s[startpos .. i + 1]);
+		} else if (ch == ':' && (isAlpha(ch2) || ch2=='_')) {
+			// parameter name
+		    i++;
+			// && state == 0
+			for(int j=i; j<len; j++) {
+				if (isAlphaNum(s[j])) {
+					text ~= s[j];
+					i = j;
+				} else {
+					break;
+				}
+			}
+			enforceEx!SyntaxError(text.length > 0, "Invalid parameter name near " ~ cast(string)s[startpos .. $]);
+			res ~= new Token(TokenType.Parameter, text);
 		} else if (isAlpha(ch) || ch=='_' || quotedIdent) {
 			// identifier or keyword
 			if (quotedIdent) {
@@ -546,7 +556,7 @@ Token[] tokenize(char[] s) {
 		} else if (ch == ',') {
 			res ~= new Token(TokenType.Comma, ",");
 		} else {
-			enforceEx!SyntaxError(false, "Invalid token near " ~ cast(string)s[startpos .. $]);
+			enforceEx!SyntaxError(false, "Invalid character near " ~ cast(string)s[startpos .. $]);
 		}
 	}
 	return res;
