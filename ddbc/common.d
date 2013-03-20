@@ -227,6 +227,15 @@ public:
 	override int getFetchSize() {
 		throw new SQLException("Method not implemented");
 	}
+	override std.datetime.DateTime getDateTime(int columnIndex) {
+		throw new SQLException("Method not implemented");
+	}
+	override std.datetime.Date getDate(int columnIndex) {
+		throw new SQLException("Method not implemented");
+	}
+	override std.datetime.TimeOfDay getTime(int columnIndex) {
+		throw new SQLException("Method not implemented");
+	}
 }
 
 class ColumnMetadataItem {

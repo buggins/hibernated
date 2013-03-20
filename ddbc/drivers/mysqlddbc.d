@@ -2,6 +2,7 @@ module ddbc.drivers.mysqlddbc;
 
 import std.algorithm;
 import std.conv;
+import std.datetime;
 import std.exception;
 import std.stdio;
 import std.string;
@@ -505,7 +506,28 @@ public:
         else
             cmd.param(parameterIndex-1) = x;
     }
-    override void setVariant(int parameterIndex, Variant x) {
+	override void setDateTime(int parameterIndex, DateTime x) {
+		checkClosed();
+		lock();
+		scope(exit) unlock();
+		checkIndex(parameterIndex);
+		cmd.param(parameterIndex-1) = x;
+	}
+	override void setDate(int parameterIndex, Date x) {
+		checkClosed();
+		lock();
+		scope(exit) unlock();
+		checkIndex(parameterIndex);
+		cmd.param(parameterIndex-1) = x;
+	}
+	override void setTime(int parameterIndex, TimeOfDay x) {
+		checkClosed();
+		lock();
+		scope(exit) unlock();
+		checkIndex(parameterIndex);
+		cmd.param(parameterIndex-1) = x;
+	}
+	override void setVariant(int parameterIndex, Variant x) {
         checkClosed();
         lock();
         scope(exit) unlock();
@@ -808,6 +830,43 @@ public:
 		}
         return v.toString();
     }
+	override std.datetime.DateTime getDateTime(int columnIndex) {
+		checkClosed();
+		lock();
+		scope(exit) unlock();
+		Variant v = getValue(columnIndex);
+		if (lastIsNull)
+			return DateTime();
+		if (v.convertsTo!(DateTime)) {
+			return v.get!DateTime();
+		}
+		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to DateTime");
+	}
+	override std.datetime.Date getDate(int columnIndex) {
+		checkClosed();
+		lock();
+		scope(exit) unlock();
+		Variant v = getValue(columnIndex);
+		if (lastIsNull)
+			return Date();
+		if (v.convertsTo!(Date)) {
+			return v.get!Date();
+		}
+		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to Date");
+	}
+	override std.datetime.TimeOfDay getTime(int columnIndex) {
+		checkClosed();
+		lock();
+		scope(exit) unlock();
+		Variant v = getValue(columnIndex);
+		if (lastIsNull)
+			return TimeOfDay();
+		if (v.convertsTo!(TimeOfDay)) {
+			return v.get!TimeOfDay();
+		}
+		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to TimeOfDay");
+	}
+
     override Variant getVariant(int columnIndex) {
         checkClosed();
         lock();
@@ -893,8 +952,8 @@ unittest {
         scope(exit) stmt.close();
 
         assert(stmt.executeUpdate("DROP TABLE IF EXISTS ddbct1") == 0);
-        assert(stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (id bigint not null primary key AUTO_INCREMENT, name varchar(250), comment mediumtext)") == 0);
-        assert(stmt.executeUpdate("INSERT INTO ddbct1 SET id=1, name='name1', comment='comment for line 1'") == 1);
+        assert(stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (id bigint not null primary key AUTO_INCREMENT, name varchar(250), comment mediumtext, ts datetime)") == 0);
+        assert(stmt.executeUpdate("INSERT INTO ddbct1 SET id=1, name='name1', comment='comment for line 1', ts='20130202123025'") == 1);
         assert(stmt.executeUpdate("INSERT INTO ddbct1 SET id=2, name='name2', comment='comment for line 2 - can be very long'") == 1);
         assert(stmt.executeUpdate("INSERT INTO ddbct1 SET id=3, name='name3', comment='this is line 3'") == 1);
         assert(stmt.executeUpdate("INSERT INTO ddbct1 SET id=4, name='name4', comment=NULL") == 1);
@@ -907,11 +966,11 @@ unittest {
         ps.setLong(2, 3);
         assert(ps.executeUpdate() == 1);
         
-        auto rs = stmt.executeQuery("SELECT id, name name_alias, comment FROM ddbct1 ORDER BY id");
+        auto rs = stmt.executeQuery("SELECT id, name name_alias, comment, ts FROM ddbct1 ORDER BY id");
 
         // testing result set meta data
         ResultSetMetaData meta = rs.getMetaData();
-        assert(meta.getColumnCount() == 3);
+        assert(meta.getColumnCount() == 4);
         assert(meta.getColumnName(1) == "id");
         assert(meta.getColumnLabel(1) == "id");
         assert(meta.isNullable(1) == false);
@@ -934,7 +993,11 @@ unittest {
             //writeln("field2 = '" ~ rs.getString(2) ~ "'");
             //writeln("field3 = '" ~ rs.getString(3) ~ "'");
             //writeln("wasNull = " ~ to!string(rs.wasNull()));
-            if (id == 4) {
+			if (id == 1) {
+				DateTime ts = rs.getDateTime(4);
+				assert(ts == DateTime(2013,02,02,12,30,25));
+			}
+			if (id == 4) {
                 assert(rs.getString(2) == "name4_x");
                 assert(rs.isNull(3));
             }
