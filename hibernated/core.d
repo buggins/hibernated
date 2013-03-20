@@ -7,6 +7,9 @@ import std.array;
 import std.string;
 import std.conv;
 import std.stdio;
+import std.variant;
+
+import ddbc.core;
 
 import hibernated.annotations;
 import hibernated.metadata;
@@ -485,11 +488,13 @@ class QueryParser {
 		res.appendSQL("SELECT ");
 		bool first = true;
 		assert(selectClause.length > 0);
+		int colCount = 0;
 		if (selectClause[0].prop is null) {
 			// object alias is specified: add all properties of object
 			SelectClauseItem a = selectClause[0];
 			string tableName = a.aliasPtr.sqlAlias;
 			FromClauseItem * from = a.aliasPtr;
+			res.setEntity(from.entity);
 			assert(from !is null);
 			assert(from.entity !is null);
 			for(int i=0; i<from.entity.getPropertyCount(); i++) {
@@ -501,9 +506,11 @@ class QueryParser {
 					first = false;
 
 				res.appendSQL(tableName ~ "." ~ dialect.quoteIfNeeded(fieldName));
+				colCount++;
 			}
 		} else {
 			// individual fields specified
+			res.setEntity(null);
 			foreach(a; selectClause) {
 				string fieldName = a.prop.columnName;
 				string tableName = a.aliasPtr.sqlAlias;
@@ -512,8 +519,10 @@ class QueryParser {
 				} else
 					first = false;
 				res.appendSQL(tableName ~ "." ~ dialect.quoteIfNeeded(fieldName));
+				colCount++;
 			}
 		}
+		res.setColCount(colCount);
 	}
 
 	void addFromSQL(Dialect dialect, ParsedQuery res) {
@@ -1104,16 +1113,59 @@ unittest {
 	assert(tokens[22].text == "ASC");
 }
 
+class ParameterValues {
+	Variant[string] values;
+	int[][string]params;
+	int[string]unboundParams;
+	this(int[][string]params) {
+		this.params = params;
+		foreach(key, value; params) {
+			unboundParams[key] = 1;
+		}
+	}
+	void setParameter(string name, Variant value) {
+		enforceEx!HibernatedException((name in params) !is null, "Attempting to set unknown parameter " ~ name);
+		unboundParams.remove(name);
+		values[name] = value;
+	}
+	void checkAllParametersSet() {
+		if (unboundParams.length == 0)
+			return;
+		string list;
+		foreach(key, value; unboundParams) {
+			if (list.length > 0)
+				list ~= ", ";
+			list ~= key;
+		}
+		enforceEx!HibernatedException(false, "Parameters " ~ list ~ " not set");
+	}
+	void applyParams(DataSetWriter ds) {
+		foreach(key, indexes; params) {
+			Variant value = values[key];
+			foreach(i; indexes)
+				ds.setVariant(i, value);
+		}
+	}
+}
+
 class ParsedQuery {
 	private string _hql;
 	private string _sql;
 	private int[][string]params; // contains 1-based indexes of ? ? ? placeholders in SQL for param by name
 	private int paramIndex = 1;
+	private EntityInfo _entity;
+	private int _colCount = 0;
 	this(string hql) {
 		_hql = hql;
 	}
 	@property string hql() { return _hql; }
 	@property string sql() { return _sql; }
+	@property EntityInfo entity() { return _entity; }
+	@property int colCount() { return _colCount; }
+	void setEntity(EntityInfo entity) {
+		_entity = entity;
+	}
+	void setColCount(int cnt) { _colCount = cnt; }
 	void addParam(string paramName) {
 		if ((paramName in params) is null) {
 			params[paramName] = [paramIndex++];
@@ -1134,6 +1186,9 @@ class ParsedQuery {
 	void appendSpace() {
 		if (_sql.length > 0 && _sql[$ - 1] != ' ')
 			_sql ~= ' ';
+	}
+	ParameterValues createParams() {
+		return new ParameterValues(params);
 	}
 }
 

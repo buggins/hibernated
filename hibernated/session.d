@@ -17,6 +17,23 @@ import hibernated.metadata;
 interface Transaction {
 }
 
+interface Query
+{
+	///Get the query string.
+	string 	getQueryString();
+	/// Convenience method to return a single instance that matches the query, or null if the query returns no results.
+	Object 	uniqueResult();
+	/// Convenience method to return a single instance that matches the query, or null if the query returns no results.
+	Variant[] uniqueRow();
+	/// Return the query results as a List of entity objects
+	Object[] list();
+	/// Return the query results as a List which each row as Variant array
+	Variant[][] listRows();
+
+	/// Bind a value to a named query parameter.
+	Query setParameter(string name, Variant val);
+}
+
 // similar to org.hibernate.Session
 interface Session
 {
@@ -52,6 +69,8 @@ interface Session
     /// renamed from Session.delete
     void remove(Object object);
 
+	/// Create a new instance of Query for the given HQL query string
+	Query createQuery(string queryString);
 }
 
 /// Allows reaction to basic SessionFactory occurrences
@@ -283,6 +302,11 @@ class SessionImpl : Session {
 		info.getKeyProperty().writeFunc(obj, stmt, 1);
 		stmt.executeUpdate();
 	}
+
+	/// Create a new instance of Query for the given HQL query string
+	Query createQuery(string queryString) {
+		return new QueryImpl(this, queryString);
+	}
 }
 
 class SessionFactoryImpl : SessionFactory {
@@ -324,20 +348,110 @@ class SessionFactoryImpl : SessionFactory {
     private void checkClosed() {
         enforceEx!HibernatedException(!closed, "Session factory is closed");
     }
-    override void close() {
+
+	override void close() {
         checkClosed();
         closed = true;
 //        if (observer !is null)
 //            observer.sessionFactoryClosed(this);
         // TODO:
     }
-    bool isClosed() {
+
+	bool isClosed() {
         return closed;
     }
-    Session openSession() {
+
+	Session openSession() {
         checkClosed();
         SessionImpl session = new SessionImpl(this, metaData, dialect, connectionPool);
         activeSessions ~= session;
         return session;
     }
 }
+
+class QueryImpl : Query
+{
+	SessionImpl sess;
+	ParsedQuery query;
+	ParameterValues params;
+	this(SessionImpl sess, string queryString) {
+		this.sess = sess;
+		QueryParser parser = new QueryParser(sess.metaData, queryString);
+		this.query = parser.makeSQL(sess.dialect);
+		params = query.createParams();
+	}
+
+	///Get the query string.
+	override string getQueryString() {
+		return query.hql;
+	}
+
+	/// Convenience method to return a single instance that matches the query, or null if the query returns no results.
+	override Object uniqueResult() {
+		Object[] rows = list();
+		if (rows == null)
+			return null;
+		enforceEx!HibernatedException(rows.length != 1, "Query returned more than one object: " ~ getQueryString());
+		return rows[0];
+	}
+
+	/// Convenience method to return a single instance that matches the query, or null if the query returns no results.
+	override Variant[] uniqueRow() {
+		Variant[][] rows = listRows();
+		if (rows == null)
+			return null;
+		enforceEx!HibernatedException(rows.length != 1, "Query returned more than one row: " ~ getQueryString());
+		return rows[0];
+	}
+
+	/// Return the query results as a List of entity objects
+	override Object[] list() {
+		EntityInfo ei = query.entity;
+		enforceEx!HibernatedException(ei !is null, "No entity expected in result of query " ~ getQueryString());
+		params.checkAllParametersSet();
+		sess.checkClosed();
+
+		Object[] res;
+
+		PreparedStatement stmt = sess.conn.prepareStatement(query.sql);
+		scope(exit) stmt.close();
+		params.applyParams(stmt);
+		ResultSet rs = stmt.executeQuery();
+		scope(exit) rs.close();
+		while(rs.next()) {
+			Object row = ei.createEntity();
+			sess.metaData.readAllColumns(row, rs, 1);
+			res ~= row;
+		}
+		return res.length > 0 ? res : null;
+	}
+
+	/// Return the query results as a List which each row as Variant array
+	override Variant[][] listRows() {
+		params.checkAllParametersSet();
+		sess.checkClosed();
+		
+		Variant[][] res;
+		
+		PreparedStatement stmt = sess.conn.prepareStatement(query.sql);
+		scope(exit) stmt.close();
+		params.applyParams(stmt);
+		ResultSet rs = stmt.executeQuery();
+		scope(exit) rs.close();
+		while(rs.next()) {
+			Variant[] row = new Variant[query.colCount];
+			for (int i = 1; i<=query.colCount; i++)
+				row[i - 1] = rs.getVariant(i);
+			res ~= row;
+		}
+		return res.length > 0 ? res : null;
+	}
+	
+	/// Bind a value to a named query parameter.
+	override Query setParameter(string name, Variant val) {
+		params.setParameter(name, val);
+		return this;
+	}
+}
+
+
