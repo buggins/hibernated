@@ -804,19 +804,31 @@ public:
             return v.get!(float);
         throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to float");
     }
-    override ubyte[] getBytes(int columnIndex) {
+    override byte[] getBytes(int columnIndex) {
         checkClosed();
         lock();
         scope(exit) unlock();
         Variant v = getValue(columnIndex);
         if (lastIsNull)
             return null;
-        if (v.convertsTo!(ubyte[])) {
-            return v.get!(ubyte[]);
+        if (v.convertsTo!(byte[])) {
+            return v.get!(byte[]);
         }
-        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to ubyte[]");
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to byte[]");
     }
-    override string getString(int columnIndex) {
+	override ubyte[] getUbytes(int columnIndex) {
+		checkClosed();
+		lock();
+		scope(exit) unlock();
+		Variant v = getValue(columnIndex);
+		if (lastIsNull)
+			return null;
+		if (v.convertsTo!(ubyte[])) {
+			return v.get!(ubyte[]);
+		}
+		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to ubyte[]");
+	}
+	override string getString(int columnIndex) {
         checkClosed();
         lock();
         scope(exit) unlock();
@@ -985,7 +997,7 @@ unittest {
         int index = 1;
         while (rs.next()) {
             assert(!rs.isNull(1));
-            ubyte[] bytes = rs.getBytes(3);
+            ubyte[] bytes = rs.getUbytes(3);
             int rowIndex = rs.getRow();
             assert(rowIndex == index);
             long id = rs.getLong(1);

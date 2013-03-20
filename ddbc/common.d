@@ -136,11 +136,17 @@ public:
 	override byte getByte(string columnName) {
 		return getByte(findColumn(columnName));
 	}
-	override ubyte[] getBytes(int columnIndex) {
+	override byte[] getBytes(int columnIndex) {
 		throw new SQLException("Method not implemented");
 	}
-	override ubyte[] getBytes(string columnName) {
+	override byte[] getBytes(string columnName) {
 		return getBytes(findColumn(columnName));
+	}
+	override ubyte[] getUbytes(int columnIndex) {
+		throw new SQLException("Method not implemented");
+	}
+	override ubyte[] getUbytes(string columnName) {
+		return getUbytes(findColumn(columnName));
 	}
 	override short getShort(int columnIndex) {
 		throw new SQLException("Method not implemented");

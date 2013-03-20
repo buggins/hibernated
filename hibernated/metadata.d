@@ -346,6 +346,8 @@ enum PropertyMemberType : int {
 	NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
 	NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
 	NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
+	BYTE_ARRAY_TYPE, // byte[]
+	UBYTE_ARRAY_TYPE, // ubyte[]
 }
 
 PropertyMemberType getPropertyMemberType(T, string m)() {
@@ -398,6 +400,10 @@ PropertyMemberType getPropertyMemberType(T, string m)() {
 			return PropertyMemberType.NULLABLE_DATE_TYPE;
 		} else if (is(ReturnType!(ti) == Nullable!TimeOfDay)) {
 			return PropertyMemberType.NULLABLE_TIME_TYPE;
+		} else if (is(ReturnType!(ti) == byte[])) {
+			return PropertyMemberType.BYTE_ARRAY_TYPE;
+		} else if (is(ReturnType!(ti) == ubyte[])) {
+			return PropertyMemberType.UBYTE_ARRAY_TYPE;
 		} else {
 			assert (false, "Member " ~ m ~ " of class " ~ T.stringof ~ " has unsupported type " ~ ti.stringof);
 		}
@@ -447,6 +453,10 @@ PropertyMemberType getPropertyMemberType(T, string m)() {
 		return PropertyMemberType.NULLABLE_DATE_TYPE;
 	} else if (is(ti == Nullable!TimeOfDay)) {
 		return PropertyMemberType.NULLABLE_TIME_TYPE;
+	} else if (is(ti == byte[])) {
+		return PropertyMemberType.BYTE_ARRAY_TYPE;
+	} else if (is(ti == ubyte[])) {
+		return PropertyMemberType.UBYTE_ARRAY_TYPE;
 	} else {
 		assert (false, "Member " ~ m ~ " of class " ~ T.stringof ~ " has unsupported type " ~ ti.stringof);
 	}
@@ -483,6 +493,8 @@ static immutable string[] ColumnTypeKeyIsSetCode =
 	 "(!%s.isNull)", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
 	 "(!%s.isNull)", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
 	 "(!%s.isNull)", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
+	 "(%s !is null)", //BYTE_ARRAY_TYPE, // byte[]
+	 "(%s !is null)", //UBYTE_ARRAY_TYPE, // ubyte[]
 	 ];
 
 string getColumnTypeKeyIsSetCode(T, string m)() {
@@ -514,6 +526,8 @@ static immutable string[] ColumnTypeIsNullCode =
 	 "(%s.isNull)", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
 	 "(%s.isNull)", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
 	 "(%s.isNull)", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
+	 "(%s is null)", //BYTE_ARRAY_TYPE, // byte[]
+	 "(%s is null)", //UBYTE_ARRAY_TYPE, // ubyte[]
 	 ];
 
 string getColumnTypeIsNullCode(T, string m)() {
@@ -545,6 +559,8 @@ static immutable string[] ColumnTypeSetNullCode =
 	 "Nullable!DateTime nv;", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
 	 "Nullable!Date nv;", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
 	 "Nullable!TimeOfDay nv;", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
+	 "byte[] nv = null;", //BYTE_ARRAY_TYPE, // byte[]
+	 "ubyte[] nv = null;", //UBYTE_ARRAY_TYPE, // ubyte[]
 	 ];
 
 static immutable string[] ColumnTypePropertyToVariant = 
@@ -572,6 +588,8 @@ static immutable string[] ColumnTypePropertyToVariant =
 	 "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
 	 "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
 	 "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
+	 "Variant(%s)", //BYTE_ARRAY_TYPE, // byte[]
+	 "Variant(%s)", //UBYTE_ARRAY_TYPE, // ubyte[]
 	 ];
 
 string getPropertyWriteCode(T, string m)() {
@@ -631,6 +649,8 @@ static immutable string[] ColumnTypeConstructorCode =
 	 "new DateTimeType()", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
 	 "new DateType()", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
 	 "new TimeType()", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
+	 "new ByteArrayBlobType()", //BYTE_ARRAY_TYPE, // byte[]
+	 "new UbyteArrayBlobType()", //UBYTE_ARRAY_TYPE, // ubyte[]
 	 ];
 
 string getColumnTypeName(T, string m)() {
@@ -662,6 +682,8 @@ static immutable string[] ColumnTypeDatasetReaderCode =
 	 "Nullable!DateTime(r.getDateTime(index))", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
 	 "Nullable!Date(r.getDate(index))", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
 	 "Nullable!TimeOfDay(r.getTime(index))", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
+	 "r.getBytes(index)", //BYTE_ARRAY_TYPE, // byte[]
+	 "r.getUbytes(index)", //UBYTE_ARRAY_TYPE, // ubyte[]
 	 ];
 
 string getColumnTypeDatasetReadCode(T, string m)() {
@@ -693,6 +715,8 @@ static immutable string[] ColumnTypeVariantReadCode =
 	 "(value == null ? nv : value.get!(DateTime))", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
 	 "(value == null ? nv : value.get!(Date))", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
 	 "(value == null ? nv : value.get!(TimeOfDay))", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
+	 "(value == null ? nv : value.get!(byte[]))", //BYTE_ARRAY_TYPE, // byte[]
+	 "(value == null ? nv : value.get!(ubyte[]))", //UBYTE_ARRAY_TYPE, // ubyte[]
 	 ];
 
 static immutable string[] DatasetWriteCode = 
@@ -720,6 +744,8 @@ static immutable string[] DatasetWriteCode =
 	 "r.setDateTime(index, %s);", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
 	 "r.setDate(index, %s);", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
 	 "r.setTime(index, %s);", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
+	 "r.setBytes(index, %s);", //BYTE_ARRAY_TYPE, // byte[]
+	 "r.setUbytes(index, %s);", //UBYTE_ARRAY_TYPE, // ubyte[]
 	 ];
 
 string getColumnTypeDatasetWriteCode(T, string m)() {
@@ -1292,6 +1318,11 @@ version(unittest) {
 		Nullable!Date nullable_date_field;
 		@Column
 		Nullable!TimeOfDay nullable_time_field;
+
+		@Column
+		byte[] byte_array_field;
+		@Column
+		ubyte[] ubyte_array_field;
 	}
 
 	import ddbc.drivers.mysqlddbc;

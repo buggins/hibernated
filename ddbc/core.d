@@ -106,7 +106,8 @@ interface ParameterMetaData {
 interface DataSetReader {
 	bool getBoolean(int columnIndex);
 	ubyte getUbyte(int columnIndex);
-	ubyte[] getBytes(int columnIndex);
+	ubyte[] getUbytes(int columnIndex);
+	byte[] getBytes(int columnIndex);
 	byte getByte(int columnIndex);
 	short getShort(int columnIndex);
 	ushort getUshort(int columnIndex);
@@ -166,7 +167,8 @@ interface ResultSet : DataSetReader {
 	// from DataSetReader
 	bool getBoolean(int columnIndex);
 	ubyte getUbyte(int columnIndex);
-	ubyte[] getBytes(int columnIndex);
+	ubyte[] getUbytes(int columnIndex);
+	byte[] getBytes(int columnIndex);
 	byte getByte(int columnIndex);
 	short getShort(int columnIndex);
 	ushort getUshort(int columnIndex);
@@ -186,7 +188,8 @@ interface ResultSet : DataSetReader {
 	int findColumn(string columnName);
 	bool getBoolean(string columnName);
 	ubyte getUbyte(string columnName);
-	ubyte[] getBytes(string columnName);
+	ubyte[] getUbytes(string columnName);
+	byte[] getBytes(string columnName);
 	byte getByte(string columnName);
 	short getShort(string columnName);
 	ushort getUshort(string columnName);

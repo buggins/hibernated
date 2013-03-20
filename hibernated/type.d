@@ -58,3 +58,15 @@ public:
 	override immutable TypeInfo getReturnedClass() { return typeid(TimeOfDay); }
 }
 
+class ByteArrayBlobType : Type {
+public:
+	override immutable string getName() { return "ByteArray"; }
+	override immutable TypeInfo getReturnedClass() { return typeid(byte[]); }
+}
+
+class UbyteArrayBlobType : Type {
+public:
+	override immutable string getName() { return "UbyteArray"; }
+	override immutable TypeInfo getReturnedClass() { return typeid(ubyte[]); }
+}
+
