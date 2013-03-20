@@ -1,5 +1,7 @@
 module hibernated.type;
 
+import std.datetime;
+
 class NullableNumber {
 	bool is_null;
 }
@@ -36,5 +38,23 @@ public:
 	override immutable string getName() { return "BigInteger"; }
 	override immutable TypeInfo getReturnedClass() { return typeid(int); }
 	
+}
+
+class DateTimeType : Type {
+public:
+	override immutable string getName() { return "DateTime"; }
+	override immutable TypeInfo getReturnedClass() { return typeid(DateTime); }
+}
+
+class DateType : Type {
+public:
+	override immutable string getName() { return "Date"; }
+	override immutable TypeInfo getReturnedClass() { return typeid(Date); }
+}
+
+class TimeType : Type {
+public:
+	override immutable string getName() { return "Time"; }
+	override immutable TypeInfo getReturnedClass() { return typeid(TimeOfDay); }
 }
 
