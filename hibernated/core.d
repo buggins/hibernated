@@ -12,6 +12,7 @@ import hibernated.annotations;
 import hibernated.metadata;
 import hibernated.type;
 import hibernated.dialect;
+import hibernated.dialects.mysqldialect;
 
 class HibernatedException : Exception {
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
@@ -26,6 +27,7 @@ struct FromClauseItem {
 	string entityName;
 	EntityInfo entity;
 	string entityAlias;
+	string sqlAlias;
 }
 
 struct OrderByClauseItem {
@@ -81,6 +83,9 @@ class QueryParser {
 		parseFromClause(fromPos + 1, fromEnd);
 		if (selectPos == 0 && selectPos < fromPos - 1)
 			parseSelectClause(selectPos + 1, fromPos);
+		else
+			defaultSelectClause();
+		validateSelectClause();
 		if (wherePos >= 0 && whereEnd > wherePos)
 			parseWhereClause(wherePos + 1, whereEnd);
 		if (orderPos >= 0 && orderEnd > orderPos)
@@ -146,6 +151,7 @@ class QueryParser {
 		fromClause[0].entityName = entityName;
 		fromClause[0].entity = ei;
 		fromClause[0].entityAlias = aliasName;
+		fromClause[0].sqlAlias = "_t1";
 		//writeln("FROM alias is " ~ fromClause[0].entityAlias);
 	}
 
@@ -184,28 +190,6 @@ class QueryParser {
 		orderByClause ~= item;
 		//insertInPlace(orderByClause, 0, item);
 	}
-	
-	void parseSelectClauseItem(int start, int end) {
-		// for each comma delimited item
-		// in current version it can only be
-		// {property}  or  {alias . property}
-		//writeln("SELECT ITEM: " ~ to!string(start) ~ " .. " ~ to!string(end));
-		if (start == end - 1) {
-			// no alias
-			enforceEx!SyntaxError(tokens[start].type == TokenType.Ident || tokens[start].type == TokenType.Alias, "Property name or alias expected in SELECT clause in query " ~ query ~ errorContext(tokens[start]));
-			if (tokens[start].type == TokenType.Ident)
-				addSelectClauseItem(null, cast(string)tokens[start].text);
-			else
-				addSelectClauseItem(cast(string)tokens[start].text, null);
-		} else if (start == end - 3) {
-			enforceEx!SyntaxError(tokens[start].type == TokenType.Alias, "Entity alias expected in SELECT clause" ~ errorContext(tokens[start]));
-			enforceEx!SyntaxError(tokens[start + 1].type == TokenType.Dot, "Dot expected after entity alias in SELECT clause" ~ errorContext(tokens[start]));
-			enforceEx!SyntaxError(tokens[start + 2].type == TokenType.Ident, "Property name expected after entity alias in SELECT clause" ~ errorContext(tokens[start]));
-			addSelectClauseItem(cast(string)tokens[start].text, cast(string)tokens[start + 2].text);
-		} else {
-			enforceEx!SyntaxError(false, "Invalid SELECT clause" ~ errorContext(tokens[start]));
-		}
-	}
 
 	void parseOrderByClauseItem(int start, int end) {
 		// for each comma delimited item
@@ -234,12 +218,51 @@ class QueryParser {
 			enforceEx!SyntaxError(false, "Invalid ORDER BY clause (expected {property [ASC | DESC]} or {alias.property [ASC | DESC]} )" ~ errorContext(tokens[start]));
 		}
 	}
-	
+
+	void parseSelectClauseItem(int start, int end) {
+		// for each comma delimited item
+		// in current version it can only be
+		// {property}  or  {alias . property}
+		//writeln("SELECT ITEM: " ~ to!string(start) ~ " .. " ~ to!string(end));
+		if (start == end - 1) {
+			// no alias
+			enforceEx!SyntaxError(tokens[start].type == TokenType.Ident || tokens[start].type == TokenType.Alias, "Property name or alias expected in SELECT clause in query " ~ query ~ errorContext(tokens[start]));
+			if (tokens[start].type == TokenType.Ident)
+				addSelectClauseItem(null, cast(string)tokens[start].text);
+			else
+				addSelectClauseItem(cast(string)tokens[start].text, null);
+		} else if (start == end - 3) {
+			enforceEx!SyntaxError(tokens[start].type == TokenType.Alias, "Entity alias expected in SELECT clause" ~ errorContext(tokens[start]));
+			enforceEx!SyntaxError(tokens[start + 1].type == TokenType.Dot, "Dot expected after entity alias in SELECT clause" ~ errorContext(tokens[start]));
+			enforceEx!SyntaxError(tokens[start + 2].type == TokenType.Ident, "Property name expected after entity alias in SELECT clause" ~ errorContext(tokens[start]));
+			addSelectClauseItem(cast(string)tokens[start].text, cast(string)tokens[start + 2].text);
+		} else {
+			enforceEx!SyntaxError(false, "Invalid SELECT clause" ~ errorContext(tokens[start]));
+		}
+	}
+
 	void parseSelectClause(int start, int end) {
 		enforceEx!SyntaxError(start < end, "Invalid SELECT clause" ~ errorContext(tokens[start]));
 		splitCommaDelimitedList(start, end, &parseSelectClauseItem);
 	}
 
+	void defaultSelectClause() {
+		addSelectClauseItem(fromClause[0].entityAlias, null);
+	}
+
+	void validateSelectClause() {
+		enforceEx!SyntaxError(selectClause != null && selectClause.length > 0, "Invalid SELECT clause");
+		int aliasCount = 0;
+		int fieldCount = 0;
+		foreach(a; selectClause) {
+			if (a.prop !is null)
+				fieldCount++;
+			else
+				aliasCount++;
+		}
+		enforceEx!SyntaxError((aliasCount == 1 && fieldCount == 0) || (aliasCount == 0 && fieldCount > 0), "You should either use single entity alias or one or more properties in SELECT clause. Don't mix objects with primitive fields");
+	}
+	
 	void parseWhereClause(int start, int end) {
 		enforceEx!SyntaxError(start < end, "Invalid WHERE clause" ~ errorContext(tokens[start]));
 		whereClause = new Token(tokens[start].pos, TokenType.Expression, tokens, start, end);
@@ -456,6 +479,169 @@ class QueryParser {
 				return i;
 		}
 		return -1;
+	}
+
+	void addSelectSQL(Dialect dialect, ParsedQuery res) {
+		res.appendSQL("SELECT ");
+		bool first = true;
+		assert(selectClause.length > 0);
+		if (selectClause[0].prop is null) {
+			// object alias is specified: add all properties of object
+			SelectClauseItem a = selectClause[0];
+			string tableName = a.aliasPtr.sqlAlias;
+			FromClauseItem * from = a.aliasPtr;
+			assert(from !is null);
+			assert(from.entity !is null);
+			for(int i=0; i<from.entity.getPropertyCount(); i++) {
+				PropertyInfo f = from.entity.getProperty(i);
+				string fieldName = f.columnName;
+				if (!first) {
+					res.appendSQL(", ");
+				} else
+					first = false;
+
+				res.appendSQL(tableName ~ "." ~ dialect.quoteIfNeeded(fieldName));
+			}
+		} else {
+			// individual fields specified
+			foreach(a; selectClause) {
+				string fieldName = a.prop.columnName;
+				string tableName = a.aliasPtr.sqlAlias;
+				if (!first) {
+					res.appendSQL(", ");
+				} else
+					first = false;
+				res.appendSQL(tableName ~ "." ~ dialect.quoteIfNeeded(fieldName));
+			}
+		}
+	}
+
+	void addFromSQL(Dialect dialect, ParsedQuery res) {
+		res.appendSpace();
+		res.appendSQL("FROM ");
+		res.appendSQL(dialect.quoteIfNeeded(fromClause[0].entity.tableName) ~ " AS " ~ fromClause[0].sqlAlias);
+	}
+
+	void addWhereCondition(Token t, int basePrecedency, Dialect dialect, ParsedQuery res) {
+		if (t.type == TokenType.Expression) {
+			addWhereCondition(t.children[0], basePrecedency, dialect, res);
+		} else if (t.type == TokenType.Field) {
+			string tableName = t.from.sqlAlias;
+			string fieldName = t.field.columnName;
+			res.appendSpace();
+			res.appendSQL(tableName ~ "." ~ dialect.quoteIfNeeded(fieldName));
+		} else if (t.type == TokenType.Number) {
+			res.appendSpace();
+			res.appendSQL(t.text);
+		} else if (t.type == TokenType.String) {
+			res.appendSpace();
+			res.appendSQL(dialect.quoteSqlString(t.text));
+		} else if (t.type == TokenType.Parameter) {
+			res.appendSpace();
+			res.appendSQL("?");
+			res.addParam(t.text);
+		} else if (t.type == TokenType.OpExpr) {
+			int currentPrecedency = operatorPrecedency(t.operator);
+			bool needBraces = currentPrecedency < basePrecedency;
+			if (needBraces)
+				res.appendSQL("(");
+			switch(t.operator) {
+				case OperatorType.EQ:
+				case OperatorType.NE:
+				case OperatorType.LT:
+				case OperatorType.GT:
+				case OperatorType.LE:
+				case OperatorType.GE:
+				case OperatorType.MUL:
+				case OperatorType.ADD:
+				case OperatorType.SUB:
+				case OperatorType.DIV:
+				case OperatorType.LIKE:
+				case OperatorType.AND:
+				case OperatorType.OR:
+				case OperatorType.IDIV:
+				case OperatorType.MOD:
+					// binary op
+					if (!needBraces)
+						res.appendSpace();
+					addWhereCondition(t.children[0], currentPrecedency, dialect, res);
+					res.appendSpace();
+					res.appendSQL(t.text);
+					res.appendSpace();
+					addWhereCondition(t.children[1], currentPrecedency, dialect, res);
+					break;
+				case OperatorType.UNARY_PLUS:
+				case OperatorType.UNARY_MINUS:
+				case OperatorType.NOT:
+					// unary op
+					if (!needBraces)
+						res.appendSpace();
+					res.appendSQL(t.text);
+					res.appendSpace();
+					addWhereCondition(t.children[0], currentPrecedency, dialect, res);
+					break;
+				case OperatorType.IS_NULL:
+				case OperatorType.IS_NOT_NULL:
+					addWhereCondition(t.children[0], currentPrecedency, dialect, res);
+					res.appendSpace();
+					res.appendSQL(t.text);
+					res.appendSpace();
+					break;
+				case OperatorType.BETWEEN:
+					if (!needBraces)
+						res.appendSpace();
+					addWhereCondition(t.children[0], currentPrecedency, dialect, res);
+					res.appendSQL(" BETWEEN ");
+					addWhereCondition(t.children[1], currentPrecedency, dialect, res);
+					res.appendSQL(" AND ");
+					addWhereCondition(t.children[2], currentPrecedency, dialect, res);
+					break;
+				case OperatorType.IN:
+				case OperatorType.IS:
+				default:
+					enforceEx!SyntaxError(false, "Unexpected operator" ~ errorContext(t));
+					break;
+			}
+			if (needBraces)
+				res.appendSQL(")");
+		}
+	}
+
+	void addWhereSQL(Dialect dialect, ParsedQuery res) {
+		if (whereClause is null)
+			return;
+		res.appendSpace();
+		res.appendSQL("WHERE ");
+		addWhereCondition(whereClause, 0, dialect, res);
+	}
+	
+	void addOrderBySQL(Dialect dialect, ParsedQuery res) {
+		if (orderByClause.length == 0)
+			return;
+		res.appendSpace();
+		res.appendSQL("ORDER BY ");
+		bool first = true;
+		// individual fields specified
+		foreach(a; orderByClause) {
+			string fieldName = a.prop.columnName;
+			string tableName = a.aliasPtr.sqlAlias;
+			if (!first) {
+				res.appendSQL(", ");
+			} else 
+				first = false;
+			res.appendSQL(tableName ~ "." ~ dialect.quoteIfNeeded(fieldName));
+			if (!a.asc)
+				res.appendSQL(" DESC");
+		}
+	}
+	
+	ParsedQuery makeSQL(Dialect dialect) {
+		ParsedQuery res = new ParsedQuery(query);
+		addSelectSQL(dialect, res);
+		addFromSQL(dialect, res);
+		addWhereSQL(dialect, res);
+		addOrderBySQL(dialect, res);
+		return res;
 	}
 
 }
@@ -945,6 +1131,10 @@ class ParsedQuery {
 	void appendSQL(string sql) {
 		_sql ~= sql;
 	}
+	void appendSpace() {
+		if (_sql.length > 0 && _sql[$ - 1] != ' ')
+			_sql ~= ' ';
+	}
 }
 
 unittest {
@@ -960,14 +1150,7 @@ unittest {
 	assert(q.getParam("param3") == [5]);
 }
 
-ParsedQuery parseQuery(string query, EntityMetaData schema, Dialect dialect) {
-	QueryParser parser = new QueryParser(schema, query);
-	ParsedQuery res = new ParsedQuery(query);
-	return res;
-}
-
 unittest {
-
 
 	EntityMetaData schema = new SchemaInfoImpl!(User, Customer);
 	QueryParser parser = new QueryParser(schema, "SELECT a FROM User AS a WHERE id = :Id AND name != :skipName OR name IS NULL  AND a.flags IS NOT NULL ORDER BY name, a.flags DESC");
@@ -993,5 +1176,14 @@ unittest {
 	parser = new QueryParser(schema, "SELECT a FROM User AS a WHERE ((id = :Id) OR (name LIKE 'a%' AND flags = (-5 + 7))) AND name != :skipName AND flags BETWEEN 2*2 AND 42/5 ORDER BY name, a.flags DESC");
 	assert(parser.whereClause !is null);
 	writeln(parser.whereClause.dump(0));
+	Dialect dialect = new MySQLDialect();
+
+	assert(dialect.quoteSqlString("abc") == "'abc'");
+	assert(dialect.quoteSqlString("a'b'c") == "'a\\'b\\'c'");
+	assert(dialect.quoteSqlString("a\nc") == "'a\\nc'");
+
+	ParsedQuery q = parser.makeSQL(dialect);
+	writeln(q.hql);
+	writeln(q.sql);
 
 }

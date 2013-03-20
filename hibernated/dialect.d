@@ -1,5 +1,7 @@
 module hibernated.dialect;
 
+import std.stdio;
+
 /// Represents a dialect of SQL implemented by a particular RDBMS. -- generated from JavaDocs on org.hibernate.dialect.Dialect
 abstract class Dialect {
     ///The character specific to this dialect used to close a quoted identifier.
@@ -14,6 +16,43 @@ abstract class Dialect {
             return name;
         return openQuote() ~ name[1..$-1] ~ closeQuote();
     }
+	// should return true for identifiers which cannot be used w/o quote (e.g. keywords)
+	bool needQuote(string ident) {
+		return true;
+	}
+	string quoteIfNeeded(string ident) {
+		if (needQuote(ident))
+			return quote("`" ~ ident ~ "`");
+		return quote(ident);
+	}
+
+	char getStringQuoteChar() {
+		return '\'';
+	}
+
+	string quoteSqlString(string s) {
+		string res = "'";
+		foreach(ch; s) {
+			switch(ch) {
+				case '\'': res ~= "\\\'"; break;
+				case '\"': res ~= "\\\""; break;
+				case '\\': res ~= "\\\\"; break;
+				case '\0': res ~= "\\n"; break;
+				case '\a': res ~= "\\a"; break;
+				case '\b': res ~= "\\b"; break;
+				case '\f': res ~= "\\f"; break;
+				case '\n': res ~= "\\n"; break;
+				case '\r': res ~= "\\r"; break;
+				case '\t': res ~= "\\t"; break;
+				case '\v': res ~= "\\v"; break;
+				default:
+					res ~= ch;
+			}
+		}
+		res ~= "'";
+		writeln("quoted " ~ s ~ " is " ~ res);
+		return res;
+	}
 
 /+
     ///Provided we supportsInsertSelectIdentity(), then attach the "select identity" clause to the insert statement.
