@@ -391,7 +391,7 @@ class QueryImpl : Query
 		Object[] rows = list();
 		if (rows == null)
 			return null;
-		enforceEx!HibernatedException(rows.length != 1, "Query returned more than one object: " ~ getQueryString());
+		enforceEx!HibernatedException(rows.length == 1, "Query returned more than one object: " ~ getQueryString());
 		return rows[0];
 	}
 
@@ -400,7 +400,7 @@ class QueryImpl : Query
 		Variant[][] rows = listRows();
 		if (rows == null)
 			return null;
-		enforceEx!HibernatedException(rows.length != 1, "Query returned more than one row: " ~ getQueryString());
+		enforceEx!HibernatedException(rows.length == 1, "Query returned more than one row: " ~ getQueryString());
 		return rows[0];
 	}
 
@@ -413,6 +413,7 @@ class QueryImpl : Query
 
 		Object[] res;
 
+		//writeln("SQL: " ~ query.sql);
 		PreparedStatement stmt = sess.conn.prepareStatement(query.sql);
 		scope(exit) stmt.close();
 		params.applyParams(stmt);
@@ -433,6 +434,7 @@ class QueryImpl : Query
 		
 		Variant[][] res;
 		
+		//writeln("SQL: " ~ query.sql);
 		PreparedStatement stmt = sess.conn.prepareStatement(query.sql);
 		scope(exit) stmt.close();
 		params.applyParams(stmt);

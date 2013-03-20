@@ -1118,7 +1118,7 @@ version(unittest) {
         Nullable!long customerId;
 
         override string toString() {
-            return "id=" ~ to!string(id) ~ ", name=" ~ name ~ ", flags=" ~ to!string(flags) ~ ", comment=" ~ comment ~ ", customerId=" ~ to!string(customerId);
+            return "id=" ~ to!string(id) ~ ", name=" ~ name ~ ", flags=" ~ to!string(flags) ~ ", comment=" ~ comment ~ ", customerId=" ~ (customerId.isNull ? "NULL" : to!string(customerId));
         }
 
     }
@@ -1182,8 +1182,8 @@ version(unittest) {
          "INSERT INTO users SET id=2, name='user 2', flags=22,   comment='this user belongs to customer 1', customer_fk=1",
          "INSERT INTO users SET id=3, name='user 3', flags=NULL, comment='this user belongs to customer 2', customer_fk=2",
          "INSERT INTO users SET id=4, name='user 4', flags=44,   comment=NULL, customer_fk=3",
-         "INSERT INTO users SET id=5, name='user 5', flags=55,   comment='this user belongs to customer 3, too', customer_fk=3",
-         "INSERT INTO users SET id=6, name='user 6', flags=66,   comment='for checking of Nullable!long reading', customer_fk=null",
+         "INSERT INTO users SET id=5, name='test user 5', flags=55,   comment='this user belongs to customer 3, too', customer_fk=3",
+		 "INSERT INTO users SET id=6, name='test user 6', flags=66,   comment='for checking of Nullable!long reading', customer_fk=null",
          ];
 
     void recreateTestSchema() {
@@ -1272,11 +1272,11 @@ unittest {
         User u5 = new User();
         u5.id = 5;
         sess.refresh(u5);
-        assert(u5.name == "user 5");
+        assert(u5.name == "test user 5");
         assert(!u5.customerId.isNull);
 
         User u6 = cast(User)sess.load("User", Variant(6));
-        assert(u6.name == "user 6");
+		assert(u6.name == "test user 6");
         assert(u6.customerId.isNull);
 
 		// check Session.save() when id is filled
@@ -1297,8 +1297,52 @@ unittest {
 		Customer c5 = new Customer();
 		c5.name = "Customer_5";
 		sess.save(c5);
-		
 
+		assertThrown!HibernatedException(sess.createQuery("SELECT id, name, blabla FROM User ORDER BY name"));
+		assertThrown!SyntaxError(sess.createQuery("SELECT id: name FROM User ORDER BY name"));
+
+		// test multiple row query
+		Query q = sess.createQuery("FROM User ORDER BY name");
+		User[] list = cast(User[])q.list();
+		assert(list.length == 6);
+		assert(list[0].name == "test user 5");
+		assert(list[1].name == "test user 6");
+		assert(list[2].name == "user 1");
+//		writeln("Read " ~ to!string(list.length) ~ " rows from User");
+//		foreach(row; list) {
+//			writeln(row.toString());
+//		}
+		Variant[][] rows = q.listRows();
+		assert(rows.length == 6);
+		//		foreach(row; rows) {
+//			writeln(row);
+//		}
+		assertThrown!HibernatedException(q.uniqueResult());
+		assertThrown!HibernatedException(q.uniqueRow());
+
+		// test single row select
+		q = sess.createQuery("FROM User AS u WHERE id = :Id and (u.name like '%test%' or flags=44)");
+		assertThrown!HibernatedException(q.list()); // cannot execute w/o all parameters set
+		q.setParameter("Id", Variant(6));
+		list = cast(User[])q.list();
+		assert(list.length == 1);
+		assert(list[0].name == "test user 6");
+//		writeln("Read " ~ to!string(list.length) ~ " rows from User");
+//		foreach(row; list) {
+//			writeln(row.toString());
+//		}
+		User uu = cast(User)q.uniqueResult();
+		assert(uu.name == "test user 6");
+		Variant[] row = q.uniqueRow();
+		assert(row[0] == 6L);
+		assert(row[1] == "test user 6");
+
+		// test empty SELECT result
+		q.setParameter("Id", Variant(7));
+		row = q.uniqueRow();
+		assert(row is null);
+		uu = cast(User)q.uniqueResult();
+		assert(uu is null);
 	}
 }
 

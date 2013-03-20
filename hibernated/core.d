@@ -273,12 +273,15 @@ class QueryParser {
 		convertFields(whereClause.children);
 		//writeln("after convertFields before convertIsNullIsNotNull:\n" ~ whereClause.dump(0));
 		convertIsNullIsNotNull(whereClause.children);
-		//writeln("converting WHERE expression\n" ~ whereClause.dump(0));
+		//writeln("after convertIsNullIsNotNull\n" ~ whereClause.dump(0));
 		convertUnaryPlusMinus(whereClause.children);
+		//writeln("after convertUnaryPlusMinus\n" ~ whereClause.dump(0));
 		foldBraces(whereClause.children);
+		//writeln("after foldBraces\n" ~ whereClause.dump(0));
 		foldOperators(whereClause.children);
+		//writeln("after foldOperators\n" ~ whereClause.dump(0));
 		dropBraces(whereClause.children);
-		//writeln("after conversion:\n" ~ whereClause.dump(0));
+		//writeln("after dropBraces\n" ~ whereClause.dump(0));
 	}
 
 	void foldBraces(ref Token[] items) {
@@ -363,7 +366,7 @@ class QueryParser {
 				if (items[i].type != TokenType.Dot)
 					break;
 				enforceEx!SyntaxError(i < items.length - 1 && items[i + 1].type == TokenType.Ident, "Syntax error in WHERE condition - no property name after . " ~ errorContext(items[p]));
-				lastp = i;
+				lastp = i + 1;
 				idents ~= items[i + 1].text;
 			}
 			string aliasName;
@@ -465,7 +468,9 @@ class QueryParser {
 				enforceEx!SyntaxError(items[bestOpPosition - 1].isExpression(), "Syntax error in WHERE condition - wrong type of left arg for binary operator " ~ errorContext(items[bestOpPosition]));
 				enforceEx!SyntaxError(items[bestOpPosition - 1].isExpression(), "Syntax error in WHERE condition - wrong type of right arg for binary operator " ~ errorContext(items[bestOpPosition]));
 				Token folded = new Token(items[bestOpPosition - 1].pos, t, items[bestOpPosition].text, items[bestOpPosition - 1], items[bestOpPosition + 1]);
+				auto oldlen = items.length;
 				replaceInPlace(items, bestOpPosition - 1, bestOpPosition + 2, [folded]);
+				assert(items.length == oldlen - 2);
 			}
 		}
 	}
@@ -555,6 +560,7 @@ class QueryParser {
 			if (needBraces)
 				res.appendSQL("(");
 			switch(t.operator) {
+				case OperatorType.LIKE:
 				case OperatorType.EQ:
 				case OperatorType.NE:
 				case OperatorType.LT:
@@ -565,7 +571,6 @@ class QueryParser {
 				case OperatorType.ADD:
 				case OperatorType.SUB:
 				case OperatorType.DIV:
-				case OperatorType.LIKE:
 				case OperatorType.AND:
 				case OperatorType.OR:
 				case OperatorType.IDIV:
@@ -1230,15 +1235,19 @@ unittest {
 
 	parser = new QueryParser(schema, "SELECT a FROM User AS a WHERE ((id = :Id) OR (name LIKE 'a%' AND flags = (-5 + 7))) AND name != :skipName AND flags BETWEEN 2*2 AND 42/5 ORDER BY name, a.flags DESC");
 	assert(parser.whereClause !is null);
-	writeln(parser.whereClause.dump(0));
+	//writeln(parser.whereClause.dump(0));
 	Dialect dialect = new MySQLDialect();
 
 	assert(dialect.quoteSqlString("abc") == "'abc'");
 	assert(dialect.quoteSqlString("a'b'c") == "'a\\'b\\'c'");
 	assert(dialect.quoteSqlString("a\nc") == "'a\\nc'");
 
+	parser = new QueryParser(schema, "FROM User AS u WHERE id = :Id and u.name like '%test%'");
 	ParsedQuery q = parser.makeSQL(dialect);
-	writeln(q.hql);
-	writeln(q.sql);
+	//writeln(parser.whereClause.dump(0));
+	//writeln(q.hql ~ "\n=>\n" ~ q.sql);
+
+	//writeln(q.hql);
+	//writeln(q.sql);
 
 }
