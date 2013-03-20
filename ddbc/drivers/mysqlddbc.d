@@ -43,6 +43,39 @@ version(unittest) {
     }
 }
 
+SqlType fromMySQLType(int t) {
+	switch(t) {
+	case SQLType.DECIMAL:
+		case SQLType.TINY: return SqlType.TINYINT;
+		case SQLType.SHORT: return SqlType.SMALLINT;
+		case SQLType.INT: return SqlType.INTEGER;
+		case SQLType.FLOAT: return SqlType.FLOAT;
+		case SQLType.DOUBLE: return SqlType.DOUBLE;
+		case SQLType.NULL: return SqlType.NULL;
+		case SQLType.TIMESTAMP: return SqlType.DATETIME;
+		case SQLType.LONGLONG: return SqlType.BIGINT;
+		case SQLType.INT24: return SqlType.INTEGER;
+		case SQLType.DATE: return SqlType.DATE;
+		case SQLType.TIME: return SqlType.TIME;
+		case SQLType.DATETIME: return SqlType.DATETIME;
+		case SQLType.YEAR: return SqlType.SMALLINT;
+		case SQLType.NEWDATE: return SqlType.DATE;
+		case SQLType.VARCHAR: return SqlType.VARCHAR;
+		case SQLType.BIT: return SqlType.BIT;
+		case SQLType.NEWDECIMAL: return SqlType.DECIMAL;
+		case SQLType.ENUM: return SqlType.OTHER;
+		case SQLType.SET: return SqlType.OTHER;
+		case SQLType.TINYBLOB: return SqlType.BLOB;
+		case SQLType.MEDIUMBLOB: return SqlType.BLOB;
+		case SQLType.LONGBLOB: return SqlType.BLOB;
+		case SQLType.BLOB: return SqlType.BLOB;
+		case SQLType.VARSTRING: return SqlType.VARCHAR;
+		case SQLType.STRING: return SqlType.VARCHAR;
+		case SQLType.GEOMETRY: return SqlType.OTHER;
+		default: return SqlType.OTHER;
+	}
+}
+
 class MySQLConnection : ddbc.core.Connection {
 private:
     string url;
@@ -263,6 +296,7 @@ public:
             item.scale = field.scale;
             item.isNullable = !field.notNull;
             item.isSigned = !field.unsigned;
+			item.type = fromMySQLType(field.type);
             // TODO: fill more params
             res[i] = item;
         }
@@ -276,7 +310,8 @@ public:
             item.scale = field.scale;
             item.isNullable = !field.notNull;
             item.isSigned = !field.unsigned;
-            // TODO: fill more params
+			item.type = fromMySQLType(field.type);
+			// TODO: fill more params
             res[i] = item;
         }
         return new ParameterMetaDataImpl(res);
