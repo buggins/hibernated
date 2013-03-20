@@ -1,6 +1,7 @@
 module hibernated.dialect;
 
 import std.stdio;
+import std.string;
 
 /// Represents a dialect of SQL implemented by a particular RDBMS. -- generated from JavaDocs on org.hibernate.dialect.Dialect
 abstract class Dialect {
@@ -16,14 +17,24 @@ abstract class Dialect {
             return name;
         return openQuote() ~ name[1..$-1] ~ closeQuote();
     }
+
 	// should return true for identifiers which cannot be used w/o quote (e.g. keywords)
 	bool needQuote(string ident) {
-		return true;
+		return (toUpper(ident) in keywordList) !is null;
 	}
+
 	string quoteIfNeeded(string ident) {
 		if (needQuote(ident))
 			return quote("`" ~ ident ~ "`");
 		return quote(ident);
+	}
+
+	protected int[string] keywordList;
+
+	protected void addKeywords(string[] keywords) {
+		foreach(s; keywords) {
+			keywordList[s] = 1;
+		}
 	}
 
 	char getStringQuoteChar() {
@@ -50,7 +61,7 @@ abstract class Dialect {
 			}
 		}
 		res ~= "'";
-		writeln("quoted " ~ s ~ " is " ~ res);
+		//writeln("quoted " ~ s ~ " is " ~ res);
 		return res;
 	}
 
