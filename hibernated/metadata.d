@@ -52,6 +52,8 @@ public:
 	alias void function(Object, Variant value) SetVariantFunc;
 	alias bool function(Object) KeyIsSetFunc;
 	alias bool function(Object) IsNullFunc;
+	alias Object function(Object) GetObjectFunc;
+	alias void function(Object, Object value) SetObjectFunc;
 	string propertyName;
 	string columnName;
 	Type columnType;
@@ -68,7 +70,9 @@ public:
 	SetVariantFunc setFunc;
 	KeyIsSetFunc keyIsSetFunc;
 	IsNullFunc isNullFunc;
-	this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, bool embedded, string referencedEntityName, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, KeyIsSetFunc keyIsSetFunc, IsNullFunc isNullFunc) {
+	GetObjectFunc getObjectFunc;
+	SetObjectFunc setObjectFunc;
+	this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, bool embedded, string referencedEntityName, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, KeyIsSetFunc keyIsSetFunc, IsNullFunc isNullFunc, GetObjectFunc getObjectFunc = null, SetObjectFunc setObjectFunc = null) {
 		this.propertyName = propertyName;
 		this.columnName = columnName;
 		this.columnType = columnType;
@@ -84,6 +88,8 @@ public:
 		this.setFunc = setFunc;
 		this.keyIsSetFunc = keyIsSetFunc;
 		this.isNullFunc = isNullFunc;
+		this.getObjectFunc = getObjectFunc;
+		this.setObjectFunc = setObjectFunc;
 	}
 }
 
@@ -928,6 +934,19 @@ string getEmbeddedPropertyVariantWriteCode(T, string m, string className)() {
 	}
 }
 
+string getEmbeddedPropertyObjectWriteCode(T, string m)() {
+	immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
+	static if (kind == PropertyMemberKind.FIELD_MEMBER) {
+		return "entity." ~ m ~ " = value;";
+	} else if (kind == PropertyMemberKind.GETTER_MEMBER) {
+		return "entity." ~ getterNameToSetterName(m) ~ "(value);";
+	} else if (kind == PropertyMemberKind.PROPERTY_MEMBER) {
+		return "entity." ~ m ~ " = value;";
+	} else {
+		assert(0);
+	}
+}
+
 /// create source code for creation of Embedded definition
 string getEmbeddedPropertyDef(T, immutable string m)() {
 	immutable string referencedEntityName = getPropertyEmbeddedEntityName!(T,m)();
@@ -948,12 +967,14 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
 	immutable string datasetWriteCode = null; //getColumnTypeDatasetWriteCode!(T,m)();
 	immutable string propertyVariantSetCode = getEmbeddedPropertyVariantWriteCode!(T,m,referencedClassName); // getPropertyVariantWriteCode!(T,m)();
 	immutable string propertyVariantGetCode = "Variant(" ~ propertyReadCode ~ " is null ? null : " ~ propertyReadCode ~ ")"; //getPropertyVariantReadCode!(T,m)();
+	immutable string propertyObjectSetCode = getEmbeddedPropertyObjectWriteCode!(T,m); // getPropertyVariantWriteCode!(T,m)();
+	immutable string propertyObjectGetCode = propertyReadCode; //getPropertyVariantReadCode!(T,m)();
 	immutable string keyIsSetCode = null; //getColumnTypeKeyIsSetCode!(T,m)();
-	immutable string isNullCode = null; //getColumnTypeIsNullCode!(T,m)();
+	immutable string isNullCode = propertyReadCode ~ " is null";
+	//	pragma(msg, "property read: " ~ propertyReadCode);
+	//	pragma(msg, "property write: " ~ propertyWriteCode);
+	//	pragma(msg, "variant get: " ~ propertyVariantGetCode);
 	immutable string readerFuncDef = "null";
-	pragma(msg, "property read: " ~ propertyReadCode);
-	pragma(msg, "property write: " ~ propertyWriteCode);
-	pragma(msg, "variant get: " ~ propertyVariantGetCode);
 	//		"\n" ~
 //		"function(Object obj, DataSetReader r, int index) { \n" ~ 
 //			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
@@ -977,18 +998,27 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
 			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
 			"    " ~ propertyVariantSetCode ~ "\n" ~
 			" }\n";
-	immutable string keyIsSetFuncDef = "null";
-//		"\n" ~
-//		"function(Object obj) { \n" ~ 
-//			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
-//			"    return " ~ keyIsSetCode ~ ";\n" ~
-//			" }\n";
-	immutable string isNullFuncDef = "null";
-//		"\n" ~
-//		"function(Object obj) { \n" ~ 
-//			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
-//			"    return " ~ isNullCode ~ ";\n" ~
-//			" }\n";
+	immutable string keyIsSetFuncDef = "\n" ~
+		"function(Object obj) { \n" ~ 
+			"    return false;\n" ~
+			" }\n";
+	immutable string isNullFuncDef = "\n" ~
+		"function(Object obj) { \n" ~ 
+			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+			"    return " ~ isNullCode ~ ";\n" ~
+			" }\n";
+	immutable string getObjectFuncDef = 
+		"\n" ~
+			"function(Object obj) { \n" ~ 
+			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+			"    return " ~ propertyObjectGetCode ~ "; \n" ~
+			" }\n";
+	immutable string setObjectFuncDef = 
+		"\n" ~
+			"function(Object obj, Object value) { \n" ~ 
+			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+			"    " ~ propertyObjectSetCode ~ "\n" ~
+			" }\n";
 	//	pragma(msg, propertyReadCode);
 	//	pragma(msg, datasetReadCode);
 	//	pragma(msg, propertyWriteCode);
@@ -1195,9 +1225,9 @@ interface EntityMetaData {
     public EntityInfo getEntity(int entityIndex);
     public int getEntityCount();
 	public Object createEntity(string entityName);
-    public void readAllColumns(Object obj, DataSetReader r, int startColumn);
-	public void writeAllColumns(Object obj, DataSetWriter w, int startColumn);
-	public void writeAllColumnsExceptKey(Object obj, DataSetWriter w, int startColumn);
+    public int readAllColumns(Object obj, DataSetReader r, int startColumn);
+	public int writeAllColumns(Object obj, DataSetWriter w, int startColumn);
+	public int writeAllColumnsExceptKey(Object obj, DataSetWriter w, int startColumn);
 	public string generateFindAllForEntity(string entityName);
     public string getAllFieldList(EntityInfo ei);
     public string getAllFieldList(string entityName);
@@ -1283,29 +1313,61 @@ abstract class SchemaInfo : EntityMetaData {
         return getAllFieldList(findEntity(entityName));
     }
 
-    public void readAllColumns(Object obj, DataSetReader r, int startColumn) {
+    public int readAllColumns(Object obj, DataSetReader r, int startColumn) {
 		EntityInfo ei = findEntityForObject(obj);
+		int columnCount = 0;
 		for (int i = 0; i<ei.getPropertyCount(); i++) {
-			ei.getProperty(i).readFunc(obj, r, startColumn + i);
+			PropertyInfo pi = ei.getProperty(i);
+			if (pi.embedded) {
+				EntityInfo emei = pi.referencedEntity;
+				Object em = emei.createEntity();
+				int columnsRead = readAllColumns(em, r, startColumn + columnCount);
+				pi.setObjectFunc(obj, em);
+				columnCount += columnsRead;
+			} else {
+				pi.readFunc(obj, r, startColumn + columnCount);
+				columnCount++;
+			}
 		}
+		return columnCount;
 	}
 
-	public void writeAllColumns(Object obj, DataSetWriter w, int startColumn) {
+	public int writeAllColumns(Object obj, DataSetWriter w, int startColumn) {
 		EntityInfo ei = findEntityForObject(obj);
+		int columnCount = 0;
 		for (int i = 0; i<ei.getPropertyCount(); i++) {
-			ei.getProperty(i).writeFunc(obj, w, startColumn + i);
+			PropertyInfo pi = ei.getProperty(i);
+			if (pi.embedded) {
+				EntityInfo emei = pi.referencedEntity;
+				Object em = pi.getObjectFunc(obj);
+				int columnsWritten = writeAllColumns(em, w, startColumn + columnCount);
+				columnCount += columnsWritten;
+			} else {
+				pi.writeFunc(obj, w, startColumn + columnCount);
+				columnCount++;
+			}
 		}
+		return columnCount;
 	}
 
-	public void writeAllColumnsExceptKey(Object obj, DataSetWriter w, int startColumn) {
+	public int writeAllColumnsExceptKey(Object obj, DataSetWriter w, int startColumn) {
 		EntityInfo ei = findEntityForObject(obj);
-		int index = 0;
+		int columnCount = 0;
 		for (int i = 0; i<ei.getPropertyCount(); i++) {
-			if (ei.getProperty(i).key)
+			PropertyInfo pi = ei.getProperty(i);
+			if (pi.key)
 				continue;
-			ei.getProperty(i).writeFunc(obj, w, startColumn + index);
-			index++;
+			if (pi.embedded) {
+				EntityInfo emei = pi.referencedEntity;
+				Object em = pi.getObjectFunc(obj);
+				int columnsWritten = writeAllColumns(em, w, startColumn + columnCount);
+				columnCount += columnsWritten;
+			} else {
+				pi.writeFunc(obj, w, startColumn + columnCount);
+				columnCount++;
+			}
 		}
+		return columnCount;
 	}
 
     public string generateFindAllForEntity(string entityName) {
