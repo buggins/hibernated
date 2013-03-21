@@ -84,3 +84,14 @@ public:
 	override immutable TypeInfo getReturnedClass() { return typeid(ubyte[]); }
 }
 
+class EntityType : Type {
+	private string name;
+	private immutable TypeInfo_Class classType;
+public:
+	this(immutable TypeInfo_Class classType, string className) {
+		this.classType = classType;
+		this.name = className;
+	}
+	override immutable string getName() { return name; }
+	override immutable TypeInfo getReturnedClass() { return null; }
+}
