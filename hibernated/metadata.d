@@ -14,6 +14,7 @@
  */
 module hibernated.metadata;
 
+import std.ascii;
 import std.conv;
 import std.datetime;
 import std.exception;
@@ -136,12 +137,20 @@ class EntityInfo {
 	Object createEntity() { return Object.factory(classInfo.name); }
 }
 
-bool isHibernatedAnnotation(alias t)() {
-	return is(typeof(t) == Id) || is(typeof(t) == Entity) || is(typeof(t) == Column) || is(typeof(t) == Table) || is(typeof(t) == Generated) || is(typeof(t) == Id) || t.stringof == Column.stringof || t.stringof == Id.stringof || t.stringof == Generated.stringof || t.stringof == Entity.stringof;
+bool isHibernatedPropertyAnnotation(alias t)() {
+	return is(typeof(t) == Id) || is(typeof(t) == Embedded) || is(typeof(t) == Column) || is(typeof(t) == Table) || is(typeof(t) == Generated) || is(typeof(t) == Id) || t.stringof == Column.stringof || t.stringof == Id.stringof || t.stringof == Generated.stringof || t.stringof == Embedded.stringof;
 }
 
 bool isHibernatedEntityAnnotation(alias t)() {
 	return is(typeof(t) == Entity) || t.stringof == Entity.stringof;
+}
+
+bool isHibernatedEmbeddableAnnotation(alias t)() {
+	return is(typeof(t) == Embeddable) || t.stringof == Embeddable.stringof;
+}
+
+bool isHibernatedEntityOrEmbeddableAnnotation(alias t)() {
+	return is(typeof(t) == Entity) || t.stringof == Entity.stringof || is(typeof(t) == Embeddable) || t.stringof == Embeddable.stringof;
 }
 
 string capitalizeFieldName(immutable string name) {
@@ -164,15 +173,43 @@ string getterNameToSetterName(immutable string name) {
 	return "_" ~ name;
 }
 
-bool hasHibernatedAnnotation(T, string m)() {
+/// converts camel case MyEntityName to my_entity_name
+string camelCaseToUnderscoreDelimited(immutable string s) {
+	string res;
+	bool lastLower = false;
+	foreach(ch; s) {
+		if (ch >= 'A' && ch <= 'Z') {
+			if (lastLower) {
+				lastLower = false;
+				res ~= "_";
+			}
+			res ~= toLower(ch);
+		} else if (ch >= 'a' && ch <= 'z') {
+			lastLower = true;
+			res ~= ch;
+		} else {
+			res ~= ch;
+		}
+	}
+	return res;
+}
+
+unittest {
+	static assert(camelCaseToUnderscoreDelimited("User") == "user");
+	static assert(camelCaseToUnderscoreDelimited("MegaTableName") == "mega_table_name");
+}
+
+/// returns true if class member has at least one known property level annotation (@Column, @Id, @Generated)
+bool hasHibernatedPropertyAnnotation(T, string m)() {
 	foreach(a; __traits(getAttributes, __traits(getMember, T, m))) {
-		static if (isHibernatedAnnotation!a) {
+		static if (isHibernatedPropertyAnnotation!a) {
 			return true;
 		}
 	}
 	return false;
 }
 
+/// returns true if class has @Entity or @Entity() annotation
 bool hasHibernatedEntityAnnotation(T)() {
 	foreach(a; __traits(getAttributes, T)) {
 		static if (isHibernatedEntityAnnotation!a) {
@@ -182,7 +219,18 @@ bool hasHibernatedEntityAnnotation(T)() {
 	return false;
 }
 
-string getEntityName(T)() {
+/// returns true if class has @Embeddable or @Embeddable() annotation
+bool hasHibernatedEmbeddableAnnotation(T)() {
+	foreach(a; __traits(getAttributes, T)) {
+		static if (isHibernatedEntityAnnotation!a) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/// returns entity name for class type
+string getEntityName(T : Object)() {
 	foreach (a; __traits(getAttributes, T)) {
 		static if (is(typeof(a) == Entity)) {
 			return a.name;
@@ -194,13 +242,14 @@ string getEntityName(T)() {
 	return T.stringof;
 }
 
-string getTableName(T)() {
+/// returns table name for class type
+string getTableName(T : Object)() {
 	foreach (a; __traits(getAttributes, T)) {
 		static if (is(typeof(a) == Table)) {
 			return a.name;
 		}
 	}
-	return toLower(T.stringof);
+	return camelCaseToUnderscoreDelimited(T.stringof);
 }
 
 bool hasIdAnnotation(T, string m)() {
@@ -875,7 +924,7 @@ string getEntityDef(T)() {
 			alias typeof(__traits(getMember, T, m)) ti;
 
 
-			static if (hasHibernatedAnnotation!(T, m)) {
+			static if (hasHibernatedPropertyAnnotation!(T, m)) {
 				
 				immutable string propertyDef = getPropertyDef!(T, m)();
 				//pragma(msg, propertyDef);
