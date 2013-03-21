@@ -1,3 +1,14 @@
+/**
+ * HibernateD - Object-Relation Mapping for D programming language, with interface similar to Hibernate. 
+ * 
+ * Source file hibernated/dialects/mysqldialect.d.
+ *
+ * This module contains implementation of MySQLDialect class which provides implementation specific SQL syntax information.
+ * 
+ * Copyright: Copyright 2013
+ * License:   $(LINK www.boost.org/LICENSE_1_0.txt, Boost License 1.0).
+ * Author:   Vadim Lopatin
+ */
 module hibernated.dialects.mysqldialect;
 
 import hibernated.dialect;

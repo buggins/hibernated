@@ -1,3 +1,42 @@
+/**
+ * DDBC - D DataBase Connector - abstraction layer for RDBMS access, with interface similar to JDBC. 
+ * 
+ * Source file ddbc/core.d.
+ *
+ * DDBC library attempts to provide implementation independent interface to different databases.
+ * 
+ * Set of supported RDBMSs can be extended by writing Drivers for particular DBs.
+ * Currently it only includes MySQL Driver which uses patched version of MYSQLN (native D implementation of MySQL connector, written by Steve Teale)
+ * 
+ * JDBC documentation can be found here:
+ * $(LINK http://docs.oracle.com/javase/1.5.0/docs/api/java/sql/package-summary.html)$(BR)
+ *
+ * Limitations of current version: readonly unidirectional resultset, completely fetched into memory.
+ * 
+ * Its primary objects are:
+ * $(UL
+ *    $(LI Driver: $(UL $(LI Implements interface to particular RDBMS, used to create connections)))
+ *    $(LI Connection: $(UL $(LI Connection to the server, and querying and setting of server parameters.)))
+ *    $(LI Statement: Handling of general SQL requests/queries/commands, with principal methods:
+ *       $(UL $(LI executeUpdate() - run query which doesn't return result set.)
+ *            $(LI executeQuery() - execute query which returns ResultSet interface to access rows of result.)
+ *        )
+ *    )
+ *    $(LI PreparedStatement: Handling of general SQL requests/queries/commands which having additional parameters, with principal methods:
+ *       $(UL $(LI executeUpdate() - run query which doesn't return result set.)
+ *            $(LI executeQuery() - execute query which returns ResultSet interface to access rows of result.)
+ *            $(LI setXXX() - setter methods to bind parameters.)
+ *        )
+ *    )
+ *    $(LI ResultSet: $(UL $(LI Get result of query row by row, accessing individual fields.)))
+ * )
+ *
+ * You can find usage examples in unittest{} sections.
+ *
+ * Copyright: Copyright 2013
+ * License:   $(LINK www.boost.org/LICENSE_1_0.txt, Boost License 1.0).
+ * Author:   Vadim Lopatin
+ */
 module ddbc.core;
 
 import std.exception;

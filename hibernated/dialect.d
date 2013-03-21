@@ -1,3 +1,14 @@
+/**
+ * HibernateD - Object-Relation Mapping for D programming language, with interface similar to Hibernate. 
+ * 
+ * Source file hibernated/dialect.d.
+ *
+ * This module contains declaration of Dialect class - base class for implementing RDBMS specific SQL syntax definitions.
+ * 
+ * Copyright: Copyright 2013
+ * License:   $(LINK www.boost.org/LICENSE_1_0.txt, Boost License 1.0).
+ * Author:   Vadim Lopatin
+ */
 module hibernated.dialect;
 
 import std.stdio;

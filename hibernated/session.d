@@ -1,3 +1,14 @@
+/**
+ * HibernateD - Object-Relation Mapping for D programming language, with interface similar to Hibernate. 
+ * 
+ * Source file hibernated/session.d.
+ *
+ * This module contains implementation of Hibernated SessionFactory and Session classes.
+ * 
+ * Copyright: Copyright 2013
+ * License:   $(LINK www.boost.org/LICENSE_1_0.txt, Boost License 1.0).
+ * Author:   Vadim Lopatin
+ */
 module hibernated.session;
 
 import std.algorithm;
@@ -13,6 +24,7 @@ import hibernated.type;
 import hibernated.dialect;
 import hibernated.core;
 import hibernated.metadata;
+import hibernated.query;
 
 interface Transaction {
 }

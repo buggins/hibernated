@@ -1,6 +1,13 @@
 /**
- * Hibernate-like ORM for D language. Annotations.
+ * HibernateD - Object-Relation Mapping for D programming language, with interface similar to Hibernate. 
+ * 
+ * Source file hibernated/annotations.d.
  *
+ * This module contains declarations of HibernateD Annotations - User Defined Attribues used to markup D classes and their properties for ORM.
+ * 
+ * Copyright: Copyright 2013
+ * License:   $(LINK www.boost.org/LICENSE_1_0.txt, Boost License 1.0).
+ * Author:   Vadim Lopatin
  */
 module hibernated.annotations;
 

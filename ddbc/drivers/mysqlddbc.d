@@ -1,3 +1,27 @@
+/**
+ * DDBC - D DataBase Connector - abstraction layer for RDBMS access, with interface similar to JDBC. 
+ * 
+ * Source file ddbc/drivers/mysqlddbc.d.
+ *
+ * DDBC library attempts to provide implementation independent interface to different databases.
+ * 
+ * Set of supported RDBMSs can be extended by writing Drivers for particular DBs.
+ * Currently it only includes 
+ * 
+ * JDBC documentation can be found here:
+ * $(LINK http://docs.oracle.com/javase/1.5.0/docs/api/java/sql/package-summary.html)$(BR)
+ *
+ * This module contains implementation of MySQL Driver which uses patched version of 
+ * MYSQLN (native D implementation of MySQL connector, written by Steve Teale)
+ * 
+ * Current version of driver implements only unidirectional readonly resultset, which with fetching full result to memory on creation. 
+ *
+ * You can find usage examples in unittest{} sections.
+ *
+ * Copyright: Copyright 2013
+ * License:   $(LINK www.boost.org/LICENSE_1_0.txt, Boost License 1.0).
+ * Author:   Vadim Lopatin
+ */
 module ddbc.drivers.mysqlddbc;
 
 import std.algorithm;

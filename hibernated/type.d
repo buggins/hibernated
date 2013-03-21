@@ -1,3 +1,14 @@
+/**
+ * HibernateD - Object-Relation Mapping for D programming language, with interface similar to Hibernate. 
+ * 
+ * Source file hibernated/type.d.
+ *
+ * This module contains declarations of property type description classes.
+ * 
+ * Copyright: Copyright 2013
+ * License:   $(LINK www.boost.org/LICENSE_1_0.txt, Boost License 1.0).
+ * Author:   Vadim Lopatin
+ */
 module hibernated.type;
 
 import std.datetime;
