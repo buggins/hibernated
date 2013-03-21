@@ -96,9 +96,11 @@ class EntityInfo {
 	TypeInfo_Class classInfo;
     int keyIndex;
     PropertyInfo keyProperty;
-	public this(string name, string tableName, PropertyInfo [] properties, TypeInfo_Class classInfo) {
+	bool embeddable;
+	public this(string name, string tableName, bool embeddable, PropertyInfo [] properties, TypeInfo_Class classInfo) {
 		this.name = name;
 		this.tableName = tableName;
+		this.embeddable = embeddable;
 		this.properties = properties;
 		this.classInfo = classInfo;
 		PropertyInfo[string] map;
@@ -110,7 +112,7 @@ class EntityInfo {
             }
         }
 		this.propertyMap = map;
-        enforceEx!HibernatedException(keyProperty !is null, "No key specified for entity " ~ name);
+        enforceEx!HibernatedException(keyProperty !is null || embeddable, "No key specified for non-embeddable entity " ~ name);
 	}
 	/// returns key value as Variant
 	Variant getKey(Object obj) { return keyProperty.getFunc(obj); }
@@ -1094,7 +1096,10 @@ string getEntityDef(T)() {
 	generatedEntityInfo ~= "new EntityInfo(";
 	generatedEntityInfo ~= "\"" ~ entityName ~ "\", ";
 	generatedEntityInfo ~= "\"" ~ tableName ~ "\", ";
+	generatedEntityInfo ~= (hasHibernatedEmbeddableAnnotation!T) ? "true," : "false,";
 	generatedEntityInfo ~= "[\n";
+
+	pragma(msg, entityName ~ " : " ~ ((hasHibernatedEmbeddableAnnotation!T) ? "true," : "false,"));
 
 	foreach (m; __traits(allMembers, T)) {
 		//pragma(msg, m);
@@ -1407,7 +1412,7 @@ unittest {
 	}
 
 
-	EntityInfo entity = new EntityInfo("user", "users",  [
+	EntityInfo entity = new EntityInfo("user", "users",  false, [
 	                                                      new PropertyInfo("id", "id", new IntegerType(), 0, true, true, false, false, null, null, null, null, null, null, null)
 	                                                     ], null);
 
@@ -1417,7 +1422,7 @@ unittest {
 //	immutable string info = getEntityDef!User();
 //	immutable string infos = entityListDef!(User, Customer)();
 
-	EntityInfo ei = new EntityInfo("User", "users", [
+	EntityInfo ei = new EntityInfo("User", "users", false, [
 	                                                 new PropertyInfo("id", "id_column", new IntegerType(), 0, true, true, false, false, null, null, null, null, null, null, null),
 	                                                 new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, false, null, null, null, null, null, null, null),
 	                                                 new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, false, null, null, null, null, null, null, null),
@@ -1432,14 +1437,14 @@ unittest {
 	assert(ei.getPropertyCount == 5);
 
 	EntityInfo[] entities3 =  [
-	                                                                 new EntityInfo("User", "users", [
+	                           new EntityInfo("User", "users", false, [
 	                                 new PropertyInfo("id", "id_column", new IntegerType(), 0, true, true, false, false, null, null, null, null, null, null, null),
 	                                 new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, false, null, null, null, null, null, null, null),
 	                                 new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, false, null, null, null, null, null, null, null),
 	                                 new PropertyInfo("login", "login", new StringType(), 0, false, false, true, false, null, null, null, null, null, null, null),
 	                                 new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true, false, null, null, null, null, null, null, null)], null)
 	                                                                 ,
-	                                                                 new EntityInfo("Customer", "customer", [
+	                           new EntityInfo("Customer", "customer", false, [
 	                                        new PropertyInfo("id", "id", new IntegerType(), 0, true, true, true, false, null, null, null, null, null, null, null),
 	                                        new PropertyInfo("name", "name", new StringType(), 0, false, false, true, false, null, null, null, null, null, null, null)], null)
 	                                                                 ];
