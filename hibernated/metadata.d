@@ -782,6 +782,7 @@ string getPropertyVariantReadCode(T, string m)() {
     return substituteParamTwice(ColumnTypePropertyToVariant[memberType], propertyReadCode);
 }
 
+
 static immutable string[] ColumnTypeConstructorCode = 
 	[
 	 "new IntegerType()", //BYTE_TYPE,    // byte
@@ -914,6 +915,19 @@ string getColumnTypeDatasetWriteCode(T, string m)() {
 	return "if (" ~ isNullCode ~ ") r.setNull(index); else " ~ substituteParam(setDataCode, readCode);
 }
 
+string getEmbeddedPropertyVariantWriteCode(T, string m, string className)() {
+	immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
+	static if (kind == PropertyMemberKind.FIELD_MEMBER) {
+		return "entity." ~ m ~ " = (value == null ? null : value.get!(" ~ className ~ "));";
+	} else if (kind == PropertyMemberKind.GETTER_MEMBER) {
+		return "entity." ~ getterNameToSetterName(m) ~ "(value == null ? null : value.get!(" ~ className ~ "));";
+	} else if (kind == PropertyMemberKind.PROPERTY_MEMBER) {
+		return "entity." ~ m ~ " = (value == null ? null : value.get!(" ~ className ~ "));";
+	} else {
+		assert(0);
+	}
+}
+
 /// create source code for creation of Embedded definition
 string getEmbeddedPropertyDef(T, immutable string m)() {
 	immutable string referencedEntityName = getPropertyEmbeddedEntityName!(T,m)();
@@ -932,12 +946,15 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
 	immutable string datasetReadCode = null; //getColumnTypeDatasetReadCode!(T,m)();
 	immutable string propertyWriteCode = null; //getPropertyWriteCode!(T,m)();
 	immutable string datasetWriteCode = null; //getColumnTypeDatasetWriteCode!(T,m)();
-	immutable string propertyVariantSetCode = null; // getPropertyVariantWriteCode!(T,m)();
-	immutable string propertyVariantGetCode = null; //getPropertyVariantReadCode!(T,m)();
+	immutable string propertyVariantSetCode = getEmbeddedPropertyVariantWriteCode!(T,m,referencedClassName); // getPropertyVariantWriteCode!(T,m)();
+	immutable string propertyVariantGetCode = "Variant(" ~ propertyReadCode ~ " is null ? null : " ~ propertyReadCode ~ ")"; //getPropertyVariantReadCode!(T,m)();
 	immutable string keyIsSetCode = null; //getColumnTypeKeyIsSetCode!(T,m)();
 	immutable string isNullCode = null; //getColumnTypeIsNullCode!(T,m)();
 	immutable string readerFuncDef = "null";
-//		"\n" ~
+	pragma(msg, "property read: " ~ propertyReadCode);
+	pragma(msg, "property write: " ~ propertyWriteCode);
+	pragma(msg, "variant get: " ~ propertyVariantGetCode);
+	//		"\n" ~
 //		"function(Object obj, DataSetReader r, int index) { \n" ~ 
 //			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
 //			"    " ~ propertyWriteCode ~ " \n" ~
@@ -948,18 +965,18 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
 //			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
 //			"    " ~ datasetWriteCode ~ " \n" ~
 //			" }\n";
-	immutable string getVariantFuncDef = "null";
-//		"\n" ~
-//		"function(Object obj) { \n" ~ 
-//			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
-//			"    return " ~ propertyVariantGetCode ~ "; \n" ~
-//			" }\n";
-	immutable string setVariantFuncDef = "null"; 
-//		"\n" ~
-//		"function(Object obj, Variant value) { \n" ~ 
-//			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
-//			"    " ~ propertyVariantSetCode ~ "\n" ~
-//			" }\n";
+	immutable string getVariantFuncDef = 
+		"\n" ~
+		"function(Object obj) { \n" ~ 
+			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+			"    return " ~ propertyVariantGetCode ~ "; \n" ~
+			" }\n";
+	immutable string setVariantFuncDef = 
+		"\n" ~
+		"function(Object obj, Variant value) { \n" ~ 
+			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+			"    " ~ propertyVariantSetCode ~ "\n" ~
+			" }\n";
 	immutable string keyIsSetFuncDef = "null";
 //		"\n" ~
 //		"function(Object obj) { \n" ~ 
@@ -1373,6 +1390,11 @@ class SchemaInfoImpl(T...) : SchemaInfo {
 
 
 unittest {
+
+	User uuu1 = new User();
+	Object ooo1 = uuu1;
+	Variant vvv = cast(hibernated.metadata.User)ooo1;
+	User uuu = vvv.get!(hibernated.metadata.User);
 
 	@Entity
 	@Table("users")
