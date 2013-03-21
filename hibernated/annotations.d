@@ -1,6 +1,9 @@
 /**
  * HibernateD - Object-Relation Mapping for D programming language, with interface similar to Hibernate. 
  * 
+ * Hibernate documentation can be found here:
+ * $(LINK http://hibernate.org/docs)$(BR)
+ * 
  * Source file hibernated/annotations.d.
  *
  * This module contains declarations of HibernateD Annotations - User Defined Attribues used to markup D classes and their properties for ORM.

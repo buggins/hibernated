@@ -1,6 +1,9 @@
 /**
  * HibernateD - Object-Relation Mapping for D programming language, with interface similar to Hibernate. 
  * 
+ * Hibernate documentation can be found here:
+ * $(LINK http://hibernate.org/docs)$(BR)
+ * 
  * Source file hibernated/session.d.
  *
  * This module contains implementation of Hibernated SessionFactory and Session classes.
@@ -26,32 +29,24 @@ import hibernated.core;
 import hibernated.metadata;
 import hibernated.query;
 
-interface Transaction {
+/// Factory to create HibernateD Sessions - similar to org.hibernate.SessionFactory
+interface SessionFactory {
+	void close();
+	bool isClosed();
+	Session openSession();
 }
 
-interface Query
-{
-	///Get the query string.
-	string 	getQueryString();
-	/// Convenience method to return a single instance that matches the query, or null if the query returns no results.
-	Object 	uniqueResult();
-	/// Convenience method to return a single instance that matches the query, or null if the query returns no results.
-	Variant[] uniqueRow();
-	/// Return the query results as a List of entity objects
-	Object[] list();
-	/// Return the query results as a List which each row as Variant array
-	Variant[][] listRows();
-
-	/// Bind a value to a named query parameter.
-	Query setParameter(string name, Variant val);
-}
-
-// similar to org.hibernate.Session
+/// Session - main interface to load and persist entities -- similar to org.hibernate.Session
 interface Session
 {
+	/// not supported in current implementation
 	Transaction beginTransaction();
+	/// not supported in current implementation
 	void cancelQuery();
+	/// not supported in current implementation
 	void clear();
+
+	/// closes session
 	Connection close();
 
     ///Does this session contain any changes which must be synchronized with the database? In other words, would any DML operations be executed if we flushed this session?
@@ -85,6 +80,29 @@ interface Session
 	Query createQuery(string queryString);
 }
 
+/// Transaction interface: TODO
+interface Transaction {
+}
+
+/// Interface for usage of HQL queries.
+interface Query
+{
+	///Get the query string.
+	string 	getQueryString();
+	/// Convenience method to return a single instance that matches the query, or null if the query returns no results.
+	Object 	uniqueResult();
+	/// Convenience method to return a single instance that matches the query, or null if the query returns no results.
+	Variant[] uniqueRow();
+	/// Return the query results as a List of entity objects
+	Object[] list();
+	/// Return the query results as a List which each row as Variant array
+	Variant[][] listRows();
+	
+	/// Bind a value to a named query parameter (all :parameters used in query should be bound before executing query).
+	Query setParameter(string name, Variant val);
+}
+
+
 /// Allows reaction to basic SessionFactory occurrences
 interface SessionFactoryObserver {
     ///Callback to indicate that the given factory has been closed.
@@ -116,12 +134,7 @@ class Configuration {
     bool dummy;
 }
 
-interface SessionFactory {
-    void close();
-    bool isClosed();
-    Session openSession();
-}
-
+/// Implementation of HibernateD session
 class SessionImpl : Session {
 
     private bool closed;
@@ -321,6 +334,7 @@ class SessionImpl : Session {
 	}
 }
 
+/// Implementation of HibernateD SessionFactory
 class SessionFactoryImpl : SessionFactory {
 //    Configuration cfg;
 //    Mapping mapping;
@@ -381,6 +395,7 @@ class SessionFactoryImpl : SessionFactory {
     }
 }
 
+/// Implementation of HibernateD Query
 class QueryImpl : Query
 {
 	SessionImpl sess;

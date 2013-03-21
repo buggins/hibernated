@@ -1,6 +1,9 @@
 /**
  * HibernateD - Object-Relation Mapping for D programming language, with interface similar to Hibernate. 
  * 
+ * Hibernate documentation can be found here:
+ * $(LINK http://hibernate.org/docs)$(BR)
+ * 
  * Source file hibernated/dialect.d.
  *
  * This module contains declaration of Dialect class - base class for implementing RDBMS specific SQL syntax definitions.

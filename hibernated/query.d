@@ -1,6 +1,9 @@
 /**
  * HibernateD - Object-Relation Mapping for D programming language, with interface similar to Hibernate. 
  * 
+ * Hibernate documentation can be found here:
+ * $(LINK http://hibernate.org/docs)$(BR)
+ * 
  * Source file hibernated/core.d.
  *
  * This module contains HQL query parser and HQL to SQL transform implementation.
