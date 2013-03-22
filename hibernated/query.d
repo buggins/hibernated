@@ -181,11 +181,25 @@ class QueryParser {
 		throw new SyntaxError("Cannot find FROM alias by name " ~ aliasName ~ " - in query " ~ query);
 	}
 	
-	void addSelectClauseItem(string aliasName, string propertyName) {
+	void addSelectClauseItem(string aliasName, string[] propertyNames) {
+		//writeln("addSelectClauseItem alias=" ~ aliasName ~ " properties=" ~ to!string(propertyNames));
 		FromClauseItem * from = aliasName == null ? &fromClause[0] : findFromClauseByAlias(aliasName);
 		SelectClauseItem item;
 		item.aliasPtr = from;
-		item.prop = propertyName != null ? from.entity.findProperty(propertyName) : null;
+		item.prop = null;
+		EntityInfo ei = from.entity;
+		if (propertyNames.length > 0) {
+			item.prop = ei.findProperty(propertyNames[0]);
+			propertyNames.popFront();
+			while (item.prop.embedded) {
+				//writeln("Embedded property " ~ item.prop.propertyName ~ " of type " ~ item.prop.referencedEntityName);
+				ei = item.prop.referencedEntity;
+			    enforceEx!SyntaxError(propertyNames.length > 0, "@Embedded field property name should be specified when selecting " ~ aliasName ~ "." ~ item.prop.propertyName);
+				item.prop = ei.findProperty(propertyNames[0]);
+				propertyNames.popFront();
+			}
+		}
+		enforceEx!SyntaxError(propertyNames.length == 0, "Extra field names in SELECT clause in query " ~ query);
 		selectClause ~= item;
 		//insertInPlace(selectClause, 0, item);
 	}
@@ -233,21 +247,28 @@ class QueryParser {
 		// in current version it can only be
 		// {property}  or  {alias . property}
 		//writeln("SELECT ITEM: " ~ to!string(start) ~ " .. " ~ to!string(end));
-		if (start == end - 1) {
-			// no alias
-			enforceEx!SyntaxError(tokens[start].type == TokenType.Ident || tokens[start].type == TokenType.Alias, "Property name or alias expected in SELECT clause in query " ~ query ~ errorContext(tokens[start]));
-			if (tokens[start].type == TokenType.Ident)
-				addSelectClauseItem(null, cast(string)tokens[start].text);
-			else
-				addSelectClauseItem(cast(string)tokens[start].text, null);
-		} else if (start == end - 3) {
-			enforceEx!SyntaxError(tokens[start].type == TokenType.Alias, "Entity alias expected in SELECT clause" ~ errorContext(tokens[start]));
-			enforceEx!SyntaxError(tokens[start + 1].type == TokenType.Dot, "Dot expected after entity alias in SELECT clause" ~ errorContext(tokens[start]));
-			enforceEx!SyntaxError(tokens[start + 2].type == TokenType.Ident, "Property name expected after entity alias in SELECT clause" ~ errorContext(tokens[start]));
-			addSelectClauseItem(cast(string)tokens[start].text, cast(string)tokens[start + 2].text);
-		} else {
-			enforceEx!SyntaxError(false, "Invalid SELECT clause" ~ errorContext(tokens[start]));
+		enforceEx!SyntaxError(tokens[start].type == TokenType.Ident || tokens[start].type == TokenType.Alias, "Property name or alias expected in SELECT clause in query " ~ query ~ errorContext(tokens[start]));
+		string aliasName;
+		int p = start;
+		if (tokens[p].type == TokenType.Alias) {
+			aliasName = cast(string)tokens[start].text;
+			p++;
+			enforceEx!SyntaxError(p == end || tokens[p].type == TokenType.Dot, "SELECT clause item is invalid (only  [alias.]field{[.field2]}+ allowed) " ~ errorContext(tokens[start]));
+			if (p < end - 1 && tokens[p].type == TokenType.Dot)
+				p++;
 		}
+		string[] fieldNames;
+		while (p < end && tokens[p].type == TokenType.Ident) {
+			fieldNames ~= tokens[p].text;
+			p++;
+			if (p > end - 1 || tokens[p].type != TokenType.Dot)
+				break;
+			// skipping dot
+			p++;
+		}
+		//writeln("parseSelectClauseItem pos=" ~ to!string(p) ~ " end=" ~ to!string(end));
+		enforceEx!SyntaxError(p >= end, "SELECT clause item is invalid (only  [alias.]field{[.field2]}+ allowed) " ~ errorContext(tokens[start]));
+		addSelectClauseItem(aliasName, fieldNames);
 	}
 	
 	void parseSelectClause(int start, int end) {

@@ -101,3 +101,70 @@ public:
 	override immutable string getName() { return name; }
 	//override immutable TypeInfo getReturnedClass() { return null; }
 }
+
+
+struct Lazy(T) {
+	alias T delegate() delegate_t;
+	private T _value;
+	private delegate_t _delegate;
+
+	T opCall() {
+		if (_delegate !is null)
+			opAssign(_delegate());
+		return _value;
+	}
+
+	T opCall(T newValue) {
+		return opAssign(newValue);
+	}
+	
+	void opCall(delegate_t lazyLoader) {
+		return opAssign(lazyLoader);
+	}
+	
+	T opCast(TT)() if (is(TT == T)) {
+		return opCall();
+	}
+
+	T opAssign(T v) {
+		_value = v;
+		_delegate = null;
+		return _value;
+	}
+
+	void opAssign(delegate_t lazyLoader) {
+		_delegate = lazyLoader;
+		_value = null;
+	}
+}
+
+unittest {
+	static class Foo {
+		string name;
+		this(string v) {
+			name = v;
+		}
+	}
+
+	auto loader = delegate() {
+		return new Foo("lazy loaded");
+	};
+
+	Foo res;
+	Lazy!Foo field;
+	res = field();
+	assert(res is null);
+	field = loader;
+	res = field();
+	assert(res.name == "lazy loaded");
+	field = new Foo("another string");
+	res = cast(Foo)field;
+	assert(res.name == "another string");
+
+	static class Bar {
+		@property Lazy!Foo field;
+	}
+	Bar bar = new Bar();
+	bar.field = new Foo("name1");
+	res = bar.field();
+}

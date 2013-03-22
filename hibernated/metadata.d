@@ -2076,6 +2076,12 @@ unittest {
 		assert(row is null);
 		uu = cast(User)q.uniqueResult();
 		assert(uu is null);
+
+		q = sess.createQuery("SELECT c.name, c.address.zip FROM Customer AS c WHERE id = :Id").setParameter("Id", Variant(1));
+		row = q.uniqueRow();
+		assert(row !is null);
+		assert(row[0] == "customer 1"); // name
+		assert(row[1] == "12345"); // address.zip
 	}
 }
 
