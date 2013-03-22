@@ -42,6 +42,40 @@ import hibernated.dialects.mysqldialect;
 //}
 
 
+interface EntityMetaData {
+	public EntityInfo [] getEntities();
+	public EntityInfo [string] getEntityMap();
+	public EntityInfo [TypeInfo_Class] getClassMap();
+	public EntityInfo findEntity(string entityName);
+	public EntityInfo findEntity(TypeInfo_Class entityClass);
+	public EntityInfo findEntityForObject(Object obj);
+	public EntityInfo getEntity(int entityIndex);
+	public int getEntityCount();
+	/// Entity factory
+	public Object createEntity(string entityName);
+	/// Fills all properties of entity instance from dataset
+	public int readAllColumns(Object obj, DataSetReader r, int startColumn);
+	/// Puts all properties of entity instance to dataset
+	public int writeAllColumns(Object obj, DataSetWriter w, int startColumn);
+	/// Puts properties of entity instance to dataset skipping keys
+	public int writeAllColumnsExceptKey(Object obj, DataSetWriter w, int startColumn);
+
+	public string generateFindAllForEntity(string entityName);
+
+	public string getAllFieldList(EntityInfo ei);
+	public string getAllFieldList(string entityName);
+
+	public string generateFindByPkForEntity(EntityInfo ei);
+	public string generateFindByPkForEntity(string entityName);
+
+	public string generateInsertAllFieldsForEntity(EntityInfo ei);
+	public string generateInsertAllFieldsForEntity(string entityName);
+	public string generateInsertNoKeyForEntity(EntityInfo ei);
+	public string generateUpdateForEntity(EntityInfo ei);
+
+	public Variant getPropertyValue(Object obj, string propertyName);
+	public void setPropertyValue(Object obj, string propertyName, Variant value);
+}
 
 /// Metadata of entity property
 class PropertyInfo {
@@ -1215,32 +1249,6 @@ string entityListDef(T ...)() {
     return code;
 }
 
-interface EntityMetaData {
-    public EntityInfo [] getEntities();
-    public EntityInfo [string] getEntityMap();
-    public EntityInfo [TypeInfo_Class] getClassMap();
-    public EntityInfo findEntity(string entityName);
-    public EntityInfo findEntity(TypeInfo_Class entityClass);
-    public EntityInfo findEntityForObject(Object obj);
-    public EntityInfo getEntity(int entityIndex);
-    public int getEntityCount();
-	public Object createEntity(string entityName);
-    public int readAllColumns(Object obj, DataSetReader r, int startColumn);
-	public int writeAllColumns(Object obj, DataSetWriter w, int startColumn);
-	public int writeAllColumnsExceptKey(Object obj, DataSetWriter w, int startColumn);
-	public string generateFindAllForEntity(string entityName);
-    public string getAllFieldList(EntityInfo ei);
-    public string getAllFieldList(string entityName);
-    public string generateFindByPkForEntity(EntityInfo ei);
-    public string generateFindByPkForEntity(string entityName);
-	public string generateInsertAllFieldsForEntity(EntityInfo ei);
-	public string generateInsertAllFieldsForEntity(string entityName);
-	public string generateInsertNoKeyForEntity(EntityInfo ei);
-	public string generateUpdateForEntity(EntityInfo ei);
-	public Variant getPropertyValue(Object obj, string propertyName);
-    public void setPropertyValue(Object obj, string propertyName, Variant value);
-}
-
 abstract class SchemaInfo : EntityMetaData {
 
     override public Variant getPropertyValue(Object obj, string propertyName) {
@@ -1254,23 +1262,35 @@ abstract class SchemaInfo : EntityMetaData {
 
     public string getAllFieldList(EntityInfo ei) {
         string query;
-        for (int i = 0; i < ei.getPropertyCount(); i++) {
-            if (query.length != 0)
-                query ~= ", ";
-            query ~= ei.getProperty(i).columnName;
-        }
-        return query;
+		for (int i = 0; i < ei.getPropertyCount(); i++) {
+			PropertyInfo pi = ei.getProperty(i);
+			if (query.length != 0)
+				query ~= ", ";
+			if (pi.embedded) {
+				EntityInfo emei = pi.referencedEntity;
+				query ~= getAllFieldList(emei);
+			} else {
+				query ~= pi.columnName;
+			}
+		}
+		return query;
     }
 
 	public string getAllFieldListExceptKeyForUpdate(EntityInfo ei) {
 		string query;
 		for (int i = 0; i < ei.getPropertyCount(); i++) {
-			if (ei.getProperty(i).key)
+			PropertyInfo pi = ei.getProperty(i);
+			if (pi.key)
 				continue;
 			if (query.length != 0)
 				query ~= ", ";
-			query ~= ei.getProperty(i).columnName;
-			query ~= "=?";
+			if (pi.embedded) {
+				EntityInfo emei = pi.referencedEntity;
+				query ~= getAllFieldListExceptKeyForUpdate(emei);
+			} else {
+				query ~= pi.columnName;
+				query ~= "=?";
+			}
 		}
 		return query;
 	}
@@ -1278,11 +1298,17 @@ abstract class SchemaInfo : EntityMetaData {
 	public string getAllFieldListExceptKey(EntityInfo ei) {
 		string query;
 		for (int i = 0; i < ei.getPropertyCount(); i++) {
-			if (ei.getProperty(i).key)
+			PropertyInfo pi = ei.getProperty(i);
+			if (pi.key)
 				continue;
 			if (query.length != 0)
 				query ~= ", ";
-			query ~= ei.getProperty(i).columnName;
+			if (pi.embedded) {
+				EntityInfo emei = pi.referencedEntity;
+				query ~= getAllFieldListExceptKey(emei);
+			} else {
+				query ~= pi.columnName;
+			}
 		}
 		return query;
 	}
@@ -1290,9 +1316,15 @@ abstract class SchemaInfo : EntityMetaData {
 	public string getAllFieldPlaceholderList(EntityInfo ei) {
 		string query;
 		for (int i = 0; i < ei.getPropertyCount(); i++) {
+			PropertyInfo pi = ei.getProperty(i);
 			if (query.length != 0)
 				query ~= ", ";
-			query ~= '?';
+			if (pi.embedded) {
+				EntityInfo emei = pi.referencedEntity;
+				query ~= getAllFieldPlaceholderList(emei);
+			} else {
+				query ~= '?';
+			}
 		}
 		return query;
 	}
@@ -1300,11 +1332,17 @@ abstract class SchemaInfo : EntityMetaData {
 	public string getAllFieldPlaceholderListExceptKey(EntityInfo ei) {
 		string query;
 		for (int i = 0; i < ei.getPropertyCount(); i++) {
-			if (ei.getProperty(i).key)
+			PropertyInfo pi = ei.getProperty(i);
+			if (pi.key)
 				continue;
 			if (query.length != 0)
 				query ~= ", ";
-			query ~= '?';
+			if (pi.embedded) {
+				EntityInfo emei = pi.referencedEntity;
+				query ~= getAllFieldPlaceholderListExceptKey(emei);
+			} else {
+				query ~= '?';
+			}
 		}
 		return query;
 	}
