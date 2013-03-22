@@ -43,6 +43,12 @@ import hibernated.dialects.mysqldialect;
 
 
 interface EntityMetaData {
+
+	@property size_t length();
+	EntityInfo opIndex(int index);
+	EntityInfo opIndex(string entityName);
+	PropertyInfo opIndex(string entityName, string propertyName);
+
 	public EntityInfo [] getEntities();
 	public EntityInfo [string] getEntityMap();
 	public EntityInfo [TypeInfo_Class] getClassMap();
@@ -142,6 +148,8 @@ public:
 		this.getObjectFunc = getObjectFunc;
 		this.setObjectFunc = setObjectFunc;
 	}
+
+	//int onApply();
 }
 
 /// Metadata of single entity
@@ -193,6 +201,16 @@ class EntityInfo {
 	ulong getPropertyCount() { return properties.length; }
 	/// returns number of properties
 	ulong getPropertyCountExceptKey() { return properties.length - 1; }
+
+
+	@property size_t length() { return properties.length; }
+	PropertyInfo opIndex(int index) {
+		return properties[index];
+	}
+	PropertyInfo opIndex(string propertyName) {
+		return findProperty(propertyName);
+	}
+
 	/// returns property by index
 	PropertyInfo getProperty(int propertyIndex) { return properties[propertyIndex]; }
 	/// returns property by name, throws exception if not found
@@ -202,7 +220,7 @@ class EntityInfo {
 }
 
 bool isHibernatedPropertyAnnotation(alias t)() {
-	return is(typeof(t) == Id) || is(typeof(t) == Embedded) || is(typeof(t) == Column) || is(typeof(t) == Table) || is(typeof(t) == Generated) || is(typeof(t) == Id) || t.stringof == Column.stringof || t.stringof == Id.stringof || t.stringof == Generated.stringof || t.stringof == Embedded.stringof;
+	return is(typeof(t) == Id) || is(typeof(t) == Embedded) || is(typeof(t) == Column) || is(typeof(t) == OneToOne) || is(typeof(t) == Generated) || is(typeof(t) == Id) || t.stringof == Column.stringof || t.stringof == Id.stringof || t.stringof == Generated.stringof || t.stringof == Embedded.stringof || t.stringof == OneToOne.stringof;
 }
 
 bool isHibernatedEntityAnnotation(alias t)() {
@@ -654,6 +672,7 @@ version (unittest) {
 		@Column
 		string lastName;
 		@OneToOne
+		@JoinColumn("more_info_fk")
 		MoreInfo moreInfo;
 	}
 	
@@ -664,6 +683,8 @@ version (unittest) {
 		int id;
 		@Column 
 		long flags;
+		@OneToOne("moreInfo")
+		Person person;
 	}
 }
 
@@ -675,7 +696,10 @@ unittest {
 	
 	// Checking generated metadata
 	EntityMetaData schema = new SchemaInfoImpl!(Person, MoreInfo);
-	
+//	foreach(e; schema["Person"]) {
+//		writeln("property: " ~ e.propertyName);
+//	}
+	//schema.
 }
 
 enum PropertyMemberType : int {
@@ -1629,6 +1653,20 @@ string entityListDef(T ...)() {
 
 abstract class SchemaInfo : EntityMetaData {
 
+	override @property size_t length() {
+		return getEntityCount();
+	}
+	override EntityInfo opIndex(int index) {
+		return getEntity(index);
+	}
+	override EntityInfo opIndex(string entityName) {
+		return findEntity(entityName);
+	}
+
+	override PropertyInfo opIndex(string entityName, string propertyName) {
+		return findEntity(entityName).findProperty(propertyName);
+	}
+
     override public Variant getPropertyValue(Object obj, string propertyName) {
         return findEntityForObject(obj).getPropertyValue(obj, propertyName);
     }
@@ -2163,19 +2201,19 @@ unittest {
 	//writeln("metadata test 1");
 
 	assert(schema.getEntityCount() == 5);
-	assert(schema.findEntity("User").findProperty("name").columnName == "name");
-	assert(schema.findEntity("User").getProperties()[0].columnName == "id");
-	assert(schema.findEntity("User").getProperty(2).propertyName == "flags");
-	assert(schema.findEntity("User").findProperty("id").generated == true);
-	assert(schema.findEntity("User").findProperty("id").key == true);
-    assert(schema.findEntity("User").findProperty("name").key == false);
-    assert(schema.findEntity("Customer").findProperty("id").generated == true);
-	assert(schema.findEntity("Customer").findProperty("id").key == true);
-	assert(schema.findEntity("Customer").findProperty("address").embedded == true);
-	assert(schema.findEntity("Customer").findProperty("address").referencedEntity !is null);
-	assert(schema.findEntity("Customer").findProperty("address").referencedEntity.findProperty("streetAddress").columnName == "street_address");
+	assert(schema["User"]["name"].columnName == "name");
+	assert(schema["User"][0].columnName == "id");
+	assert(schema["User"][2].propertyName == "flags");
+	assert(schema["User"]["id"].generated == true);
+	assert(schema["User"]["id"].key == true);
+    assert(schema["User"]["name"].key == false);
+    assert(schema["Customer"]["id"].generated == true);
+	assert(schema["Customer"]["id"].key == true);
+	assert(schema["Customer"]["address"].embedded == true);
+	assert(schema["Customer"]["address"].referencedEntity !is null);
+	assert(schema["Customer"]["address"].referencedEntity["streetAddress"].columnName == "street_address");
 
-	assert(schema.findEntity("User").findProperty("id").readFunc !is null);
+	assert(schema["User"]["id"].readFunc !is null);
 
     auto e2 = schema.createEntity("User");
     assert(e2 !is null);
