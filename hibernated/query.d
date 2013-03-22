@@ -375,25 +375,31 @@ class QueryParser {
 				lastp = i + 1;
 				idents ~= items[i + 1].text;
 			}
-			string aliasName;
-			string propertyName;
 			string fullName;
-			if (idents.length == 1) {
-				aliasName = fromClause[0].entityAlias;
-				enforceEx!SyntaxError(items[p].type != TokenType.Alias, "Syntax error in WHERE condition - unexpected alias " ~ aliasName ~ errorContext(items[p]));
-				propertyName = idents[0];
-			} else if (idents.length == 2) {
-				aliasName = idents[0];
-				propertyName = idents[1];
-				enforceEx!SyntaxError(items[p].type == TokenType.Alias, "Syntax error in WHERE condition - unknown alias " ~ aliasName ~ errorContext(items[p]));
+			FromClauseItem * a;
+			if (items[p].type == TokenType.Alias) {
+				a = findFromClauseByAlias(idents[0]);
+				idents.popFront();
 			} else {
-				enforceEx!SyntaxError(false, "Only one and two levels {property} and {entityAlias.property} supported for property reference in current version -" ~ errorContext(items[p]));
+				// use first FROM clause if alias is not specified
+				a = &fromClause[0];
 			}
-			fullName = aliasName ~ "." ~ propertyName;
-			//writeln("full name = " ~ fullName);
-			FromClauseItem * a = findFromClauseByAlias(aliasName);
+			string aliasName = a.entityAlias;
 			EntityInfo ei = a.entity;
+			enforceEx!SyntaxError(idents.length > 0, "Syntax error in WHERE condition - alias w/o property name: " ~ aliasName ~ errorContext(items[p]));
+			string propertyName = idents[0];
+			idents.popFront();
+			fullName = aliasName ~ "." ~ propertyName;
 			PropertyInfo pi = ei.findProperty(propertyName);
+			while (pi.embedded) { // loop to allow nested @Embedded
+				enforceEx!SyntaxError(idents.length > 0, "Syntax error in WHERE condition - @Embedded property reference should include reference to @Embeddable property " ~ aliasName ~ errorContext(items[p]));
+				propertyName = idents[0];
+				idents.popFront();
+				pi = pi.referencedEntity.findProperty(propertyName);
+				fullName = fullName ~ "." ~ propertyName;
+			}
+			enforceEx!SyntaxError(idents.length == 0, "Unexpected extra field name " ~ idents[0] ~ errorContext(items[p]));
+			//writeln("full name = " ~ fullName);
 			Token t = new Token(items[p].pos, TokenType.Field, fullName);
 			t.entity = ei;
 			t.field = pi;
