@@ -355,10 +355,10 @@ string getColumnName(T, string m)() {
 			return applyDefault(a.name, toLower(getPropertyName!(T,m)()));
 		}
 		static if (a.stringof == Column.stringof) {
-			return toLower(getPropertyName!(T,m)());
+			return camelCaseToUnderscoreDelimited(getPropertyName!(T,m)());
 		}
 	}
-	return toLower(m);
+	return camelCaseToUnderscoreDelimited(m);
 }
 
 int getColumnLength(T, string m)() {
@@ -968,14 +968,14 @@ string getEmbeddedPropertyVariantWriteCode(T, string m, string className)() {
 	}
 }
 
-string getEmbeddedPropertyObjectWriteCode(T, string m)() {
+string getEmbeddedPropertyObjectWriteCode(T, string m, string className)() {
 	immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
 	static if (kind == PropertyMemberKind.FIELD_MEMBER) {
-		return "entity." ~ m ~ " = value;";
+		return "entity." ~ m ~ " = cast(" ~ className ~ ")value;";
 	} else if (kind == PropertyMemberKind.GETTER_MEMBER) {
-		return "entity." ~ getterNameToSetterName(m) ~ "(value);";
+		return "entity." ~ getterNameToSetterName(m) ~ "(cast(" ~ className ~ ")value);";
 	} else if (kind == PropertyMemberKind.PROPERTY_MEMBER) {
-		return "entity." ~ m ~ " = value;";
+		return "entity." ~ m ~ " = cast(" ~ className ~ ")value;";
 	} else {
 		assert(0);
 	}
@@ -999,9 +999,9 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
 	immutable string datasetReadCode = null; //getColumnTypeDatasetReadCode!(T,m)();
 	immutable string propertyWriteCode = null; //getPropertyWriteCode!(T,m)();
 	immutable string datasetWriteCode = null; //getColumnTypeDatasetWriteCode!(T,m)();
-	immutable string propertyVariantSetCode = getEmbeddedPropertyVariantWriteCode!(T,m,referencedClassName); // getPropertyVariantWriteCode!(T,m)();
+	immutable string propertyVariantSetCode = getEmbeddedPropertyVariantWriteCode!(T, m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
 	immutable string propertyVariantGetCode = "Variant(" ~ propertyReadCode ~ " is null ? null : " ~ propertyReadCode ~ ")"; //getPropertyVariantReadCode!(T,m)();
-	immutable string propertyObjectSetCode = getEmbeddedPropertyObjectWriteCode!(T,m); // getPropertyVariantWriteCode!(T,m)();
+	immutable string propertyObjectSetCode = getEmbeddedPropertyObjectWriteCode!(T,m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
 	immutable string propertyObjectGetCode = propertyReadCode; //getPropertyVariantReadCode!(T,m)();
 	immutable string keyIsSetCode = null; //getColumnTypeKeyIsSetCode!(T,m)();
 	immutable string isNullCode = propertyReadCode ~ " is null";
@@ -1045,6 +1045,7 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
 		"\n" ~
 			"function(Object obj) { \n" ~ 
 			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+			"    assert(entity !is null);\n" ~
 			"    return " ~ propertyObjectGetCode ~ "; \n" ~
 			" }\n";
 	immutable string setObjectFuncDef = 
@@ -1070,7 +1071,9 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
 			getVariantFuncDef ~ ", " ~
 			setVariantFuncDef ~ ", " ~
 			keyIsSetFuncDef ~ ", " ~
-			isNullFuncDef ~
+			isNullFuncDef ~ ", " ~
+			getObjectFuncDef ~ ", " ~
+			setObjectFuncDef ~ 
 			")";
 }
 
@@ -1171,6 +1174,8 @@ string getEntityDef(T)() {
 	immutable string entityName = getEntityName!T();
 	immutable string tableName = getTableName!T();
 
+	pragma(msg, "preparing entity : " ~ entityName);
+
 	static assert (entityName != null, "Type " ~ typeName ~ " has no Entity name specified");
 	static assert (tableName != null, "Type " ~ typeName ~ " has no Table name specified");
 
@@ -1180,7 +1185,7 @@ string getEntityDef(T)() {
 	generatedEntityInfo ~= (hasHibernatedEmbeddableAnnotation!T) ? "true," : "false,";
 	generatedEntityInfo ~= "[\n";
 
-	pragma(msg, entityName ~ " : " ~ ((hasHibernatedEmbeddableAnnotation!T) ? "true," : "false,"));
+	//pragma(msg, entityName ~ " : " ~ ((hasHibernatedEmbeddableAnnotation!T) ? "true," : "false,"));
 
 	foreach (m; __traits(allMembers, T)) {
 		//pragma(msg, m);
@@ -1213,6 +1218,8 @@ string getEntityDef(T)() {
 	generatedEntityInfo ~= "" ~ typeName ~ ".classinfo";
 	generatedEntityInfo ~= ")";
 
+	pragma(msg, "built entity : " ~ entityName);
+
 	return generatedEntityInfo ~ "\n" ~ generatedGettersSetters;
 }
 
@@ -1230,6 +1237,7 @@ string entityListDef(T ...)() {
 	}
 	string code = 
 		"static this() {\n" ~
+		"    //writeln(\"starting static initializer\");\n" ~
 		"    entities = [\n" ~ res ~ "];\n" ~
 		"    EntityInfo [string] map;\n" ~
 		"    EntityInfo [TypeInfo_Class] typemap;\n" ~
@@ -1239,13 +1247,20 @@ string entityListDef(T ...)() {
 		"    }\n" ~
 		"    entityMap = map;\n" ~
 		"    classMap = typemap;\n" ~
+		"    //writeln(\"updating referenced entities\");\n" ~
 		"    foreach(e; entities) {\n" ~
 		"        foreach(p; e.getProperties()) {\n" ~
-		"            if (p.referencedEntityName !is null)\n" ~
+		"            //writeln(\"updating property \" ~ p.propertyName);\n" ~
+		"            if (p.referencedEntityName !is null) {\n" ~
+		"                //writeln(\"embedded entity \" ~ p.referencedEntityName);\n" ~
+		"                enforceEx!HibernatedException((p.referencedEntityName in map) !is null, \"embedded entity not found in schema: \" ~ p.referencedEntityName);\n" ~
 		"                p.referencedEntity = map[p.referencedEntityName];\n" ~
+		"            }\n" ~
 		"        }\n" ~
 		"    }\n" ~
+		"    //writeln(\"finished static initializer\");\n" ~
 		"}";
+	pragma(msg, "built entity list");
     return code;
 }
 
@@ -1269,6 +1284,7 @@ abstract class SchemaInfo : EntityMetaData {
 			if (pi.embedded) {
 				EntityInfo emei = pi.referencedEntity;
 				query ~= getAllFieldList(emei);
+				//writeln("Embedded fields: " ~ getAllFieldList(emei));
 			} else {
 				query ~= pi.columnName;
 			}
@@ -1372,13 +1388,21 @@ abstract class SchemaInfo : EntityMetaData {
 
 	public int writeAllColumns(Object obj, DataSetWriter w, int startColumn) {
 		EntityInfo ei = findEntityForObject(obj);
+		//writeln(ei.name ~ ".writeAllColumns");
 		int columnCount = 0;
 		for (int i = 0; i<ei.getPropertyCount(); i++) {
 			PropertyInfo pi = ei.getProperty(i);
 			if (pi.embedded) {
 				EntityInfo emei = pi.referencedEntity;
+				//writeln("getting embedded entity " ~ emei.name);
+				assert(pi.getObjectFunc !is null, "No getObjectFunc defined for embedded entity " ~ emei.name);
 				Object em = pi.getObjectFunc(obj);
+				if (em is null)
+					em = emei.createEntity();
+				assert(em !is null, "embedded object is null");
+				//writeln("writing embedded entity " ~ emei.name);
 				int columnsWritten = writeAllColumns(em, w, startColumn + columnCount);
+				//writeln("written");
 				columnCount += columnsWritten;
 			} else {
 				pi.writeFunc(obj, w, startColumn + columnCount);
@@ -1620,6 +1644,10 @@ version(unittest) {
         string name;
 		@Embedded
 		Address address;
+
+		this() {
+			address = new Address();
+		}
     }
     
 	@Embeddable
@@ -1729,10 +1757,10 @@ version(unittest) {
     string[] UNIT_TEST_CREATE_TABLES_SCRIPT = 
 	[
          "CREATE TABLE IF NOT EXISTS users (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags INT, comment TEXT, customer_fk BIGINT NULL)",
-         "CREATE TABLE IF NOT EXISTS customers (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)",
-         "INSERT INTO customers SET id=1, name='customer 1'",
-         "INSERT INTO customers SET id=2, name='customer 2'",
-         "INSERT INTO customers SET id=3, name='customer 3'",
+         "CREATE TABLE IF NOT EXISTS customers (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, zip varchar(20), city varchar(100), street_address varchar(255))",
+         "INSERT INTO customers SET id=1, name='customer 1', zip='12345'",
+         "INSERT INTO customers SET id=2, name='customer 2', zip='54321'",
+         "INSERT INTO customers SET id=3, name='customer 3', street_address='Baker Street, 24'",
          "INSERT INTO users SET id=1, name='user 1', flags=11,   comment='comments for user 1', customer_fk=1",
          "INSERT INTO users SET id=2, name='user 2', flags=22,   comment='this user belongs to customer 1', customer_fk=1",
          "INSERT INTO users SET id=3, name='user 3', flags=NULL, comment='this user belongs to customer 2', customer_fk=2",
@@ -1755,9 +1783,11 @@ version(unittest) {
 unittest {
 
 	// Checking generated metadata
-	EntityMetaData schema = new SchemaInfoImpl!(User, Customer, T1, TypeTest);
+	EntityMetaData schema = new SchemaInfoImpl!(User, Customer, T1, TypeTest, Address);
 
-	assert(schema.getEntityCount() == 4);
+	//writeln("metadata test 1");
+
+	assert(schema.getEntityCount() == 5);
 	assert(schema.findEntity("User").findProperty("name").columnName == "name");
 	assert(schema.findEntity("User").getProperties()[0].columnName == "id");
 	assert(schema.findEntity("User").getProperty(2).propertyName == "flags");
@@ -1766,6 +1796,9 @@ unittest {
     assert(schema.findEntity("User").findProperty("name").key == false);
     assert(schema.findEntity("Customer").findProperty("id").generated == true);
 	assert(schema.findEntity("Customer").findProperty("id").key == true);
+	assert(schema.findEntity("Customer").findProperty("address").embedded == true);
+	assert(schema.findEntity("Customer").findProperty("address").referencedEntity !is null);
+	assert(schema.findEntity("Customer").findProperty("address").referencedEntity.findProperty("streetAddress").columnName == "street_address");
 
 	assert(schema.findEntity("User").findProperty("id").readFunc !is null);
 
@@ -1796,9 +1829,11 @@ unittest {
 unittest {
     if (MYSQL_TESTS_ENABLED) {
         recreateTestSchema();
-        
+
+		//writeln("metadata test 2");
+
         // Checking generated metadata
-        EntityMetaData schema = new SchemaInfoImpl!(User, Customer, T1, TypeTest);
+		EntityMetaData schema = new SchemaInfoImpl!(User, Customer, T1, TypeTest, Address);
         Dialect dialect = new MySQLDialect();
         DataSource ds = createUnitTestMySQLDataSource();
         SessionFactory factory = new SessionFactoryImpl(schema, dialect, ds);
@@ -1833,6 +1868,21 @@ unittest {
         User u6 = cast(User)sess.load("User", Variant(6));
 		assert(u6.name == "test user 6");
         assert(u6.customerId.isNull);
+
+		// 
+		//writeln("loading customer 3");
+		// testing @Embedded property
+		Customer c3 = cast(Customer)sess.load("Customer", Variant(3));
+		assert(c3.address.zip is null);
+		assert(c3.address.streetAddress == "Baker Street, 24");
+		c3.address.streetAddress = "Baker Street, 24/2";
+		c3.address.zip = "55555";
+		//writeln("updating customer 3");
+		sess.update(c3);
+		Customer c3_reloaded = cast(Customer)sess.load("Customer", Variant(3));
+		assert(c3.address.streetAddress == "Baker Street, 24/2");
+		assert(c3.address.zip == "55555");
+
 
 		// check Session.save() when id is filled
 		Customer c4 = new Customer();

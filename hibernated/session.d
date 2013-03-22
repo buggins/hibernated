@@ -311,11 +311,12 @@ class SessionImpl : Session {
     override void update(Object obj) {
 		EntityInfo info = metaData.findEntityForObject(obj);
 		enforceEx!HibernatedException(info.isKeySet(obj), "Cannot persist entity w/o key assigned");
-		string query = metaData.generateUpdateForEntity(info);;
+		string query = metaData.generateUpdateForEntity(info);
+		//writeln("Query: " ~ query);
 		PreparedStatement stmt = conn.prepareStatement(query);
 		scope(exit) stmt.close();
-		metaData.writeAllColumnsExceptKey(obj, stmt, 1);
-		info.keyProperty.writeFunc(obj, stmt, cast(int)(info.getPropertyCountExceptKey() + 1));
+		int columnCount = metaData.writeAllColumnsExceptKey(obj, stmt, 1);
+		info.keyProperty.writeFunc(obj, stmt, columnCount + 1);
 		stmt.executeUpdate();
 	}
 
