@@ -16,74 +16,80 @@ module hibernated.type;
 
 import std.datetime;
 
-class NullableNumber {
-	bool is_null;
-}
-
-class NumberBox(T) : NullableNumber {
-	T value;
-	this(T v) { this.value = v; }
-}
-
-alias NumberBox!int Integer;
+import ddbc.core;
 
 class Type {
 public:
+	immutable SqlType getSqlType() { return SqlType.OTHER; }
 	immutable string getName() { return ""; }
-	immutable TypeInfo getReturnedClass() { return null; }
+	//immutable TypeInfo getReturnedClass() { return null; }
 }
 
 class StringType : Type {
+private:
+	int _length;
 public:
+	this(int len = 0) { _length = len; }
+	@property int length() { return _length; }
+	override immutable SqlType getSqlType() { return SqlType.VARCHAR; }
 	override immutable string getName() { return "String"; }
-	override immutable TypeInfo getReturnedClass() { return typeid(string); }
+	//override immutable TypeInfo getReturnedClass() { return typeid(string); }
 
 }
 
-class IntegerType : Type {
+class NumberType : Type {
+protected:
+	int _length;
+	bool _unsigned;
+	SqlType _type;
 public:
+	this(int len, bool unsigned, SqlType type) {
+		_length = len;
+		_unsigned = unsigned;
+		_type = type;
+	}
+	@property int length() { return _length; }
+	@property bool unsigned() { return _unsigned; }
+	override immutable SqlType getSqlType() { return _type; }
 	override immutable string getName() { return "Integer"; }
-	override immutable TypeInfo getReturnedClass() { return typeid(int); }
-
-}
-
-class BigIntegerType : Type {
-public:
-	override immutable string getName() { return "BigInteger"; }
-	override immutable TypeInfo getReturnedClass() { return typeid(int); }
-	
 }
 
 class DateTimeType : Type {
 public:
 	override immutable string getName() { return "DateTime"; }
-	override immutable TypeInfo getReturnedClass() { return typeid(DateTime); }
+	//override immutable TypeInfo getReturnedClass() { return typeid(DateTime); }
+	override immutable SqlType getSqlType() { return SqlType.DATETIME; }
 }
 
 class DateType : Type {
 public:
 	override immutable string getName() { return "Date"; }
-	override immutable TypeInfo getReturnedClass() { return typeid(Date); }
+	//override immutable TypeInfo getReturnedClass() { return typeid(Date); }
+	override immutable SqlType getSqlType() { return SqlType.DATE; }
 }
 
 class TimeType : Type {
 public:
 	override immutable string getName() { return "Time"; }
-	override immutable TypeInfo getReturnedClass() { return typeid(TimeOfDay); }
+	//override immutable TypeInfo getReturnedClass() { return typeid(TimeOfDay); }
+	override immutable SqlType getSqlType() { return SqlType.TIME; }
 }
 
 class ByteArrayBlobType : Type {
 public:
 	override immutable string getName() { return "ByteArray"; }
-	override immutable TypeInfo getReturnedClass() { return typeid(byte[]); }
+	//override immutable TypeInfo getReturnedClass() { return typeid(byte[]); }
+	override immutable SqlType getSqlType() { return SqlType.BLOB; }
 }
 
 class UbyteArrayBlobType : Type {
 public:
 	override immutable string getName() { return "UbyteArray"; }
-	override immutable TypeInfo getReturnedClass() { return typeid(ubyte[]); }
+	//override immutable TypeInfo getReturnedClass() { return typeid(ubyte[]); }
+	override immutable SqlType getSqlType() { return SqlType.BLOB; }
 }
 
+// TODO
 class EntityType : Type {
 	private string name;
 	private immutable TypeInfo_Class classType;
@@ -93,5 +99,5 @@ public:
 		this.name = className;
 	}
 	override immutable string getName() { return name; }
-	override immutable TypeInfo getReturnedClass() { return null; }
+	//override immutable TypeInfo getReturnedClass() { return null; }
 }

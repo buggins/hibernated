@@ -192,6 +192,18 @@ bool isHibernatedEntityAnnotation(alias t)() {
 	return is(typeof(t) == Entity) || t.stringof == Entity.stringof;
 }
 
+bool isHibernatedNullAnnotation(alias t)() {
+	return is(typeof(t) == Null) || t.stringof == Null.stringof;
+}
+
+bool isHibernatedNotNullAnnotation(alias t)() {
+	return is(typeof(t) == NotNull) || t.stringof == NotNull.stringof;
+}
+
+bool isHibernatedUniqueAnnotation(alias t)() {
+	return is(typeof(t) == UniqueKey) || t.stringof == UniqueKey.stringof;
+}
+
 bool isHibernatedEmbeddableAnnotation(alias t)() {
 	return is(typeof(t) == Embeddable) || t.stringof == Embeddable.stringof;
 }
@@ -286,6 +298,34 @@ bool hasHibernatedEntityOrEmbeddableAnnotation(T)() {
 	return false;
 }
 
+bool hasHibernatedNullAnnotation(T, string m)() {
+	foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
+		static if (isHibernatedNullAnnotation!a) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool hasHibernatedNotNullAnnotation(T, string m)() {
+	foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
+		static if (isHibernatedNotNullAnnotation!a) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool hasHibernatedUniqueAnnotation(T, string m)() {
+	foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
+		static if (isHibernatedUniqueAnnotation!a) {
+			return true;
+		}
+	}
+	return false;
+}
+
+
 /// returns entity name for class type
 string getEntityName(T : Object)() {
 	foreach (a; __traits(getAttributes, T)) {
@@ -368,24 +408,6 @@ int getColumnLength(T, string m)() {
 		}
 	}
 	return 0;
-}
-
-bool getColumnNullable(T, string m)() {
-	foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
-		static if (is(typeof(a) == Column)) {
-			return a.nullable;
-		}
-	}
-	return true;
-}
-
-bool getColumnUnique(T, string m)() {
-	foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
-		static if (is(typeof(a) == Column)) {
-			return a.unique;
-		}
-	}
-	return false;
 }
 
 string getPropertyName(T, string m)() {
@@ -666,6 +688,40 @@ string getPropertyReadCode(T, string m)() {
 	return substituteParam(PropertyMemberKind_ReadCode[getPropertyMemberKind!(T,m)()], m);
 }
 
+static immutable bool[] ColumnTypeCanHoldNulls = 
+	[
+	 false, //BYTE_TYPE,    // byte
+	 false, //SHORT_TYPE,   // short
+	 false, //INT_TYPE,     // int
+	 false, //LONG_TYPE,    // long
+	 false, //UBYTE_TYPE,   // ubyte
+	 false, //USHORT_TYPE,  // ushort
+	 false, //UINT_TYPE,    // uint
+	 false, //ULONG_TYPE,   // ulong
+	 true, //NULLABLE_BYTE_TYPE,  // Nullable!byte
+	 true, //NULLABLE_SHORT_TYPE, // Nullable!short
+	 true, //NULLABLE_INT_TYPE,   // Nullable!int
+	 true, //NULLABLE_LONG_TYPE,  // Nullable!long
+	 true, //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
+	 true, //NULLABLE_USHORT_TYPE,// Nullable!ushort
+	 true, //NULLABLE_UINT_TYPE,  // Nullable!uint
+	 true, //NULLABLE_ULONG_TYPE, // Nullable!ulong
+	 true, //STRING_TYPE   // string
+	 false, //DATETIME_TYPE, // std.datetime.DateTime
+	 false, //DATE_TYPE, // std.datetime.Date
+	 false, //TIME_TYPE, // std.datetime.TimeOfDay
+	 true, //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
+	 true, //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
+	 true, //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
+	 true, //BYTE_ARRAY_TYPE, // byte[]
+	 true, //UBYTE_ARRAY_TYPE, // ubyte[]
+	 ];
+
+string canColumnTypeHoldNulls(T, string m)() {
+	return ColumnTypeCanHoldNulls[getPropertyMemberType!(T,m)];
+}
+
+
 static immutable string[] ColumnTypeKeyIsSetCode = 
 	[
 	 "(%s != 0)", //BYTE_TYPE,    // byte
@@ -825,22 +881,22 @@ string getPropertyVariantReadCode(T, string m)() {
 
 static immutable string[] ColumnTypeConstructorCode = 
 	[
-	 "new IntegerType()", //BYTE_TYPE,    // byte
-	 "new IntegerType()", //SHORT_TYPE,   // short
-	 "new IntegerType()", //INT_TYPE,     // int
-	 "new BigIntegerType()", //LONG_TYPE,    // long
-	 "new IntegerType()", //UBYTE_TYPE,   // ubyte
-	 "new IntegerType()", //USHORT_TYPE,  // ushort
-	 "new IntegerType()", //UINT_TYPE,    // uint
-	 "new BigIntegerType()", //ULONG_TYPE,   // ulong
-	 "new IntegerType()", //NULLABLE_BYTE_TYPE,  // Nullable!byte
-	 "new IntegerType()", //NULLABLE_SHORT_TYPE, // Nullable!short
-	 "new IntegerType()", //NULLABLE_INT_TYPE,   // Nullable!int
-	 "new BigIntegerType()", //NULLABLE_LONG_TYPE,  // Nullable!long
-	 "new IntegerType()", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
-	 "new IntegerType()", //NULLABLE_USHORT_TYPE,// Nullable!ushort
-	 "new IntegerType()", //NULLABLE_UINT_TYPE,  // Nullable!uint
-	 "new BigIntegerType()", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+	 "new NumberType(2, false, SqlType.TINYINT)", //BYTE_TYPE,    // byte
+	 "new NumberType(4, false, SqlType.SMALLINT)", //SHORT_TYPE,   // short
+	 "new NumberType(9, false, SqlType.INTEGER)", //INT_TYPE,     // int
+	 "new NumberType(20, false, SqlType.BIGINT)", //LONG_TYPE,    // long
+	 "new NumberType(2, true, SqlType.TINYINT)", //UBYTE_TYPE,   // ubyte
+	 "new NumberType(4, true, SqlType.SMALLINT)", //USHORT_TYPE,  // ushort
+	 "new NumberType(9, true, SqlType.INTEGER)", //UINT_TYPE,    // uint
+	 "new NumberType(20, true, SqlType.BIGINT)", //ULONG_TYPE,   // ulong
+	 "new NumberType(2, false, SqlType.TINYINT)", //NULLABLE_BYTE_TYPE,  // Nullable!byte
+	 "new NumberType(4, false, SqlType.SMALLINT)", //NULLABLE_SHORT_TYPE, // Nullable!short
+	 "new NumberType(9, false, SqlType.INTEGER)", //NULLABLE_INT_TYPE,   // Nullable!int
+	 "new NumberType(20, false, SqlType.BIGINT)", //NULLABLE_LONG_TYPE,  // Nullable!long
+	 "new NumberType(2, true, SqlType.TINYINT)", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
+	 "new NumberType(4, true, SqlType.SMALLINT)", //NULLABLE_USHORT_TYPE,// Nullable!ushort
+	 "new NumberType(9, true, SqlType.INTEGER)", //NULLABLE_UINT_TYPE,  // Nullable!uint
+	 "new NumberType(20, true, SqlType.BIGINT)", //NULLABLE_ULONG_TYPE, // Nullable!ulong
 	 "new StringType()", //STRING_TYPE   // string
 	 "new DateTimeType()", //DATETIME_TYPE, // std.datetime.DateTime
 	 "new DateType()", //DATE_TYPE, // std.datetime.Date
@@ -992,8 +1048,10 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
 	immutable bool isGenerated = hasGeneratedAnnotation!(T, m)();
 	immutable string columnName = getColumnName!(T, m)();
 	immutable length = getColumnLength!(T, m)();
-	immutable bool nullable = getColumnNullable!(T, m)();
-	immutable bool unique = getColumnUnique!(T, m)();
+	immutable bool hasNull = hasHibernatedNullAnnotation!(T,m)();
+	immutable bool hasNotNull = hasHibernatedNotNullAnnotation!(T,m);
+	immutable bool nullable = hasNull ? true : (hasNotNull ? false : true); //canColumnTypeHoldNulls!(T.m)
+	immutable bool unique = hasHibernatedUniqueAnnotation!(T,m);
 	immutable string typeName = "new EntityType(cast(immutable TypeInfo_Class)" ~ entityClassName ~ ".classinfo, \"" ~ entityClassName ~ "\")"; //getColumnTypeName!(T, m)();
 	immutable string propertyReadCode = getPropertyReadCode!(T,m)();
 	immutable string datasetReadCode = null; //getColumnTypeDatasetReadCode!(T,m)();
@@ -1086,8 +1144,10 @@ string getSimplePropertyDef(T, immutable string m)() {
 	immutable bool isGenerated = hasGeneratedAnnotation!(T, m)();
 	immutable string columnName = getColumnName!(T, m)();
 	immutable length = getColumnLength!(T, m)();
-	immutable bool nullable = getColumnNullable!(T, m)();
-	immutable bool unique = getColumnUnique!(T, m)();
+	immutable bool hasNull = hasHibernatedNullAnnotation!(T,m);
+	immutable bool hasNotNull = hasHibernatedNotNullAnnotation!(T,m);
+	immutable bool nullable = hasNull ? true : (hasNotNull ? false : true); //canColumnTypeHoldNulls!(T.m)
+	immutable bool unique = hasHibernatedUniqueAnnotation!(T,m);
 	immutable string typeName = getColumnTypeName!(T, m)();
 	immutable string propertyReadCode = getPropertyReadCode!(T,m)();
 	immutable string datasetReadCode = getColumnTypeDatasetReadCode!(T,m)();
@@ -1559,7 +1619,7 @@ unittest {
 
 
 	EntityInfo entity = new EntityInfo("user", "users",  false, [
-	                                                      new PropertyInfo("id", "id", new IntegerType(), 0, true, true, false, false, null, null, null, null, null, null, null)
+	                                                      new PropertyInfo("id", "id", new NumberType(10,false,SqlType.INTEGER), 0, true, true, false, false, null, null, null, null, null, null, null)
 	                                                     ], null);
 
 	assert(entity.properties.length == 1);
@@ -1569,11 +1629,11 @@ unittest {
 //	immutable string infos = entityListDef!(User, Customer)();
 
 	EntityInfo ei = new EntityInfo("User", "users", false, [
-	                                                 new PropertyInfo("id", "id_column", new IntegerType(), 0, true, true, false, false, null, null, null, null, null, null, null),
+	                                                        new PropertyInfo("id", "id_column", new NumberType(10,false,SqlType.INTEGER), 0, true, true, false, false, null, null, null, null, null, null, null),
 	                                                 new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, false, null, null, null, null, null, null, null),
 	                                                 new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, false, null, null, null, null, null, null, null),
 	                                                 new PropertyInfo("login", "login", new StringType(), 0, false, false, true, false, null, null, null, null, null, null, null),
-	                                                 new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true, false, null, null, null, null, null, null, null)], null);
+	                                                        new PropertyInfo("testColumn", "testcolumn", new NumberType(10,false,SqlType.INTEGER), 0, false, false, true, false, null, null, null, null, null, null, null)], null);
 
 	//void function(User, DataSetReader, int) readFunc = function(User entity, DataSetReader reader, int index) { };
 
@@ -1584,14 +1644,14 @@ unittest {
 
 	EntityInfo[] entities3 =  [
 	                           new EntityInfo("User", "users", false, [
-	                                 new PropertyInfo("id", "id_column", new IntegerType(), 0, true, true, false, false, null, null, null, null, null, null, null),
+	                                        new PropertyInfo("id", "id_column", new NumberType(10,false,SqlType.INTEGER), 0, true, true, false, false, null, null, null, null, null, null, null),
 	                                 new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, false, null, null, null, null, null, null, null),
 	                                 new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, false, null, null, null, null, null, null, null),
 	                                 new PropertyInfo("login", "login", new StringType(), 0, false, false, true, false, null, null, null, null, null, null, null),
-	                                 new PropertyInfo("testColumn", "testcolumn", new IntegerType(), 0, false, false, true, false, null, null, null, null, null, null, null)], null)
+	                                        new PropertyInfo("testColumn", "testcolumn", new NumberType(10,false,SqlType.INTEGER), 0, false, false, true, false, null, null, null, null, null, null, null)], null)
 	                                                                 ,
 	                           new EntityInfo("Customer", "customer", false, [
-	                                        new PropertyInfo("id", "id", new IntegerType(), 0, true, true, true, false, null, null, null, null, null, null, null),
+	                                               new PropertyInfo("id", "id", new NumberType(10,false,SqlType.INTEGER), 0, true, true, true, false, null, null, null, null, null, null, null),
 	                                        new PropertyInfo("name", "name", new StringType(), 0, false, false, true, false, null, null, null, null, null, null, null)], null)
 	                                                                 ];
 
@@ -1668,6 +1728,8 @@ version(unittest) {
         int id;
 
         @Column
+		@NotNull
+		@UniqueKey
         string name;
 
         // property column
@@ -1679,7 +1741,8 @@ version(unittest) {
         // getter/setter property
         string comment;
         @Column
-        string getComment() { return comment; }
+		@Null
+		string getComment() { return comment; }
         void setComment(string v) { comment = v; }
 
 
