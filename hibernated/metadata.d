@@ -77,6 +77,15 @@ interface EntityMetaData {
 	public void setPropertyValue(Object obj, string propertyName, Variant value);
 }
 
+enum RelationType {
+	None,
+	Embedded,
+	OneToOne,
+	OneToMany,
+	ManyToOne,
+	ManyToMany,
+}
+
 /// Metadata of entity property
 class PropertyInfo {
 public:
@@ -95,7 +104,8 @@ public:
 	bool key;
 	bool generated;
 	bool nullable;
-	bool embedded;
+	RelationType relation;
+
 	string referencedEntityName; // for @Embedded, @OneToOne, @OneToMany, @ManyToOne, @ManyToMany holds name of entity
 	EntityInfo referencedEntity; // for @Embedded, @OneToOne, @OneToMany, @ManyToOne, @ManyToMany holds entity info reference, filled in runtime
 	ReaderFunc readFunc;
@@ -106,7 +116,14 @@ public:
 	IsNullFunc isNullFunc;
 	GetObjectFunc getObjectFunc;
 	SetObjectFunc setObjectFunc;
-	this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, bool embedded, string referencedEntityName, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, KeyIsSetFunc keyIsSetFunc, IsNullFunc isNullFunc, GetObjectFunc getObjectFunc = null, SetObjectFunc setObjectFunc = null) {
+
+	@property bool embedded() { return relation == RelationType.Embedded; };
+	@property bool oneToOne() { return relation == RelationType.OneToOne; };
+	@property bool oneToMany() { return relation == RelationType.OneToMany; };
+	@property bool manyToOne() { return relation == RelationType.ManyToOne; };
+	@property bool manyToMany() { return relation == RelationType.ManyToMany; };
+
+	this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, RelationType relation, string referencedEntityName, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, KeyIsSetFunc keyIsSetFunc, IsNullFunc isNullFunc, GetObjectFunc getObjectFunc = null, SetObjectFunc setObjectFunc = null) {
 		this.propertyName = propertyName;
 		this.columnName = columnName;
 		this.columnType = columnType;
@@ -114,7 +131,7 @@ public:
 		this.key = key;
 		this.generated = generated;
 		this.nullable = nullable;
-		this.embedded = embedded;
+		this.relation = relation;
 		this.referencedEntityName =referencedEntityName;
 		this.readFunc = reader;
 		this.writeFunc = writer;
@@ -377,8 +394,30 @@ bool hasGeneratedAnnotation(T, string m)() {
 	foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
 		static if (is(typeof(a) == Generated)) {
 			return true;
+		} else if (a.stringof == Generated.stringof) {
+			return true;
 		}
-		static if (a.stringof == Generated.stringof) {
+	}
+	return false;
+}
+
+bool hasOneToOneAnnotation(T, string m)() {
+	foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
+		static if (is(typeof(a) == OneToOne)) {
+			return true;
+		} else if (a.stringof == OneToOne.stringof) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool hasJoinColumnAnnotation(T, string m)() {
+	foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
+		static if (is(typeof(a) == JoinColumn)) {
+			return true;
+		}
+		static if (a.stringof == JoinColumn.stringof) {
 			return true;
 		}
 	}
@@ -392,13 +431,37 @@ string applyDefault(string s, string defaultValue) {
 string getColumnName(T, string m)() {
 	foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
 		static if (is(typeof(a) == Column)) {
-			return applyDefault(a.name, toLower(getPropertyName!(T,m)()));
+			return applyDefault(a.name, camelCaseToUnderscoreDelimited(getPropertyName!(T,m)()));
 		}
 		static if (a.stringof == Column.stringof) {
 			return camelCaseToUnderscoreDelimited(getPropertyName!(T,m)());
 		}
 	}
 	return camelCaseToUnderscoreDelimited(m);
+}
+
+string getJoinColumnName(T, string m)() {
+	foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
+		static if (is(typeof(a) == JoinColumn)) {
+			return applyDefault(a.name, camelCaseToUnderscoreDelimited(getPropertyName!(T,m)()) ~ "_fk");
+		}
+		static if (a.stringof == JoinColumn.stringof) {
+			return camelCaseToUnderscoreDelimited(getPropertyName!(T,m)()) ~ "_fk";
+		}
+	}
+	return camelCaseToUnderscoreDelimited(m) ~ "_fk";
+}
+
+string getOneToOneName(T, string m)() {
+	foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
+		static if (is(typeof(a) == OneToOne)) {
+			return a.name;
+		}
+//		static if (a.stringof == OneToOne.stringof) {
+//			return null;
+//		}
+	}
+	return null;
 }
 
 int getColumnLength(T, string m)() {
@@ -483,13 +546,30 @@ string getPropertyEmbeddedEntityName(T : Object, string m)() {
 			static assert(hasHibernatedEmbeddableAnnotation!(ReturnType!(ti)), "@Embedded property class should have @Embeddable annotation");
 			return getEntityName!(ReturnType!(ti));
 		} else
-			return null;
+			static assert(false, "@Embedded property can be only class with @Embeddable annotation");
 	} else {
 		static if (isImplicitlyConvertible!(ti, Object)) {
 			static assert(hasHibernatedEmbeddableAnnotation!(ti), "@Embedded property class should have @Embeddable annotation");
 			return getEntityName!ti;
 		} else 
-			return null;
+			static assert(false, "@Embedded property can be only class with @Embeddable annotation");
+	}
+}
+
+string getPropertyReferencedEntityName(T : Object, string m)() {
+	alias typeof(__traits(getMember, T, m)) ti;
+	static if (is(ti == function)) {
+		static if (isImplicitlyConvertible!(ReturnType!(ti), Object)) {
+			static assert(!hasHibernatedEmbeddableAnnotation!(ReturnType!(ti)), "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany referenced property class should not have @Embeddable annotation");
+			return getEntityName!(ReturnType!(ti));
+		} else
+			static assert(false, "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany property can be only class");
+	} else {
+		static if (isImplicitlyConvertible!(ti, Object)) {
+			static assert(!hasHibernatedEmbeddableAnnotation!(ti), "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany referenced property class should not have @Embeddable annotation");
+			return getEntityName!ti;
+		} else 
+			static assert(false, "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany property can be only class");
 	}
 }
 
@@ -500,13 +580,30 @@ string getPropertyEmbeddedClassName(T : Object, string m)() {
 			static assert(hasHibernatedEmbeddableAnnotation!(ReturnType!(ti)), "@Embedded property class should have @Embeddable annotation");
 			return fullyQualifiedName!(ReturnType!(ti));
 		} else
-			return null;
+			static assert(false, "@Embedded property can be only class with @Embeddable annotation");
 	} else {
 		static if (isImplicitlyConvertible!(ti, Object)) {
 			static assert(hasHibernatedEmbeddableAnnotation!(ti), "@Embedded property class should have @Embeddable annotation");
 			return fullyQualifiedName!ti;
 		} else 
-			return null;
+			static assert(false, "@Embedded property can be only class with @Embeddable annotation");
+	}
+}
+
+string getPropertyReferencedClassName(T : Object, string m)() {
+	alias typeof(__traits(getMember, T, m)) ti;
+	static if (is(ti == function)) {
+		static if (isImplicitlyConvertible!(ReturnType!(ti), Object)) {
+			static assert(!hasHibernatedEmbeddableAnnotation!(ReturnType!(ti)), "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany referenced property class should not have @Embeddable annotation");
+			return fullyQualifiedName!(ReturnType!(ti));
+		} else
+			static assert(false, "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany property can be only class");
+	} else {
+		static if (isImplicitlyConvertible!(ti, Object)) {
+			static assert(!hasHibernatedEmbeddableAnnotation!(ti), "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany referenced property class should not have @Embeddable annotation");
+			return fullyQualifiedName!ti;
+		} else 
+			static assert(false, "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany property can be only class");
 	}
 }
 
@@ -519,6 +616,7 @@ version (unittest) {
 		@Column
 		string lastName;
 	}
+
 	@Entity 
 	class EMUser {
 		@Id @Generated
@@ -532,14 +630,52 @@ version (unittest) {
 
 unittest {
 	static assert(hasHibernatedEmbeddableAnnotation!EMName);
+	static assert(hasHibernatedEmbeddableAnnotation!EMName);
 	static assert(hasEmbeddedAnnotation!(EMUser, "userName"));
+	static assert(!hasOneToOneAnnotation!(EMUser, "userName"));
 	static assert(getPropertyEmbeddedEntityName!(EMUser, "userName")() == "EMName");
 	static assert(getPropertyEmbeddedClassName!(EMUser, "userName")() == "hibernated.metadata.EMName");
-	pragma(msg, getEmbeddedPropertyDef!(EMUser, "userName")());
+	//pragma(msg, getEmbeddedPropertyDef!(EMUser, "userName")());
 
 	// Checking generated metadata
 	EntityMetaData schema = new SchemaInfoImpl!(EMName, EMUser);
 
+}
+
+version (unittest) {
+	// for testing of Embeddable
+	@Entity 
+	class Person {
+		@Id
+		@Column
+		int id;
+		@Column
+		string firstName;
+		@Column
+		string lastName;
+		@OneToOne
+		MoreInfo moreInfo;
+	}
+	
+	@Entity 
+	class MoreInfo {
+		@Id @Generated
+		@Column
+		int id;
+		@Column 
+		long flags;
+	}
+}
+
+unittest {
+	static assert(hasOneToOneAnnotation!(Person, "moreInfo"));
+	static assert(getPropertyReferencedEntityName!(Person, "moreInfo")() == "MoreInfo");
+	static assert(getPropertyReferencedClassName!(Person, "moreInfo")() == "hibernated.metadata.MoreInfo");
+	pragma(msg, getOneToOnePropertyDef!(Person, "moreInfo")());
+	
+	// Checking generated metadata
+	EntityMetaData schema = new SchemaInfoImpl!(Person, MoreInfo);
+	
 }
 
 enum PropertyMemberType : int {
@@ -1094,6 +1230,105 @@ string getEmbeddedPropertyObjectWriteCode(T, string m, string className)() {
 }
 
 /// create source code for creation of Embedded definition
+string getOneToOnePropertyDef(T, immutable string m)() {
+	immutable string referencedEntityName = getPropertyReferencedEntityName!(T,m)();
+	immutable string referencedClassName = getPropertyReferencedClassName!(T,m)();
+	immutable string entityClassName = fullyQualifiedName!T;
+	immutable string propertyName = getPropertyName!(T,m)();
+	static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
+	immutable bool isId = hasIdAnnotation!(T, m)();
+	immutable bool isGenerated = hasGeneratedAnnotation!(T, m)();
+	immutable string columnName = getColumnName!(T, m)();
+	immutable length = getColumnLength!(T, m)();
+	immutable bool hasNull = hasHibernatedNullAnnotation!(T,m)();
+	immutable bool hasNotNull = hasHibernatedNotNullAnnotation!(T,m);
+	immutable bool nullable = hasNull ? true : (hasNotNull ? false : true); //canColumnTypeHoldNulls!(T.m)
+	immutable bool unique = hasHibernatedUniqueAnnotation!(T,m);
+	immutable string typeName = "new EntityType(cast(immutable TypeInfo_Class)" ~ entityClassName ~ ".classinfo, \"" ~ entityClassName ~ "\")"; //getColumnTypeName!(T, m)();
+	immutable string propertyReadCode = getPropertyReadCode!(T,m)();
+	immutable string datasetReadCode = null; //getColumnTypeDatasetReadCode!(T,m)();
+	immutable string propertyWriteCode = null; //getPropertyWriteCode!(T,m)();
+	immutable string datasetWriteCode = null; //getColumnTypeDatasetWriteCode!(T,m)();
+	immutable string propertyVariantSetCode = getEmbeddedPropertyVariantWriteCode!(T, m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
+	immutable string propertyVariantGetCode = "Variant(" ~ propertyReadCode ~ " is null ? null : " ~ propertyReadCode ~ ")"; //getPropertyVariantReadCode!(T,m)();
+	immutable string propertyObjectSetCode = getEmbeddedPropertyObjectWriteCode!(T,m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
+	immutable string propertyObjectGetCode = propertyReadCode; //getPropertyVariantReadCode!(T,m)();
+	immutable string keyIsSetCode = null; //getColumnTypeKeyIsSetCode!(T,m)();
+	immutable string isNullCode = propertyReadCode ~ " is null";
+	//	pragma(msg, "property read: " ~ propertyReadCode);
+	//	pragma(msg, "property write: " ~ propertyWriteCode);
+	//	pragma(msg, "variant get: " ~ propertyVariantGetCode);
+	immutable string readerFuncDef = "null";
+	//		"\n" ~
+	//		"function(Object obj, DataSetReader r, int index) { \n" ~ 
+	//			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+	//			"    " ~ propertyWriteCode ~ " \n" ~
+	//			" }\n";
+	immutable string writerFuncDef = "null";
+	//		"\n" ~
+	//		"function(Object obj, DataSetWriter r, int index) { \n" ~ 
+	//			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+	//			"    " ~ datasetWriteCode ~ " \n" ~
+	//			" }\n";
+	immutable string getVariantFuncDef = 
+		"\n" ~
+			"function(Object obj) { \n" ~ 
+			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+			"    return " ~ propertyVariantGetCode ~ "; \n" ~
+			" }\n";
+	immutable string setVariantFuncDef = 
+		"\n" ~
+			"function(Object obj, Variant value) { \n" ~ 
+			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+			"    " ~ propertyVariantSetCode ~ "\n" ~
+			" }\n";
+	immutable string keyIsSetFuncDef = "\n" ~
+		"function(Object obj) { \n" ~ 
+			"    return false;\n" ~
+			" }\n";
+	immutable string isNullFuncDef = "\n" ~
+		"function(Object obj) { \n" ~ 
+			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+			"    return " ~ isNullCode ~ ";\n" ~
+			" }\n";
+	immutable string getObjectFuncDef = 
+		"\n" ~
+			"function(Object obj) { \n" ~ 
+			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+			"    assert(entity !is null);\n" ~
+			"    return " ~ propertyObjectGetCode ~ "; \n" ~
+			" }\n";
+	immutable string setObjectFuncDef = 
+		"\n" ~
+			"function(Object obj, Object value) { \n" ~ 
+			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+			"    " ~ propertyObjectSetCode ~ "\n" ~
+			" }\n";
+	//	pragma(msg, propertyReadCode);
+	//	pragma(msg, datasetReadCode);
+	//	pragma(msg, propertyWriteCode);
+	//	pragma(msg, datasetWriteCode);
+	//	pragma(msg, readerFuncDef);
+	//	pragma(msg, writerFuncDef);
+	
+	return "    new PropertyInfo(\"" ~ propertyName ~ "\", \"" ~ columnName ~ "\", " ~ typeName ~ ", " ~ 
+		format("%s",length) ~ ", " ~ (isId ? "true" : "false")  ~ ", " ~ 
+			(isGenerated ? "true" : "false")  ~ ", " ~ (nullable ? "true" : "false") ~ ", " ~ 
+			"RelationType.OneToOne, " ~
+			(referencedEntityName !is null ? "\"" ~ referencedEntityName ~ "\"" : "null")  ~ ", " ~ 
+			readerFuncDef ~ ", " ~
+			writerFuncDef ~ ", " ~
+			getVariantFuncDef ~ ", " ~
+			setVariantFuncDef ~ ", " ~
+			keyIsSetFuncDef ~ ", " ~
+			isNullFuncDef ~ ", " ~
+			getObjectFuncDef ~ ", " ~
+			setObjectFuncDef ~ 
+			")";
+}
+
+
+/// create source code for creation of Embedded definition
 string getEmbeddedPropertyDef(T, immutable string m)() {
 	immutable string referencedEntityName = getPropertyEmbeddedEntityName!(T,m)();
 	immutable string referencedClassName = getPropertyEmbeddedClassName!(T,m)();
@@ -1178,7 +1413,7 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
 	return "    new PropertyInfo(\"" ~ propertyName ~ "\", \"" ~ columnName ~ "\", " ~ typeName ~ ", " ~ 
 		format("%s",length) ~ ", " ~ (isId ? "true" : "false")  ~ ", " ~ 
 			(isGenerated ? "true" : "false")  ~ ", " ~ (nullable ? "true" : "false") ~ ", " ~ 
-			"true, " ~ // embedded
+			"RelationType.Embedded, " ~
 			(referencedEntityName !is null ? "\"" ~ referencedEntityName ~ "\"" : "null")  ~ ", " ~ 
 			readerFuncDef ~ ", " ~
 			writerFuncDef ~ ", " ~
@@ -1254,7 +1489,7 @@ string getSimplePropertyDef(T, immutable string m)() {
 	return "    new PropertyInfo(\"" ~ propertyName ~ "\", \"" ~ columnName ~ "\", " ~ typeName ~ ", " ~ 
 		format("%s",length) ~ ", " ~ (isId ? "true" : "false")  ~ ", " ~ 
 			(isGenerated ? "true" : "false")  ~ ", " ~ (nullable ? "true" : "false") ~ ", " ~ 
-			"false, " ~ 
+			"RelationType.None, " ~ 
 			"null, " ~ 
 			readerFuncDef ~ ", " ~
 			writerFuncDef ~ ", " ~
@@ -1266,12 +1501,24 @@ string getSimplePropertyDef(T, immutable string m)() {
 }
 
 
-string getPropertyDef(T, immutable string m)() {
-	static if (hasEmbeddedAnnotation!(T, m)()) {
-		pragma(msg, getEmbeddedPropertyDef!(T, m)());
+string getPropertyDef(T, string m)() {
+	immutable bool isEmbedded = hasEmbeddedAnnotation!(T, m)();
+	immutable bool isOneToOne = hasOneToOneAnnotation!(T, m)();
+	immutable bool isSimple = !isEmbedded && !isOneToOne;
+//	pragma(msg, m ~ " isEmbedded=" ~ (isEmbedded ? "true" : "false"))
+//	pragma(msg, m ~ " isOneToOne=" ~ (isOneToOne ? "true" : "false"))
+//	pragma(msg, m ~ " isSimple=" ~ (isSimple ? "true" : "false"))
+	static if (isEmbedded) {
+		//pragma(msg, getEmbeddedPropertyDef!(T, m)());
 		return getEmbeddedPropertyDef!(T, m)();
-	} else
+	} 
+	static if (isSimple) {
 		return getSimplePropertyDef!(T, m)();
+	} 
+	static if (isOneToOne) {
+		//pragma(msg, getOneToOnePropertyDef!(T, m)());
+		return getOneToOnePropertyDef!(T, m)();
+	}
 }
 
 string getEntityDef(T)() {
@@ -1290,7 +1537,7 @@ string getEntityDef(T)() {
 	immutable string entityName = getEntityName!T();
 	immutable string tableName = getTableName!T();
 
-	pragma(msg, "preparing entity : " ~ entityName);
+	//pragma(msg, "preparing entity : " ~ entityName);
 
 	static assert (entityName != null, "Type " ~ typeName ~ " has no Entity name specified");
 	static assert (tableName != null, "Type " ~ typeName ~ " has no Table name specified");
@@ -1334,7 +1581,7 @@ string getEntityDef(T)() {
 	generatedEntityInfo ~= "" ~ typeName ~ ".classinfo";
 	generatedEntityInfo ~= ")";
 
-	pragma(msg, "built entity : " ~ entityName);
+	//pragma(msg, "built entity : " ~ entityName);
 
 	return generatedEntityInfo ~ "\n" ~ generatedGettersSetters;
 }
@@ -1376,7 +1623,7 @@ string entityListDef(T ...)() {
 		"    }\n" ~
 		"    //writeln(\"finished static initializer\");\n" ~
 		"}";
-	pragma(msg, "built entity list");
+	//pragma(msg, "built entity list");
     return code;
 }
 
@@ -1675,7 +1922,7 @@ unittest {
 
 
 	EntityInfo entity = new EntityInfo("user", "users",  false, [
-	                                                      new PropertyInfo("id", "id", new NumberType(10,false,SqlType.INTEGER), 0, true, true, false, false, null, null, null, null, null, null, null)
+	                                                             new PropertyInfo("id", "id", new NumberType(10,false,SqlType.INTEGER), 0, true, true, false, RelationType.None, null, null, null, null, null, null, null)
 	                                                     ], null);
 
 	assert(entity.properties.length == 1);
@@ -1685,11 +1932,11 @@ unittest {
 //	immutable string infos = entityListDef!(User, Customer)();
 
 	EntityInfo ei = new EntityInfo("User", "users", false, [
-	                                                        new PropertyInfo("id", "id_column", new NumberType(10,false,SqlType.INTEGER), 0, true, true, false, false, null, null, null, null, null, null, null),
-	                                                 new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, false, null, null, null, null, null, null, null),
-	                                                 new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, false, null, null, null, null, null, null, null),
-	                                                 new PropertyInfo("login", "login", new StringType(), 0, false, false, true, false, null, null, null, null, null, null, null),
-	                                                        new PropertyInfo("testColumn", "testcolumn", new NumberType(10,false,SqlType.INTEGER), 0, false, false, true, false, null, null, null, null, null, null, null)], null);
+	                                                        new PropertyInfo("id", "id_column", new NumberType(10,false,SqlType.INTEGER), 0, true, true, false, RelationType.None, null, null, null, null, null, null, null),
+	                                                        new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, RelationType.None, null, null, null, null, null, null, null),
+	                                                        new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null),
+	                                                        new PropertyInfo("login", "login", new StringType(), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null),
+	                                                        new PropertyInfo("testColumn", "testcolumn", new NumberType(10,false,SqlType.INTEGER), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null)], null);
 
 	//void function(User, DataSetReader, int) readFunc = function(User entity, DataSetReader reader, int index) { };
 
@@ -1700,15 +1947,15 @@ unittest {
 
 	EntityInfo[] entities3 =  [
 	                           new EntityInfo("User", "users", false, [
-	                                        new PropertyInfo("id", "id_column", new NumberType(10,false,SqlType.INTEGER), 0, true, true, false, false, null, null, null, null, null, null, null),
-	                                 new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, false, null, null, null, null, null, null, null),
-	                                 new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, false, null, null, null, null, null, null, null),
-	                                 new PropertyInfo("login", "login", new StringType(), 0, false, false, true, false, null, null, null, null, null, null, null),
-	                                        new PropertyInfo("testColumn", "testcolumn", new NumberType(10,false,SqlType.INTEGER), 0, false, false, true, false, null, null, null, null, null, null, null)], null)
+	                                        new PropertyInfo("id", "id_column", new NumberType(10,false,SqlType.INTEGER), 0, true, true, false, RelationType.None, null, null, null, null, null, null, null),
+	                                        new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, RelationType.None, null, null, null, null, null, null, null),
+	                                        new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null),
+	                                        new PropertyInfo("login", "login", new StringType(), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null),
+	                                        new PropertyInfo("testColumn", "testcolumn", new NumberType(10,false,SqlType.INTEGER), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null)], null)
 	                                                                 ,
 	                           new EntityInfo("Customer", "customer", false, [
-	                                               new PropertyInfo("id", "id", new NumberType(10,false,SqlType.INTEGER), 0, true, true, true, false, null, null, null, null, null, null, null),
-	                                        new PropertyInfo("name", "name", new StringType(), 0, false, false, true, false, null, null, null, null, null, null, null)], null)
+	                                               new PropertyInfo("id", "id", new NumberType(10,false,SqlType.INTEGER), 0, true, true, true, RelationType.None, null, null, null, null, null, null, null),
+	                                               new PropertyInfo("name", "name", new StringType(), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null)], null)
 	                                                                 ];
 
 
