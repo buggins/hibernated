@@ -1618,8 +1618,20 @@ version(unittest) {
         int id;
         @Column
         string name;
+		@Embedded
+		Address address;
     }
     
+	@Embeddable
+	class Address {
+		@Column
+		string zip;
+		@Column
+		string city;
+		@Column
+		string streetAddress;
+	}
+
     @Entity
     @Table("t1")
     class T1 {
