@@ -244,6 +244,8 @@ interface DataSetReader {
 }
 
 interface DataSetWriter {
+	void setFloat(int parameterIndex, float x);
+	void setDouble(int parameterIndex, double x);
 	void setBoolean(int parameterIndex, bool x);
 	void setLong(int parameterIndex, long x);
 	void setInt(int parameterIndex, int x);
@@ -347,6 +349,8 @@ interface PreparedStatement : Statement, DataSetWriter {
 	void clearParameters();
 
 	// from DataSetWriter
+	void setFloat(int parameterIndex, float x);
+	void setDouble(int parameterIndex, double x);
 	void setBoolean(int parameterIndex, bool x);
 	void setLong(int parameterIndex, long x);
 	void setInt(int parameterIndex, int x);

@@ -559,6 +559,10 @@ enum PropertyMemberType : int {
 	NULLABLE_USHORT_TYPE,// Nullable!ushort
 	NULLABLE_UINT_TYPE,  // Nullable!uint
 	NULLABLE_ULONG_TYPE, // Nullable!ulong
+	FLOAT_TYPE,   // float
+	DOUBLE_TYPE,   // double
+	NULLABLE_FLOAT_TYPE, // Nullable!float
+	NULLABLE_DOUBLE_TYPE,// Nullable!double
 	STRING_TYPE,   // string
 	DATETIME_TYPE, // std.datetime.DateTime
 	DATE_TYPE, // std.datetime.Date
@@ -590,6 +594,10 @@ PropertyMemberType getPropertyMemberType(T, string m)() {
 			return PropertyMemberType.UINT_TYPE;
 		} else if (is(ReturnType!(ti) == ulong)) {
 			return PropertyMemberType.ULONG_TYPE;
+		} else if (is(ReturnType!(ti) == float)) {
+			return PropertyMemberType.FLOAT_TYPE;
+		} else if (is(ReturnType!(ti) == double)) {
+			return PropertyMemberType.DOUBLE_TYPE;
 		} else if (is(ReturnType!(ti) == Nullable!byte)) {
 			return PropertyMemberType.NULLABLE_BYTE_TYPE;
 		} else if (is(ReturnType!(ti) == Nullable!short)) {
@@ -606,6 +614,10 @@ PropertyMemberType getPropertyMemberType(T, string m)() {
 			return PropertyMemberType.NULLABLE_UINT_TYPE;
 		} else if (is(ReturnType!(ti) == Nullable!ulong)) {
 			return PropertyMemberType.NULLABLE_ULONG_TYPE;
+		} else if (is(ReturnType!(ti) == Nullable!float)) {
+			return PropertyMemberType.NULLABLE_FLOAT_TYPE;
+		} else if (is(ReturnType!(ti) == Nullable!double)) {
+			return PropertyMemberType.NULLABLE_DOUBLE_TYPE;
 		} else if (is(ReturnType!(ti) == string)) {
 			return PropertyMemberType.STRING_TYPE;
 		} else if (is(ReturnType!(ti) == DateTime)) {
@@ -643,6 +655,10 @@ PropertyMemberType getPropertyMemberType(T, string m)() {
 		return PropertyMemberType.UINT_TYPE;
 	} else if (is(ti == ulong)) {
 		return PropertyMemberType.ULONG_TYPE;
+	} else if (is(ti == float)) {
+		return PropertyMemberType.FLOAT_TYPE;
+	} else if (is(ti == double)) {
+		return PropertyMemberType.DOUBLE_TYPE;
 	} else if (is(ti == Nullable!byte)) {
 		return PropertyMemberType.NULLABLE_BYTE_TYPE;
 	} else if (is(ti == Nullable!short)) {
@@ -659,6 +675,10 @@ PropertyMemberType getPropertyMemberType(T, string m)() {
 		return PropertyMemberType.NULLABLE_UINT_TYPE;
 	} else if (is(ti == Nullable!ulong)) {
 		return PropertyMemberType.NULLABLE_ULONG_TYPE;
+	} else if (is(ti == Nullable!float)) {
+		return PropertyMemberType.NULLABLE_FLOAT_TYPE;
+	} else if (is(ti == Nullable!double)) {
+		return PropertyMemberType.NULLABLE_DOUBLE_TYPE;
 	} else if (is(ti == string)) {
 		return PropertyMemberType.STRING_TYPE;
 	} else if (is(ti == DateTime)) {
@@ -706,6 +726,10 @@ static immutable bool[] ColumnTypeCanHoldNulls =
 	 true, //NULLABLE_USHORT_TYPE,// Nullable!ushort
 	 true, //NULLABLE_UINT_TYPE,  // Nullable!uint
 	 true, //NULLABLE_ULONG_TYPE, // Nullable!ulong
+	 false,//FLOAT_TYPE,   // float
+	 false,//DOUBLE_TYPE,   // double
+	 true, //NULLABLE_FLOAT_TYPE, // Nullable!float
+	 true, //NULLABLE_DOUBLE_TYPE,// Nullable!double
 	 true, //STRING_TYPE   // string
 	 false, //DATETIME_TYPE, // std.datetime.DateTime
 	 false, //DATE_TYPE, // std.datetime.Date
@@ -740,6 +764,10 @@ static immutable string[] ColumnTypeKeyIsSetCode =
 	 "(!%s.isNull)", //NULLABLE_USHORT_TYPE,// Nullable!ushort
 	 "(!%s.isNull)", //NULLABLE_UINT_TYPE,  // Nullable!uint
 	 "(!%s.isNull)", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+	 "(%s != 0)",//FLOAT_TYPE,   // float
+	 "(%s != 0)",//DOUBLE_TYPE,   // double
+	 "(!%s.isNull)", //NULLABLE_FLOAT_TYPE, // Nullable!float
+	 "(!%s.isNull)", //NULLABLE_DOUBLE_TYPE,// Nullable!double
 	 "(%s !is null)", //STRING_TYPE   // string
 	 "(%s != DateTime())", //DATETIME_TYPE, // std.datetime.DateTime
 	 "(%s != Date())", //DATE_TYPE, // std.datetime.Date
@@ -773,6 +801,10 @@ static immutable string[] ColumnTypeIsNullCode =
 	 "(%s.isNull)", //NULLABLE_USHORT_TYPE,// Nullable!ushort
 	 "(%s.isNull)", //NULLABLE_UINT_TYPE,  // Nullable!uint
 	 "(%s.isNull)", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+	 "(false)",//FLOAT_TYPE,   // float
+	 "(false)",//DOUBLE_TYPE,   // double
+	 "(%s.isNull)", //NULLABLE_FLOAT_TYPE, // Nullable!float
+	 "(%s.isNull)", //NULLABLE_DOUBLE_TYPE,// Nullable!double
 	 "(%s is null)", //STRING_TYPE   // string
 	 "(false)", //DATETIME_TYPE, // std.datetime.DateTime
 	 "(false)", //DATE_TYPE, // std.datetime.Date
@@ -806,6 +838,10 @@ static immutable string[] ColumnTypeSetNullCode =
 	 "Nullable!ushort nv;", //NULLABLE_USHORT_TYPE,// Nullable!ushort
 	 "Nullable!uint nv;", //NULLABLE_UINT_TYPE,  // Nullable!uint
 	 "Nullable!ulong nv;", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+	 "float nv = 0;",//FLOAT_TYPE,   // float
+	 "double nv = 0;",//DOUBLE_TYPE,   // double
+	 "Nullable!float nv;", //NULLABLE_FLOAT_TYPE, // Nullable!float
+	 "Nullable!double nv;", //NULLABLE_DOUBLE_TYPE,// Nullable!double
 	 "string nv = null;", //STRING_TYPE   // string
 	 "DateTime nv;", //DATETIME_TYPE, // std.datetime.DateTime
 	 "Date nv;", //DATE_TYPE, // std.datetime.Date
@@ -835,7 +871,11 @@ static immutable string[] ColumnTypePropertyToVariant =
      "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_USHORT_TYPE,// Nullable!ushort
      "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_UINT_TYPE,  // Nullable!uint
      "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_ULONG_TYPE, // Nullable!ulong
-     "Variant(%s)", //STRING_TYPE   // string
+	 "Variant(%s)",//FLOAT_TYPE,   // float
+	 "Variant(%s)",//DOUBLE_TYPE,   // double
+	 "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_FLOAT_TYPE, // Nullable!float
+	 "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_DOUBLE_TYPE,// Nullable!double
+	 "Variant(%s)", //STRING_TYPE   // string
 	 "Variant(%s)", //DATETIME_TYPE, // std.datetime.DateTime
 	 "Variant(%s)", //DATE_TYPE, // std.datetime.Date
 	 "Variant(%s)", //TIME_TYPE, // std.datetime.TimeOfDay
@@ -897,6 +937,10 @@ static immutable string[] ColumnTypeConstructorCode =
 	 "new NumberType(4, true, SqlType.SMALLINT)", //NULLABLE_USHORT_TYPE,// Nullable!ushort
 	 "new NumberType(9, true, SqlType.INTEGER)", //NULLABLE_UINT_TYPE,  // Nullable!uint
 	 "new NumberType(20, true, SqlType.BIGINT)", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+	 "new NumberType(7, false, SqlType.FLOAT)",//FLOAT_TYPE,   // float
+	 "new NumberType(14, false, SqlType.DOUBLE)",//DOUBLE_TYPE,   // double
+	 "new NumberType(7, false, SqlType.FLOAT)", //NULLABLE_FLOAT_TYPE, // Nullable!float
+	 "new NumberType(14, false, SqlType.DOUBLE)", //NULLABLE_DOUBLE_TYPE,// Nullable!double
 	 "new StringType()", //STRING_TYPE   // string
 	 "new DateTimeType()", //DATETIME_TYPE, // std.datetime.DateTime
 	 "new DateType()", //DATE_TYPE, // std.datetime.Date
@@ -930,6 +974,10 @@ static immutable string[] ColumnTypeDatasetReaderCode =
      "Nullable!ushort(r.getUshort(index))", //NULLABLE_USHORT_TYPE,// Nullable!ushort
      "Nullable!uint(r.getUint(index))", //NULLABLE_UINT_TYPE,  // Nullable!uint
      "Nullable!ulong(r.getUlong(index))", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+	 "r.getFloat(index)",//FLOAT_TYPE,   // float
+	 "r.getDouble(index)",//DOUBLE_TYPE,   // double
+	 "Nullable!float(r.getFloat(index))", //NULLABLE_FLOAT_TYPE, // Nullable!float
+	 "Nullable!double(r.getDouble(index))", //NULLABLE_DOUBLE_TYPE,// Nullable!double
 	 "r.getString(index)", //STRING_TYPE   // string
 	 "r.getDateTime(index)", //DATETIME_TYPE, // std.datetime.DateTime
 	 "r.getDate(index)", //DATE_TYPE, // std.datetime.Date
@@ -963,6 +1011,10 @@ static immutable string[] ColumnTypeVariantReadCode =
 	 "(value == null ? nv : (value.convertsTo!(ushort) ? value.get!(ushort) : (value.convertsTo!(ulong) ? to!ushort(value.get!(ulong)) : to!ushort((value.get!(long))))))", //NULLABLE_USHORT_TYPE,// Nullable!ushort
 	 "(value == null ? nv : (value.convertsTo!(uint) ? value.get!(uint) : (value.convertsTo!(ulong) ? to!uint(value.get!(ulong)) : to!uint((value.get!(long))))))", //NULLABLE_UINT_TYPE,  // Nullable!uint
 	 "(value == null ? nv : (value.convertsTo!(ulong) ? value.get!(ulong) : to!ulong(value.get!(long))))", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+	 "(value == null ? nv : (value.convertsTo!(float) ? value.get!(float) : to!float(value.get!(double))))",//FLOAT_TYPE,   // float
+	 "(value == null ? nv : (value.convertsTo!(double) ? value.get!(double) : to!double(value.get!(double))))",//DOUBLE_TYPE,   // double
+	 "(value == null ? nv : (value.convertsTo!(float) ? value.get!(float) : to!float(value.get!(double))))", //NULLABLE_FLOAT_TYPE, // Nullable!float
+	 "(value == null ? nv : (value.convertsTo!(double) ? value.get!(double) : to!double(value.get!(double))))", //NULLABLE_DOUBLE_TYPE,// Nullable!double
 	 "(value == null ? nv : value.get!(string))", //STRING_TYPE   // string
 	 "(value == null ? nv : value.get!(DateTime))", //DATETIME_TYPE, // std.datetime.DateTime
 	 "(value == null ? nv : value.get!(Date))", //DATE_TYPE, // std.datetime.Date
@@ -992,6 +1044,10 @@ static immutable string[] DatasetWriteCode =
 	 "r.setUshort(index, %s);", //NULLABLE_USHORT_TYPE,// Nullable!ushort
 	 "r.setUint(index, %s);", //NULLABLE_UINT_TYPE,  // Nullable!uint
 	 "r.setUlong(index, %s);", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+	 "r.setFloat(index, %s);",//FLOAT_TYPE,   // float
+	 "r.setDouble(index, %s);",//DOUBLE_TYPE,   // double
+	 "r.setFloat(index, %s);", //NULLABLE_FLOAT_TYPE, // Nullable!float
+	 "r.setDouble(index, %s);", //NULLABLE_DOUBLE_TYPE,// Nullable!double
 	 "r.setString(index, %s);", //STRING_TYPE   // string
 	 "r.setDateTime(index, %s);", //DATETIME_TYPE, // std.datetime.DateTime
 	 "r.setDate(index, %s);", //DATE_TYPE, // std.datetime.Date
@@ -1801,6 +1857,15 @@ version(unittest) {
 		Nullable!Date nullable_date_field;
 		@Column
 		Nullable!TimeOfDay nullable_time_field;
+
+		@Column
+		float float_field;
+		@Column
+		double double_field;
+		@Column
+		Nullable!float nullable_float_field;
+		@Column
+		Nullable!double nullable_double_field;
 
 		@Column
 		byte[] byte_array_field;

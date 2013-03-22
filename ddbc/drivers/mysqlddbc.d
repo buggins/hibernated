@@ -472,7 +472,21 @@ public:
             setNull(i);
     }
     
-    override void setBoolean(int parameterIndex, bool x) {
+	override void setFloat(int parameterIndex, float x) {
+		checkClosed();
+		lock();
+		scope(exit) unlock();
+		checkIndex(parameterIndex);
+		cmd.param(parameterIndex-1) = x;
+	}
+	override void setDouble(int parameterIndex, double x){
+		checkClosed();
+		lock();
+		scope(exit) unlock();
+		checkIndex(parameterIndex);
+		cmd.param(parameterIndex-1) = x;
+	}
+	override void setBoolean(int parameterIndex, bool x) {
         checkClosed();
         lock();
         scope(exit) unlock();
