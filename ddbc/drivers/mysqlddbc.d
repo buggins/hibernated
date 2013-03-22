@@ -6,7 +6,7 @@
  * DDBC library attempts to provide implementation independent interface to different databases.
  * 
  * Set of supported RDBMSs can be extended by writing Drivers for particular DBs.
- * Currently it only includes 
+ * Currently it only includes MySQL driver.
  * 
  * JDBC documentation can be found here:
  * $(LINK http://docs.oracle.com/javase/1.5.0/docs/api/java/sql/package-summary.html)$(BR)
