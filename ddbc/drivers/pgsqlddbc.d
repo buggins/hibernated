@@ -160,8 +160,16 @@ public:
 		if(PQstatus(conn) != CONNECTION_OK)
 			throw new SQLException(copyCString(PQerrorMessage(conn)));
 		closed = false;
-		//setAutoCommit(true);
+		setAutoCommit(true);
+		updateConnectionParams();
 	}
+
+	void updateConnectionParams() {
+		Statement stmt = createStatement();
+		scope(exit) stmt.close();
+		stmt.executeUpdate("SET NAMES 'utf8'");
+	}
+
 	override void close() {
 		checkClosed();
 		
@@ -173,6 +181,7 @@ public:
 		PQfinish(conn);
 		closed = true;
 	}
+
 	override void commit() {
 		checkClosed();
 		
@@ -183,6 +192,7 @@ public:
 		scope(exit) stmt.close();
 		stmt.executeUpdate("COMMIT");
 	}
+
 	override Statement createStatement() {
 		checkClosed();
 		
@@ -250,7 +260,7 @@ public:
 		
 		Statement stmt = createStatement();
 		scope(exit) stmt.close();
-		stmt.executeUpdate("SET autocommit=" ~ (autoCommit ? "1" : "0"));
+		stmt.executeUpdate("SET autocommit = " ~ (autoCommit ? "ON" : "OFF"));
 		this.autocommit = autoCommit;
 	}
 }
@@ -281,23 +291,28 @@ public:
 		this.conn = conn;
 	}
 	
-//	ResultSetMetaData createMetadata(FieldDescription[] fields) {
-//		ColumnMetadataItem[] res = new ColumnMetadataItem[fields.length];
-//		foreach(i, field; fields) {
-//			ColumnMetadataItem item = new ColumnMetadataItem();
-//			item.schemaName = field.db;
-//			item.name = field.originalName;
-//			item.label = field.name;
-//			item.precision = field.length;
-//			item.scale = field.scale;
-//			item.isNullable = !field.notNull;
-//			item.isSigned = !field.unsigned;
-//			item.type = fromPGSQLType(field.type);
+	ResultSetMetaData createMetadata(PGresult * res) {
+		int rows = PQntuples(res);
+		int fieldCount = PQnfields(res);
+		ColumnMetadataItem[] list = new ColumnMetadataItem[fieldCount];
+		for(int i = 0; i < fieldCount; i++) {
+			ColumnMetadataItem item = new ColumnMetadataItem();
+			//item.schemaName = field.db;
+			item.name = copyCString(PQfname(res, i));
+			//item.tableName = copyCString(PQfname(res, i));
+			int fmt = PQfformat(res, i);
+			ulong t = PQftype(res, i);
+			item.label = copyCString(PQfname(res, i));
+			//item.precision = field.length;
+			//item.scale = field.scale;
+			//item.isNullable = !field.notNull;
+			//item.isSigned = !field.unsigned;
+			//item.type = fromPGSQLType(field.type);
 //			// TODO: fill more params
-//			res[i] = item;
-//		}
-//		return new ResultSetMetaDataImpl(res);
-//	}
+			list[i] = item;
+		}
+		return new ResultSetMetaDataImpl(list);
+	}
 //	ParameterMetaData createMetadata(ParamDescription[] fields) {
 //		ParameterMetaDataItem[] res = new ParameterMetaDataItem[fields.length];
 //		foreach(i, field; fields) {
@@ -317,37 +332,51 @@ public:
 		checkClosed();
 		return conn;
 	}
+
 	override ddbc.core.ResultSet executeQuery(string query) {
 		throw new SQLException("Not implemented");
-//		checkClosed();
-//		lock();
-//		scope(exit) unlock();
+		checkClosed();
+		lock();
+		scope(exit) unlock();
+
+		PGresult * res = PQexec(conn.getConnection(), std.string.toStringz(query));
+		enforceEx!SQLException(res !is null, "Failed to execute statement " ~ query);
+		auto status = PQresultStatus(res);
+		enforceEx!SQLException(status == PGRES_TUPLES_OK, getError());
+		scope(exit) PQclear(res);
+
 //		cmd = new Command(conn.getConnection(), query);
 //		rs = cmd.execSQLResult();
 //		resultSet = new PGSQLResultSet(this, rs, createMetadata(cmd.getResultHeaders().getFieldDescriptions()));
 //		return resultSet;
 	}
+
+	string getError() {
+		return copyCString(PQerrorMessage(conn.getConnection()));
+	}
+
 	override int executeUpdate(string query) {
-		throw new SQLException("Not implemented");
-//		checkClosed();
-//		lock();
-//		scope(exit) unlock();
-//		cmd = new Command(conn.getConnection(), query);
-//		ulong rowsAffected = 0;
-//		cmd.execSQL(rowsAffected);
-//		return cast(int)rowsAffected;
+		Variant dummy;
+		return executeUpdate(query, dummy);
 	}
+
 	override int executeUpdate(string query, out Variant insertId) {
-		throw new SQLException("Not implemented");
-//		checkClosed();
-//		lock();
-//		scope(exit) unlock();
-//		cmd = new Command(conn.getConnection(), query);
-//		ulong rowsAffected = 0;
-//		cmd.execSQL(rowsAffected);
-//		insertId = Variant(cmd.lastInsertID);
-//		return cast(int)rowsAffected;
+		checkClosed();
+		lock();
+		scope(exit) unlock();
+		PGresult * res = PQexec(conn.getConnection(), std.string.toStringz(query));
+		enforceEx!SQLException(res !is null, "Failed to execute statement " ~ query);
+		auto status = PQresultStatus(res);
+		enforceEx!SQLException(status == PGRES_COMMAND_OK || status == PGRES_TUPLES_OK, getError());
+		scope(exit) PQclear(res);
+		
+		string rowsAffected = copyCString(PQcmdTuples(res));
+		auto lastid = PQoidValue(res);
+		int affected = rowsAffected.length > 0 ? to!int(rowsAffected) : 0;
+		insertId = Variant(lastid);
+		return affected;
 	}
+
 	override void close() {
 		checkClosed();
 		lock();
@@ -355,8 +384,9 @@ public:
 		closeResultSet();
 		closed = true;
 	}
+
 	void closeResultSet() {
-		throw new SQLException("Not implemented");
+		//throw new SQLException("Not implemented");
 //		if (cmd == null) {
 //			return;
 //		}
@@ -1072,9 +1102,11 @@ extern(C) {
 	
 	PGresult* PQexec(PGconn*, const char*);
 	void PQclear(PGresult*);
+
 	
 	int PQresultStatus(PGresult*); // FIXME check return value
-	
+	char *PQcmdTuples(PGresult *res);
+
 	int PQnfields(PGresult*); // number of fields in a result
 	const(char*) PQfname(PGresult*, int); // name of field
 	
@@ -1093,8 +1125,15 @@ extern(C) {
 	int PQgetisnull(const PGresult *res,
 	                int row_number,
 	                int column_number);
-	
-	
+
+	alias ulong Oid;
+
+	Oid PQftype(const PGresult *res,
+	            int column_number);
+	Oid PQoidValue(const PGresult *res);
+
+	int PQfformat(const PGresult *res,
+	              int column_number);
 }
 
 unittest {
