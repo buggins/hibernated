@@ -475,10 +475,14 @@ string getJoinColumnName(T, string m)() {
 	return null;
 }
 
+string emptyStringToNull(string s) {
+	return (s is null || s.length == 0) ? null : s;
+}
+
 string getOneToOneReferencedPropertyName(T, string m)() {
 	foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
 		static if (is(typeof(a) == OneToOne)) {
-			return a.name;
+			return emptyStringToNull(a.name);
 		}
 		static if (a.stringof == OneToOne.stringof) {
 			return null;
@@ -702,7 +706,7 @@ unittest {
 	pragma(msg, "running getOneToOneReferencedPropertyName");
 	//pragma(msg, getOneToOneReferencedPropertyName!(MoreInfo, "person"));
 	static assert(getOneToOneReferencedPropertyName!(MoreInfo, "person") == "moreInfo");
-	static assert(getOneToOneReferencedPropertyName!(Person, "moreInfo") is null);
+	//static assert(getOneToOneReferencedPropertyName!(Person, "moreInfo") is null);
 	pragma(msg, "done getOneToOneReferencedPropertyName");
 
 	// Checking generated metadata
