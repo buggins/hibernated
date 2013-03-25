@@ -701,10 +701,10 @@ unittest {
 	static assert(hasOneToOneAnnotation!(Person, "moreInfo"));
 	static assert(getPropertyReferencedEntityName!(Person, "moreInfo")() == "MoreInfo");
 	static assert(getPropertyReferencedClassName!(Person, "moreInfo")() == "hibernated.metadata.MoreInfo");
-	//pragma(msg, getOneToOnePropertyDef!(Person, "moreInfo")());
-	//pragma(msg, getOneToOnePropertyDef!(MoreInfo, "person")());
+	pragma(msg, getOneToOnePropertyDef!(Person, "moreInfo")());
+	pragma(msg, getOneToOnePropertyDef!(MoreInfo, "person")());
 	pragma(msg, "running getOneToOneReferencedPropertyName");
-	//pragma(msg, getOneToOneReferencedPropertyName!(MoreInfo, "person"));
+	pragma(msg, getOneToOneReferencedPropertyName!(MoreInfo, "person"));
 	static assert(getOneToOneReferencedPropertyName!(MoreInfo, "person") == "moreInfo");
 	//static assert(getOneToOneReferencedPropertyName!(Person, "moreInfo") is null);
 	pragma(msg, "done getOneToOneReferencedPropertyName");

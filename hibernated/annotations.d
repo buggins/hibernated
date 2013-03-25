@@ -30,7 +30,7 @@ module hibernated.annotations;
  */
 struct Entity {
 	immutable string name;
-	this(string name) { this.name = name; }
+//	this(string name) { this.name = name; }
 }
 
 /**
@@ -39,7 +39,7 @@ struct Entity {
  */
 struct Embeddable {
 	immutable bool dummy;
-	this(bool enabled) {}
+//	this(bool enabled) {}
 }
 
 /**
@@ -50,7 +50,7 @@ struct Embeddable {
  */
 struct Table {
 	immutable string name;
-	this(string name) { this.name = name; }
+//	this(string name) { this.name = name; }
 }
 
 /** 
@@ -88,9 +88,9 @@ struct Table {
 struct Column {
 	immutable string name;
 	immutable int length;
-	this(string name) { this.name = name; }
-	this(string name, int length) { this.name = name; this.length = length; }
-	this(int length) { this.length = length; }
+//	this(string name) { this.name = name; }
+//	this(string name, int length) { this.name = name; this.length = length; }
+//	this(int length) { this.length = length; }
 }
 
 /**
@@ -146,7 +146,7 @@ struct UniqueKey {
  */
 struct OneToOne {
 	immutable string name;
-	this(string referencedPropertyName) { this.name = name; }
+//	this(string referencedPropertyName) { this.name = name; }
 }
 
 /**
@@ -156,7 +156,7 @@ struct OneToOne {
  */
 struct JoinColumn {
 	immutable string name;
-	this(string columnName) { this.name = name; }
+//	this(string columnName) { this.name = name; }
 }
 
 /*
