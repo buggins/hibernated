@@ -475,14 +475,14 @@ string getJoinColumnName(T, string m)() {
 	return null;
 }
 
-string getOneToOnePropertyName(T, string m)() {
+string getOneToOneReferencedPropertyName(T, string m)() {
 	foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
 		static if (is(typeof(a) == OneToOne)) {
-			return a.name.length > 0 ? a.name : null;
+			return a.name;
 		}
-//		static if (a.stringof == OneToOne.stringof) {
-//			return null;
-//		}
+		static if (a.stringof == OneToOne.stringof) {
+			return null;
+		}
 	}
 	return null;
 }
@@ -628,6 +628,90 @@ string getPropertyReferencedClassName(T : Object, string m)() {
 		} else 
 			static assert(false, "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany property can be only class");
 	}
+}
+
+
+
+
+
+version (unittest) {
+	// for testing of Embeddable
+	@Embeddable 
+		class EMName {
+			@Column
+				string firstName;
+			@Column
+				string lastName;
+		}
+
+	@Entity 
+		class EMUser {
+			@Id @Generated
+				@Column
+				int id;
+
+			@Embedded 
+				EMName userName;
+		}
+
+	// for testing of Embeddable
+	@Entity 
+		class Person {
+			@Id
+				@Column
+				int id;
+			@Column
+				string firstName;
+			@Column
+				string lastName;
+			@OneToOne
+				@JoinColumn("more_info_fk")
+				MoreInfo moreInfo;
+		}
+
+	@Entity 
+		class MoreInfo {
+			@Id @Generated
+				@Column
+				int id;
+			@Column 
+				long flags;
+			@OneToOne("moreInfo")
+				Person person;
+		}
+
+}
+
+unittest {
+	static assert(hasHibernatedEmbeddableAnnotation!EMName);
+	static assert(hasHibernatedEmbeddableAnnotation!EMName);
+	static assert(hasEmbeddedAnnotation!(EMUser, "userName"));
+	static assert(!hasOneToOneAnnotation!(EMUser, "userName"));
+	static assert(getPropertyEmbeddedEntityName!(EMUser, "userName")() == "EMName");
+	static assert(getPropertyEmbeddedClassName!(EMUser, "userName")() == "hibernated.metadata.EMName");
+	//pragma(msg, getEmbeddedPropertyDef!(EMUser, "userName")());
+
+	// Checking generated metadata
+	EntityMetaData schema = new SchemaInfoImpl!(EMName, EMUser);
+
+	static assert(hasOneToOneAnnotation!(Person, "moreInfo"));
+	static assert(getPropertyReferencedEntityName!(Person, "moreInfo")() == "MoreInfo");
+	static assert(getPropertyReferencedClassName!(Person, "moreInfo")() == "hibernated.metadata.MoreInfo");
+	//pragma(msg, getOneToOnePropertyDef!(Person, "moreInfo")());
+	//pragma(msg, getOneToOnePropertyDef!(MoreInfo, "person")());
+	pragma(msg, "running getOneToOneReferencedPropertyName");
+	//pragma(msg, getOneToOneReferencedPropertyName!(MoreInfo, "person"));
+	static assert(getOneToOneReferencedPropertyName!(MoreInfo, "person") == "moreInfo");
+	static assert(getOneToOneReferencedPropertyName!(Person, "moreInfo") is null);
+	pragma(msg, "done getOneToOneReferencedPropertyName");
+
+	// Checking generated metadata
+	//EntityMetaData schema = new SchemaInfoImpl!(Person, MoreInfo);
+	//	foreach(e; schema["Person"]) {
+	//		writeln("property: " ~ e.propertyName);
+	//	}
+	//schema.
+
 }
 
 enum PropertyMemberType : int {
@@ -1181,11 +1265,18 @@ string getEmbeddedPropertyObjectWriteCode(T, string m, string className)() {
 	}
 }
 
+
+
+
+
+
+
+
 /// create source code for creation of Embedded definition
 string getOneToOnePropertyDef(T, immutable string m)() {
 	immutable string referencedEntityName = getPropertyReferencedEntityName!(T,m);
 	immutable string referencedClassName = getPropertyReferencedClassName!(T,m);
-	immutable string referencedPropertyName = getOneToOnePropertyName!(T,m);
+	immutable string referencedPropertyName = getOneToOneReferencedPropertyName!(T,m);
 	immutable string entityClassName = fullyQualifiedName!T;
 	immutable string propertyName = getPropertyName!(T,m)();
 	static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
@@ -1849,6 +1940,7 @@ class SchemaInfoImpl(T...) : SchemaInfo {
 }
 
 
+
 unittest {
 
 	User uuu1 = new User();
@@ -2307,81 +2399,4 @@ unittest {
 	}
 }
 
-
-version (unittest) {
-	// for testing of Embeddable
-	@Embeddable 
-		class EMName {
-			@Column
-				string firstName;
-			@Column
-				string lastName;
-		}
-
-	@Entity 
-		class EMUser {
-			@Id @Generated
-				@Column
-				int id;
-
-			@Embedded 
-				EMName userName;
-		}
-}
-
-unittest {
-	static assert(hasHibernatedEmbeddableAnnotation!EMName);
-	static assert(hasHibernatedEmbeddableAnnotation!EMName);
-	static assert(hasEmbeddedAnnotation!(EMUser, "userName"));
-	static assert(!hasOneToOneAnnotation!(EMUser, "userName"));
-	static assert(getPropertyEmbeddedEntityName!(EMUser, "userName")() == "EMName");
-	static assert(getPropertyEmbeddedClassName!(EMUser, "userName")() == "hibernated.metadata.EMName");
-	//pragma(msg, getEmbeddedPropertyDef!(EMUser, "userName")());
-
-	// Checking generated metadata
-	EntityMetaData schema = new SchemaInfoImpl!(EMName, EMUser);
-
-}
-
-version (unittest) {
-	// for testing of Embeddable
-	@Entity 
-		class Person {
-			@Id
-				@Column
-				int id;
-			@Column
-				string firstName;
-			@Column
-				string lastName;
-			@OneToOne
-				@JoinColumn("more_info_fk")
-				MoreInfo moreInfo;
-		}
-
-	@Entity 
-		class MoreInfo {
-			@Id @Generated
-				@Column
-				int id;
-			@Column 
-				long flags;
-			@OneToOne("moreInfo")
-				Person person;
-		}
-}
-
-unittest {
-	static assert(hasOneToOneAnnotation!(Person, "moreInfo"));
-	static assert(getPropertyReferencedEntityName!(Person, "moreInfo")() == "MoreInfo");
-	static assert(getPropertyReferencedClassName!(Person, "moreInfo")() == "hibernated.metadata.MoreInfo");
-	pragma(msg, getOneToOnePropertyDef!(Person, "moreInfo")());
-
-	// Checking generated metadata
-	EntityMetaData schema = new SchemaInfoImpl!(Person, MoreInfo);
-	//	foreach(e; schema["Person"]) {
-	//		writeln("property: " ~ e.propertyName);
-	//	}
-	//schema.
-}
 
