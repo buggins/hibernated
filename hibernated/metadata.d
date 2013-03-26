@@ -224,34 +224,6 @@ class EntityInfo {
 	Object createEntity() { return Object.factory(classInfo.name); }
 }
 
-bool isHibernatedPropertyAnnotation(alias t)() {
-	return is(typeof(t) == Id) || is(typeof(t) == Embedded) || is(typeof(t) == Column) || is(typeof(t) == OneToOne) || is(typeof(t) == Generated) || is(typeof(t) == Id) || t.stringof == Column.stringof || t.stringof == Id.stringof || t.stringof == Generated.stringof || t.stringof == Embedded.stringof || t.stringof == OneToOne.stringof;
-}
-
-bool isHibernatedEntityAnnotation(alias t)() {
-	return is(typeof(t) == Entity) || t.stringof == Entity.stringof;
-}
-
-bool isHibernatedNullAnnotation(alias t)() {
-	return is(typeof(t) == Null) || t.stringof == Null.stringof;
-}
-
-bool isHibernatedNotNullAnnotation(alias t)() {
-	return is(typeof(t) == NotNull) || t.stringof == NotNull.stringof;
-}
-
-bool isHibernatedUniqueAnnotation(alias t)() {
-	return is(typeof(t) == UniqueKey) || t.stringof == UniqueKey.stringof;
-}
-
-bool isHibernatedEmbeddableAnnotation(alias t)() {
-	return is(typeof(t) == Embeddable) || t.stringof == Embeddable.stringof;
-}
-
-bool isHibernatedEntityOrEmbeddableAnnotation(alias t)() {
-	return is(typeof(t) == Entity) || t.stringof == Entity.stringof || is(typeof(t) == Embeddable) || t.stringof == Embeddable.stringof;
-}
-
 string capitalizeFieldName(immutable string name) {
 	return toUpper(name[0..1]) ~ name[1..$];
 }
@@ -300,71 +272,48 @@ unittest {
 
 /// returns true if class member has at least one known property level annotation (@Column, @Id, @Generated)
 bool hasHibernatedPropertyAnnotation(T, string m)() {
-	foreach(a; __traits(getAttributes, __traits(getMember, T, m))) {
-		static if (isHibernatedPropertyAnnotation!a) {
-			return true;
-		}
-	}
+	return hasOneOfMemberAnnotations!(T, m, Id, Embedded, Column, OneToOne, Generated);
+}
+
+/// returns true if class has one of specified anotations
+bool hasOneOfAnnotations(T : Object, A...)() {
+    foreach(a; A) {
+        static if (hasAnnotation!(T, a)) {
+            return true;
+        }
+    }
 	return false;
 }
 
-/// returns true if class has @Entity or @Entity() annotation
-bool hasHibernatedEntityAnnotation(T)() {
+/// returns true if class member has one of specified anotations
+bool hasOneOfMemberAnnotations(T : Object, string m, A...)() {
+    foreach(a; A) {
+        static if (hasMemberAnnotation!(T, m, a)) {
+            return true;
+        }
+    }
+	return false;
+}
+
+/// returns true if class has specified anotations
+bool hasAnnotation(T, A)() {
 	foreach(a; __traits(getAttributes, T)) {
-		static if (isHibernatedEntityAnnotation!a) {
+		static if (is(typeof(a) == A) || a.stringof == A.stringof) {
 			return true;
 		}
 	}
 	return false;
 }
 
-/// returns true if class has @Embeddable or @Embeddable() annotation
-bool hasHibernatedEmbeddableAnnotation(T)() {
-	foreach(a; __traits(getAttributes, T)) {
-		static if (isHibernatedEmbeddableAnnotation!a) {
-			return true;
-		}
-	}
-	return false;
-}
-
-/// returns true if class has @Embeddable or @Embeddable() annotation
-bool hasHibernatedEntityOrEmbeddableAnnotation(T)() {
-	foreach(a; __traits(getAttributes, T)) {
-		static if (isHibernatedEmbeddableAnnotation!a || isHibernatedEntityAnnotation!a) {
-			return true;
-		}
-	}
-	return false;
-}
-
-bool hasHibernatedNullAnnotation(T, string m)() {
+/// returns true if class member has specified anotations
+bool hasMemberAnnotation(T, string m, A)() {
 	foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
-		static if (isHibernatedNullAnnotation!a) {
+		static if (is(typeof(a) == A) || a.stringof == A.stringof) {
 			return true;
 		}
 	}
 	return false;
 }
-
-bool hasHibernatedNotNullAnnotation(T, string m)() {
-	foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
-		static if (isHibernatedNotNullAnnotation!a) {
-			return true;
-		}
-	}
-	return false;
-}
-
-bool hasHibernatedUniqueAnnotation(T, string m)() {
-	foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
-		static if (isHibernatedUniqueAnnotation!a) {
-			return true;
-		}
-	}
-	return false;
-}
-
 
 /// returns entity name for class type
 string getEntityName(T : Object)() {
@@ -387,64 +336,6 @@ string getTableName(T : Object)() {
 		}
 	}
 	return camelCaseToUnderscoreDelimited(T.stringof);
-}
-
-bool hasIdAnnotation(T, string m)() {
-	foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
-		static if (is(typeof(a) == Id)) {
-			return true;
-		}
-		static if (a.stringof == Id.stringof) {
-			return true;
-		}
-	}
-	return false;
-}
-
-bool hasEmbeddedAnnotation(T, string m)() {
-	foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
-		static if (is(typeof(a) == Embedded)) {
-			return true;
-		}
-		static if (a.stringof == Embedded.stringof) {
-			return true;
-		}
-	}
-	return false;
-}
-
-bool hasGeneratedAnnotation(T, string m)() {
-	foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
-		static if (is(typeof(a) == Generated)) {
-			return true;
-		} else if (a.stringof == Generated.stringof) {
-			return true;
-		}
-	}
-	return false;
-}
-
-bool hasOneToOneAnnotation(T, string m)() {
-	foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
-		static if (is(typeof(a) == OneToOne)) {
-			return true;
-		} else if (a.stringof == OneToOne.stringof) {
-			return true;
-		}
-	}
-	return false;
-}
-
-bool hasJoinColumnAnnotation(T, string m)() {
-	foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
-		static if (is(typeof(a) == JoinColumn)) {
-			return true;
-		}
-		static if (a.stringof == JoinColumn.stringof) {
-			return true;
-		}
-	}
-	return false;
 }
 
 string applyDefault(string s, string defaultValue) {
@@ -570,13 +461,13 @@ string getPropertyEmbeddedEntityName(T : Object, string m)() {
 	alias typeof(__traits(getMember, T, m)) ti;
 	static if (is(ti == function)) {
 		static if (isImplicitlyConvertible!(ReturnType!(ti), Object)) {
-			static assert(hasHibernatedEmbeddableAnnotation!(ReturnType!(ti)), "@Embedded property class should have @Embeddable annotation");
+			static assert(hasAnnotation!(ReturnType!(ti), Embeddable), "@Embedded property class should have @Embeddable annotation");
 			return getEntityName!(ReturnType!(ti));
 		} else
 			static assert(false, "@Embedded property can be only class with @Embeddable annotation");
 	} else {
 		static if (isImplicitlyConvertible!(ti, Object)) {
-			static assert(hasHibernatedEmbeddableAnnotation!(ti), "@Embedded property class should have @Embeddable annotation");
+			static assert(hasAnnotation!(ti, Embeddable), "@Embedded property class should have @Embeddable annotation");
 			return getEntityName!ti;
 		} else 
 			static assert(false, "@Embedded property can be only class with @Embeddable annotation");
@@ -587,13 +478,13 @@ string getPropertyReferencedEntityName(T : Object, string m)() {
 	alias typeof(__traits(getMember, T, m)) ti;
 	static if (is(ti == function)) {
 		static if (isImplicitlyConvertible!(ReturnType!(ti), Object)) {
-			static assert(!hasHibernatedEmbeddableAnnotation!(ReturnType!(ti)), "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany referenced property class should not have @Embeddable annotation");
+			static assert(!hasAnnotation!(ReturnType!(ti), Embeddable), "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany referenced property class should not have @Embeddable annotation");
 			return getEntityName!(ReturnType!(ti));
 		} else
 			static assert(false, "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany property can be only class");
 	} else {
 		static if (isImplicitlyConvertible!(ti, Object)) {
-			static assert(!hasHibernatedEmbeddableAnnotation!(ti), "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany referenced property class should not have @Embeddable annotation");
+			static assert(!hasAnnotation!(ti, Embeddable), "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany referenced property class should not have @Embeddable annotation");
 			return getEntityName!ti;
 		} else 
 			static assert(false, "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany property can be only class");
@@ -604,13 +495,13 @@ string getPropertyEmbeddedClassName(T : Object, string m)() {
 	alias typeof(__traits(getMember, T, m)) ti;
 	static if (is(ti == function)) {
 		static if (isImplicitlyConvertible!(ReturnType!(ti), Object)) {
-			static assert(hasHibernatedEmbeddableAnnotation!(ReturnType!(ti)), "@Embedded property class should have @Embeddable annotation");
+			static assert(hasAnnotation!(ReturnType!(ti), Embeddable), "@Embedded property class should have @Embeddable annotation");
 			return fullyQualifiedName!(ReturnType!(ti));
 		} else
 			static assert(false, "@Embedded property can be only class with @Embeddable annotation");
 	} else {
 		static if (isImplicitlyConvertible!(ti, Object)) {
-			static assert(hasHibernatedEmbeddableAnnotation!(ti), "@Embedded property class should have @Embeddable annotation");
+			static assert(hasAnnotation!(ti, Embeddable), "@Embedded property class should have @Embeddable annotation");
 			return fullyQualifiedName!ti;
 		} else 
 			static assert(false, "@Embedded property can be only class with @Embeddable annotation");
@@ -621,13 +512,13 @@ string getPropertyReferencedClassName(T : Object, string m)() {
 	alias typeof(__traits(getMember, T, m)) ti;
 	static if (is(ti == function)) {
 		static if (isImplicitlyConvertible!(ReturnType!(ti), Object)) {
-			static assert(!hasHibernatedEmbeddableAnnotation!(ReturnType!(ti)), "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany referenced property class should not have @Embeddable annotation");
+			static assert(!hasAnnotation!(ReturnType!(ti), Embeddable), "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany referenced property class should not have @Embeddable annotation");
 			return fullyQualifiedName!(ReturnType!(ti));
 		} else
 			static assert(false, "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany property can be only class");
 	} else {
 		static if (isImplicitlyConvertible!(ti, Object)) {
-			static assert(!hasHibernatedEmbeddableAnnotation!(ti), "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany referenced property class should not have @Embeddable annotation");
+			static assert(!hasAnnotation!(ti, Embeddable), "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany referenced property class should not have @Embeddable annotation");
 			return fullyQualifiedName!ti;
 		} else 
 			static assert(false, "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany property can be only class");
@@ -690,28 +581,27 @@ version (unittest) {
 }
 
 unittest {
-	static assert(hasHibernatedEmbeddableAnnotation!EMName);
-	static assert(hasHibernatedEmbeddableAnnotation!EMName);
-	static assert(hasEmbeddedAnnotation!(EMUser, "userName"));
-	static assert(!hasOneToOneAnnotation!(EMUser, "userName"));
-	static assert(getPropertyEmbeddedEntityName!(EMUser, "userName")() == "EMName");
-	static assert(getPropertyEmbeddedClassName!(EMUser, "userName")() == "hibernated.metadata.EMName");
+	static assert(hasAnnotation!(EMName, Embeddable));
+	static assert(hasMemberAnnotation!(EMUser, "userName", Embedded));
+	static assert(!hasMemberAnnotation!(EMUser, "userName", OneToOne));
+	static assert(getPropertyEmbeddedEntityName!(EMUser, "userName") == "EMName");
+	static assert(getPropertyEmbeddedClassName!(EMUser, "userName") == "hibernated.metadata.EMName");
 	//pragma(msg, getEmbeddedPropertyDef!(EMUser, "userName")());
 
 	// Checking generated metadata
 	EntityMetaData schema = new SchemaInfoImpl!(EMName, EMUser);
 
-	static assert(hasOneToOneAnnotation!(Person, "moreInfo"));
-	static assert(getPropertyReferencedEntityName!(Person, "moreInfo")() == "More");
-	static assert(getPropertyReferencedClassName!(Person, "moreInfo")() == "hibernated.metadata.MoreInfo");
-	pragma(msg, getOneToOnePropertyDef!(Person, "moreInfo")());
-	pragma(msg, getOneToOnePropertyDef!(MoreInfo, "person")());
-	pragma(msg, "running getOneToOneReferencedPropertyName");
-	pragma(msg, getOneToOneReferencedPropertyName!(MoreInfo, "person"));
+	static assert(hasMemberAnnotation!(Person, "moreInfo", OneToOne));
+	static assert(getPropertyReferencedEntityName!(Person, "moreInfo") == "More");
+	static assert(getPropertyReferencedClassName!(Person, "moreInfo") == "hibernated.metadata.MoreInfo");
+	pragma(msg, getOneToOnePropertyDef!(Person, "moreInfo"));
+	pragma(msg, getOneToOnePropertyDef!(MoreInfo, "person"));
+	//pragma(msg, "running getOneToOneReferencedPropertyName");
+	//pragma(msg, getOneToOneReferencedPropertyName!(MoreInfo, "person"));
     static assert(getJoinColumnName!(Person, "moreInfo") == "more_info_fk");
 	static assert(getOneToOneReferencedPropertyName!(MoreInfo, "person") == "moreInfo");
 	static assert(getOneToOneReferencedPropertyName!(Person, "moreInfo") is null);
-	pragma(msg, "done getOneToOneReferencedPropertyName");
+	//pragma(msg, "done getOneToOneReferencedPropertyName");
 
 	// Checking generated metadata
 	//EntityMetaData schema = new SchemaInfoImpl!(Person, MoreInfo);
@@ -1288,14 +1178,14 @@ string getOneToOnePropertyDef(T, immutable string m)() {
 	immutable string entityClassName = fullyQualifiedName!T;
 	immutable string propertyName = getPropertyName!(T,m)();
 	static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
-	immutable bool isId = hasIdAnnotation!(T, m)();
-	immutable bool isGenerated = hasGeneratedAnnotation!(T, m)();
-	immutable string columnName = getColumnName!(T, m)();
+	immutable bool isId = hasMemberAnnotation!(T, m, Id);
+	immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
+	immutable string columnName = getJoinColumnName!(T, m)();
 	immutable length = getColumnLength!(T, m)();
-	immutable bool hasNull = hasHibernatedNullAnnotation!(T,m)();
-	immutable bool hasNotNull = hasHibernatedNotNullAnnotation!(T,m);
+	immutable bool hasNull = hasMemberAnnotation!(T,m, Null);
+	immutable bool hasNotNull = hasMemberAnnotation!(T,m, NotNull);
 	immutable bool nullable = hasNull ? true : (hasNotNull ? false : true); //canColumnTypeHoldNulls!(T.m)
-	immutable bool unique = hasHibernatedUniqueAnnotation!(T,m);
+	immutable bool unique = hasMemberAnnotation!(T, m, UniqueKey);
 	immutable string typeName = "new EntityType(cast(immutable TypeInfo_Class)" ~ entityClassName ~ ".classinfo, \"" ~ entityClassName ~ "\")"; //getColumnTypeName!(T, m)();
 	immutable string propertyReadCode = getPropertyReadCode!(T,m)();
 	immutable string datasetReadCode = null; //getColumnTypeDatasetReadCode!(T,m)();
@@ -1363,21 +1253,23 @@ string getOneToOnePropertyDef(T, immutable string m)() {
 	//	pragma(msg, readerFuncDef);
 	//	pragma(msg, writerFuncDef);
 	
-	return "    new PropertyInfo(\"" ~ propertyName ~ "\", \"" ~ columnName ~ "\", " ~ typeName ~ ", " ~ 
-		format("%s",length) ~ ", " ~ (isId ? "true" : "false")  ~ ", " ~ 
-			(isGenerated ? "true" : "false")  ~ ", " ~ (nullable ? "true" : "false") ~ ", " ~ 
-			"RelationType.OneToOne, " ~
-			(referencedEntityName !is null ? "\"" ~ referencedEntityName ~ "\"" : "null")  ~ ", " ~ 
-			(referencedPropertyName !is null ? "\"" ~ referencedPropertyName ~ "\"" : "null")  ~ ", " ~ 
-			readerFuncDef ~ ", " ~
-			writerFuncDef ~ ", " ~
-			getVariantFuncDef ~ ", " ~
-			setVariantFuncDef ~ ", " ~
-			keyIsSetFuncDef ~ ", " ~
-			isNullFuncDef ~ ", " ~
-			getObjectFuncDef ~ ", " ~
-			setObjectFuncDef ~ 
-			")";
+	return "    new PropertyInfo(\"" ~ propertyName ~ "\", " ~ 
+            (columnName is null ? "null" : "\"" ~ columnName ~ "\"") ~ ", " ~ 
+            typeName ~ ", " ~ 
+		    format("%s",length) ~ ", " ~ (isId ? "true" : "false")  ~ ", " ~ 
+		    (isGenerated ? "true" : "false")  ~ ", " ~ (nullable ? "true" : "false") ~ ", " ~ 
+		    "RelationType.OneToOne, " ~
+		    (referencedEntityName !is null ? "\"" ~ referencedEntityName ~ "\"" : "null")  ~ ", " ~ 
+		    (referencedPropertyName !is null ? "\"" ~ referencedPropertyName ~ "\"" : "null")  ~ ", " ~ 
+		    readerFuncDef ~ ", " ~
+		    writerFuncDef ~ ", " ~
+		    getVariantFuncDef ~ ", " ~
+		    setVariantFuncDef ~ ", " ~
+		    keyIsSetFuncDef ~ ", " ~
+		    isNullFuncDef ~ ", " ~
+		    getObjectFuncDef ~ ", " ~
+		    setObjectFuncDef ~ 
+		    ")";
 }
 
 
@@ -1388,14 +1280,14 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
 	immutable string entityClassName = fullyQualifiedName!T;
 	immutable string propertyName = getPropertyName!(T,m)();
 	static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
-	immutable bool isId = hasIdAnnotation!(T, m)();
-	immutable bool isGenerated = hasGeneratedAnnotation!(T, m)();
-	immutable string columnName = getColumnName!(T, m)();
+	immutable bool isId = hasMemberAnnotation!(T, m, Id);
+	immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
+	immutable string columnName = getColumnName!(T, m);
 	immutable length = getColumnLength!(T, m)();
-	immutable bool hasNull = hasHibernatedNullAnnotation!(T,m)();
-	immutable bool hasNotNull = hasHibernatedNotNullAnnotation!(T,m);
+	immutable bool hasNull = hasMemberAnnotation!(T, m, Null);
+	immutable bool hasNotNull = hasMemberAnnotation!(T, m, NotNull);
 	immutable bool nullable = hasNull ? true : (hasNotNull ? false : true); //canColumnTypeHoldNulls!(T.m)
-	immutable bool unique = hasHibernatedUniqueAnnotation!(T,m);
+	immutable bool unique = hasMemberAnnotation!(T, m, UniqueKey);
 	immutable string typeName = "new EntityType(cast(immutable TypeInfo_Class)" ~ entityClassName ~ ".classinfo, \"" ~ entityClassName ~ "\")"; //getColumnTypeName!(T, m)();
 	immutable string propertyReadCode = getPropertyReadCode!(T,m)();
 	immutable string datasetReadCode = null; //getColumnTypeDatasetReadCode!(T,m)();
@@ -1483,25 +1375,25 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
 string getSimplePropertyDef(T, immutable string m)() {
 	//getPropertyReferencedEntityName(
 	immutable string entityClassName = fullyQualifiedName!T;
-	immutable string propertyName = getPropertyName!(T,m)();
+	immutable string propertyName = getPropertyName!(T,m);
 	static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
-	immutable bool isId = hasIdAnnotation!(T, m)();
-	immutable bool isGenerated = hasGeneratedAnnotation!(T, m)();
-	immutable string columnName = getColumnName!(T, m)();
+	immutable bool isId = hasMemberAnnotation!(T, m, Id);
+	immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
+	immutable string columnName = getColumnName!(T, m);
 	immutable length = getColumnLength!(T, m)();
-	immutable bool hasNull = hasHibernatedNullAnnotation!(T,m);
-	immutable bool hasNotNull = hasHibernatedNotNullAnnotation!(T,m);
+	immutable bool hasNull = hasMemberAnnotation!(T,m,Null);
+	immutable bool hasNotNull = hasMemberAnnotation!(T,m,NotNull);
 	immutable bool nullable = hasNull ? true : (hasNotNull ? false : true); //canColumnTypeHoldNulls!(T.m)
-	immutable bool unique = hasHibernatedUniqueAnnotation!(T,m);
-	immutable string typeName = getColumnTypeName!(T, m)();
-	immutable string propertyReadCode = getPropertyReadCode!(T,m)();
-	immutable string datasetReadCode = getColumnTypeDatasetReadCode!(T,m)();
-	immutable string propertyWriteCode = getPropertyWriteCode!(T,m)();
-	immutable string datasetWriteCode = getColumnTypeDatasetWriteCode!(T,m)();
-	immutable string propertyVariantSetCode = getPropertyVariantWriteCode!(T,m)();
-	immutable string propertyVariantGetCode = getPropertyVariantReadCode!(T,m)();
-	immutable string keyIsSetCode = getColumnTypeKeyIsSetCode!(T,m)();
-	immutable string isNullCode = getColumnTypeIsNullCode!(T,m)();
+	immutable bool unique = hasMemberAnnotation!(T, m, UniqueKey);
+	immutable string typeName = getColumnTypeName!(T, m);
+	immutable string propertyReadCode = getPropertyReadCode!(T,m);
+	immutable string datasetReadCode = getColumnTypeDatasetReadCode!(T,m);
+	immutable string propertyWriteCode = getPropertyWriteCode!(T,m);
+	immutable string datasetWriteCode = getColumnTypeDatasetWriteCode!(T,m);
+	immutable string propertyVariantSetCode = getPropertyVariantWriteCode!(T,m);
+	immutable string propertyVariantGetCode = getPropertyVariantReadCode!(T,m);
+	immutable string keyIsSetCode = getColumnTypeKeyIsSetCode!(T,m);
+	immutable string isNullCode = getColumnTypeIsNullCode!(T,m);
 	immutable string readerFuncDef = "\n" ~
 		"function(Object obj, DataSetReader r, int index) { \n" ~ 
 			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
@@ -1557,8 +1449,8 @@ string getSimplePropertyDef(T, immutable string m)() {
 
 
 string getPropertyDef(T, string m)() {
-	immutable bool isEmbedded = hasEmbeddedAnnotation!(T, m)();
-	immutable bool isOneToOne = hasOneToOneAnnotation!(T, m)();
+	immutable bool isEmbedded = hasMemberAnnotation!(T, m, Embedded);
+	immutable bool isOneToOne = hasMemberAnnotation!(T, m, OneToOne);
 	immutable bool isSimple = !isEmbedded && !isOneToOne;
 //	pragma(msg, m ~ " isEmbedded=" ~ (isEmbedded ? "true" : "false"))
 //	pragma(msg, m ~ " isOneToOne=" ~ (isOneToOne ? "true" : "false"))
@@ -1584,9 +1476,9 @@ string getEntityDef(T)() {
 	string generatedPropertyInfo;
 
     immutable string typeName = fullyQualifiedName!T;
-	immutable bool isEntity = hasHibernatedEntityAnnotation!T;
+	immutable bool isEntity = hasAnnotation!(T, Entity);
 
-	static assert (hasHibernatedEntityOrEmbeddableAnnotation!T(), "Type " ~ typeName ~ " has neither @Entity nor @Embeddable annotation");
+	static assert (hasOneOfAnnotations!(T, Entity, Embeddable), "Type " ~ typeName ~ " has neither @Entity nor @Embeddable annotation");
     //pragma(msg, "Entity type name: " ~ typeName);
 
 	immutable string entityName = getEntityName!T();
@@ -1600,7 +1492,7 @@ string getEntityDef(T)() {
 	generatedEntityInfo ~= "new EntityInfo(";
 	generatedEntityInfo ~= "\"" ~ entityName ~ "\", ";
 	generatedEntityInfo ~= "\"" ~ tableName ~ "\", ";
-	generatedEntityInfo ~= (hasHibernatedEmbeddableAnnotation!T) ? "true," : "false,";
+	generatedEntityInfo ~= hasAnnotation!(T, Embeddable) ? "true," : "false,";
 	generatedEntityInfo ~= "[\n";
 
 	//pragma(msg, entityName ~ " : " ~ ((hasHibernatedEmbeddableAnnotation!T) ? "true," : "false,"));
