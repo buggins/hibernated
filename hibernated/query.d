@@ -32,11 +32,36 @@ import hibernated.core;
 import hibernated.dialect;
 import hibernated.dialects.mysqldialect;
 
+enum JoinType {
+    InnerJoin,
+    LeftJoin,
+}
+
 struct FromClauseItem {
 	string entityName;
 	EntityInfo entity;
 	string entityAlias;
 	string sqlAlias;
+    JoinType joinType = JoinType.InnerJoin;
+    int startColumn;
+    int selectedColumns;
+}
+
+class FromClause {
+    FromClauseItem[] items;
+    FromClauseItem * add(EntityInfo entity, string entityAlias, JoinType joinType) {
+        FromClauseItem item;
+        item.entityName = entity.name;
+        item.entity = entity;
+        item.entityAlias = entityAlias is null ? "a" ~ to!string(items.length) : entityAlias;
+        item.sqlAlias = "a" ~ to!string(items.length);
+        item.joinType = joinType;
+        items ~= item;
+        return &items[$-1];
+    }
+    string getSQL() {
+        return "";
+    }
 }
 
 struct OrderByClauseItem {

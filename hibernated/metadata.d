@@ -76,10 +76,10 @@ abstract class EntityMetaData {
 
 	public string generateFindAllForEntity(string entityName);
 
-	public string getAllFieldList(EntityInfo ei);
-	public string getAllFieldList(string entityName);
+	public string getAllFieldList(EntityInfo ei, bool exceptKey = false);
+	public string getAllFieldList(string entityName, bool exceptKey = false);
 
-	public string generateFindByPkForEntity(EntityInfo ei);
+    public string generateFindByPkForEntity(EntityInfo ei);
 	public string generateFindByPkForEntity(string entityName);
 
 	public string generateInsertAllFieldsForEntity(EntityInfo ei);
@@ -111,6 +111,11 @@ public:
 	alias bool function(Object) IsNullFunc;
 	alias Object function(Object) GetObjectFunc;
 	alias void function(Object, Object value) SetObjectFunc;
+
+    package EntityInfo _entity;
+    @property EntityInfo entity() { return _entity; }
+    @property EntityMetaData metadata() { return _entity.metadata; }
+
 	string propertyName;
 	string columnName;
 	Type columnType;
@@ -167,7 +172,11 @@ public:
 
 /// Metadata of single entity
 class EntityInfo {
-	string name;
+
+    package EntityMetaData _metadata;
+    @property EntityMetaData metadata() { return _metadata; }
+
+    string name;
 	string tableName;
 	PropertyInfo [] properties;
 	PropertyInfo [string] propertyMap;
@@ -183,6 +192,7 @@ class EntityInfo {
 		this.classInfo = classInfo;
 		PropertyInfo[string] map;
 		foreach(i, p; properties) {
+            p._entity = this;
 			map[p.propertyName] = p;
             if (p.key) {
                 keyIndex = cast(int)i;
@@ -1479,13 +1489,12 @@ string entityListDef(T ...)() {
 		"    foreach(e; entities) {\n" ~
 		"        map[e.name] = e;\n" ~
 		"        typemap[cast(TypeInfo_Class)e.classInfo] = e;\n" ~
-		"    }\n" ~
+        "    }\n" ~
 		"    entityMap = map;\n" ~
 		"    classMap = typemap;\n" ~
 		"    //writeln(\"updating referenced entities\");\n" ~
 		"    foreach(e; entities) {\n" ~
 		"        foreach(p; e.getProperties()) {\n" ~
-		"            //writeln(\"updating property \" ~ p.propertyName);\n" ~
 		"            if (p.referencedEntityName !is null) {\n" ~
 		"                //writeln(\"embedded entity \" ~ p.referencedEntityName);\n" ~
 		"                enforceEx!HibernatedException((p.referencedEntityName in map) !is null, \"embedded entity not found in schema: \" ~ p.referencedEntityName);\n" ~
@@ -1526,97 +1535,77 @@ abstract class SchemaInfo : EntityMetaData {
         findEntityForObject(obj).setPropertyValue(obj, propertyName, value);
     }
 
-
-    override public string getAllFieldList(EntityInfo ei) {
-        string query;
-		for (int i = 0; i < ei.getPropertyCount(); i++) {
-			PropertyInfo pi = ei.getProperty(i);
-			if (query.length != 0)
-				query ~= ", ";
-			if (pi.embedded) {
-				EntityInfo emei = pi.referencedEntity;
-				query ~= getAllFieldList(emei);
-				//writeln("Embedded fields: " ~ getAllFieldList(emei));
-			} else {
-				query ~= pi.columnName;
-			}
-		}
-		return query;
+    private void appendCommaDelimitedList(ref string buf, string data) {
+        if (buf.length != 0)
+            buf ~= ", ";
+        buf ~= data;
     }
 
-	public string getAllFieldListExceptKeyForUpdate(EntityInfo ei) {
+	public string getAllFieldListForUpdate(EntityInfo ei, bool exceptKey = false) {
 		string query;
 		for (int i = 0; i < ei.getPropertyCount(); i++) {
 			PropertyInfo pi = ei.getProperty(i);
-			if (pi.key)
+			if (pi.key && exceptKey)
 				continue;
-			if (query.length != 0)
-				query ~= ", ";
 			if (pi.embedded) {
 				EntityInfo emei = pi.referencedEntity;
-				query ~= getAllFieldListExceptKeyForUpdate(emei);
-			} else {
-				query ~= pi.columnName;
-				query ~= "=?";
+                appendCommaDelimitedList(query, getAllFieldListForUpdate(emei, exceptKey));
+            } else if (pi.oneToOne) {
+                if (pi.columnName != null) {
+                    // read FK column
+                    appendCommaDelimitedList(query, pi.columnName);
+                }
+            } else {
+                appendCommaDelimitedList(query, pi.columnName ~ "=?");
 			}
 		}
 		return query;
 	}
 	
-	public string getAllFieldListExceptKey(EntityInfo ei) {
+	override public string getAllFieldList(EntityInfo ei, bool exceptKey = false) {
 		string query;
 		for (int i = 0; i < ei.getPropertyCount(); i++) {
 			PropertyInfo pi = ei.getProperty(i);
-			if (pi.key)
+            if (pi.key && exceptKey)
 				continue;
-			if (query.length != 0)
-				query ~= ", ";
 			if (pi.embedded) {
 				EntityInfo emei = pi.referencedEntity;
-				query ~= getAllFieldListExceptKey(emei);
-			} else {
-				query ~= pi.columnName;
+                appendCommaDelimitedList(query, getAllFieldList(emei, exceptKey));
+            } else if (pi.oneToOne) {
+                if (pi.columnName != null) {
+                    // read FK column
+                    appendCommaDelimitedList(query, pi.columnName);
+                }
+            } else {
+                appendCommaDelimitedList(query, pi.columnName);
 			}
 		}
 		return query;
 	}
 	
-	public string getAllFieldPlaceholderList(EntityInfo ei) {
+	public string getAllFieldPlaceholderList(EntityInfo ei, bool exceptKey = false) {
 		string query;
 		for (int i = 0; i < ei.getPropertyCount(); i++) {
 			PropertyInfo pi = ei.getProperty(i);
-			if (query.length != 0)
-				query ~= ", ";
-			if (pi.embedded) {
+            if (pi.key && exceptKey)
+                continue;
+            if (pi.embedded) {
 				EntityInfo emei = pi.referencedEntity;
-				query ~= getAllFieldPlaceholderList(emei);
-			} else {
-				query ~= '?';
+                appendCommaDelimitedList(query, getAllFieldPlaceholderList(emei));
+            } else if (pi.oneToOne) {
+                if (pi.columnName != null) {
+                    // read FK column
+                    appendCommaDelimitedList(query, "?");
+                }
+            } else {
+                appendCommaDelimitedList(query, "?");
 			}
 		}
 		return query;
 	}
 	
-	public string getAllFieldPlaceholderListExceptKey(EntityInfo ei) {
-		string query;
-		for (int i = 0; i < ei.getPropertyCount(); i++) {
-			PropertyInfo pi = ei.getProperty(i);
-			if (pi.key)
-				continue;
-			if (query.length != 0)
-				query ~= ", ";
-			if (pi.embedded) {
-				EntityInfo emei = pi.referencedEntity;
-				query ~= getAllFieldPlaceholderListExceptKey(emei);
-			} else {
-				query ~= '?';
-			}
-		}
-		return query;
-	}
-	
-	override public string getAllFieldList(string entityName) {
-        return getAllFieldList(findEntity(entityName));
+	override public string getAllFieldList(string entityName, bool exceptKey) {
+        return getAllFieldList(findEntity(entityName), exceptKey);
     }
 
     override public int readAllColumns(Object obj, DataSetReader r, int startColumn) {
@@ -1630,7 +1619,15 @@ abstract class SchemaInfo : EntityMetaData {
 				int columnsRead = readAllColumns(em, r, startColumn + columnCount);
 				pi.setObjectFunc(obj, em);
 				columnCount += columnsRead;
-			} else {
+            } else if (pi.oneToOne) {
+                if (pi.columnName !is null) {
+                    Variant fk = r.getVariant(startColumn + columnCount);
+                    // TODO: use FK
+                    columnCount++;
+                } else {
+                    // TODO: plan reading
+                }
+            } else {
 				pi.readFunc(obj, r, startColumn + columnCount);
 				columnCount++;
 			}
@@ -1698,11 +1695,11 @@ abstract class SchemaInfo : EntityMetaData {
 	}
 
     override public string generateInsertNoKeyForEntity(EntityInfo ei) {
-		return "INSERT INTO " ~ ei.tableName ~ "(" ~ getAllFieldListExceptKey(ei) ~ ") VALUES (" ~ getAllFieldPlaceholderListExceptKey(ei) ~ ")";
+		return "INSERT INTO " ~ ei.tableName ~ "(" ~ getAllFieldList(ei, true) ~ ") VALUES (" ~ getAllFieldPlaceholderList(ei, true) ~ ")";
 	}
 
     override public string generateUpdateForEntity(EntityInfo ei) {
-		return "UPDATE " ~ ei.tableName ~ " SET " ~ getAllFieldListExceptKeyForUpdate(ei) ~ " WHERE " ~ ei.getKeyProperty().columnName ~ "=?";
+		return "UPDATE " ~ ei.tableName ~ " SET " ~ getAllFieldListForUpdate(ei, true) ~ " WHERE " ~ ei.getKeyProperty().columnName ~ "=?";
 	}
 
     override public string generateFindByPkForEntity(string entityName) {
@@ -1764,6 +1761,12 @@ class SchemaInfoImpl(T...) : SchemaInfo {
             return classMap[obj.classinfo];
         } catch (Exception e) {
             throw new HibernatedException("Cannot find entity metadata for " ~ obj.classinfo.toString());
+        }
+    }
+    this() {
+        // update entity._metadata reference
+        foreach(e; entities) {
+            e._metadata = this;
         }
     }
 }
@@ -2044,7 +2047,7 @@ version(unittest) {
          "INSERT INTO person_info SET id=3, flags=123",
          "INSERT INTO person_info SET id=4, flags=234",
          "INSERT INTO person_info SET id=5, flags=345",
-         "INSERT INTO person SET id=1, first_name='Anrdrei', last_name='Alexandrescu', more_info_fk=3",
+         "INSERT INTO person SET id=1, first_name='Andrei', last_name='Alexandrescu', more_info_fk=3",
          "INSERT INTO person SET id=2, first_name='Walter', last_name='Bright', more_info_fk=4",
          "INSERT INTO person SET id=3, first_name='John', last_name='Smith', more_info_fk=5",
     ];
