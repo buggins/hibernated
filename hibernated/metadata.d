@@ -42,12 +42,20 @@ import hibernated.dialects.mysqldialect;
 //}
 
 
-interface EntityMetaData {
+abstract class EntityMetaData {
 
 	@property size_t length();
 	EntityInfo opIndex(int index);
 	EntityInfo opIndex(string entityName);
 	PropertyInfo opIndex(string entityName, string propertyName);
+
+    public string getEntityName(TypeInfo_Class type) {
+        return getClassMap()[type].name;
+    }
+    
+    public string getEntityNameForClass(T)() {
+        return getClassMap()[T.classinfo].name;
+    }
 
 	public EntityInfo [] getEntities();
 	public EntityInfo [string] getEntityMap();
@@ -1519,7 +1527,7 @@ abstract class SchemaInfo : EntityMetaData {
     }
 
 
-    public string getAllFieldList(EntityInfo ei) {
+    override public string getAllFieldList(EntityInfo ei) {
         string query;
 		for (int i = 0; i < ei.getPropertyCount(); i++) {
 			PropertyInfo pi = ei.getProperty(i);
@@ -1607,11 +1615,11 @@ abstract class SchemaInfo : EntityMetaData {
 		return query;
 	}
 	
-	public string getAllFieldList(string entityName) {
+	override public string getAllFieldList(string entityName) {
         return getAllFieldList(findEntity(entityName));
     }
 
-    public int readAllColumns(Object obj, DataSetReader r, int startColumn) {
+    override public int readAllColumns(Object obj, DataSetReader r, int startColumn) {
 		EntityInfo ei = findEntityForObject(obj);
 		int columnCount = 0;
 		for (int i = 0; i<ei.getPropertyCount(); i++) {
@@ -1630,7 +1638,7 @@ abstract class SchemaInfo : EntityMetaData {
 		return columnCount;
 	}
 
-	public int writeAllColumns(Object obj, DataSetWriter w, int startColumn) {
+	override public int writeAllColumns(Object obj, DataSetWriter w, int startColumn) {
 		EntityInfo ei = findEntityForObject(obj);
 		//writeln(ei.name ~ ".writeAllColumns");
 		int columnCount = 0;
@@ -1656,7 +1664,7 @@ abstract class SchemaInfo : EntityMetaData {
 		return columnCount;
 	}
 
-	public int writeAllColumnsExceptKey(Object obj, DataSetWriter w, int startColumn) {
+	override public int writeAllColumnsExceptKey(Object obj, DataSetWriter w, int startColumn) {
 		EntityInfo ei = findEntityForObject(obj);
 		int columnCount = 0;
 		for (int i = 0; i<ei.getPropertyCount(); i++) {
@@ -1676,32 +1684,32 @@ abstract class SchemaInfo : EntityMetaData {
 		return columnCount;
 	}
 
-    public string generateFindAllForEntity(string entityName) {
+    override public string generateFindAllForEntity(string entityName) {
 		EntityInfo ei = findEntity(entityName);
         return "SELECT " ~ getAllFieldList(ei) ~ " FROM " ~ ei.tableName;
 	}
 
-    public string generateFindByPkForEntity(EntityInfo ei) {
+    override public string generateFindByPkForEntity(EntityInfo ei) {
         return "SELECT " ~ getAllFieldList(ei) ~ " FROM " ~ ei.tableName ~ " WHERE " ~ ei.keyProperty.columnName ~ " = ?";
     }
 
-	public string generateInsertAllFieldsForEntity(EntityInfo ei) {
+    override public string generateInsertAllFieldsForEntity(EntityInfo ei) {
 		return "INSERT INTO " ~ ei.tableName ~ "(" ~ getAllFieldList(ei) ~ ") VALUES (" ~ getAllFieldPlaceholderList(ei) ~ ")";
 	}
 
-	public string generateInsertNoKeyForEntity(EntityInfo ei) {
+    override public string generateInsertNoKeyForEntity(EntityInfo ei) {
 		return "INSERT INTO " ~ ei.tableName ~ "(" ~ getAllFieldListExceptKey(ei) ~ ") VALUES (" ~ getAllFieldPlaceholderListExceptKey(ei) ~ ")";
 	}
 
-	public string generateUpdateForEntity(EntityInfo ei) {
+    override public string generateUpdateForEntity(EntityInfo ei) {
 		return "UPDATE " ~ ei.tableName ~ " SET " ~ getAllFieldListExceptKeyForUpdate(ei) ~ " WHERE " ~ ei.getKeyProperty().columnName ~ "=?";
 	}
 
-	public string generateFindByPkForEntity(string entityName) {
+    override public string generateFindByPkForEntity(string entityName) {
         return generateFindByPkForEntity(findEntity(entityName));
     }
 
-	public string generateInsertAllFieldsForEntity(string entityName){
+    override public string generateInsertAllFieldsForEntity(string entityName){
 		return generateInsertAllFieldsForEntity(findEntity(entityName));
 	}
 }
@@ -1713,41 +1721,45 @@ class SchemaInfoImpl(T...) : SchemaInfo {
     //pragma(msg, entityListDef!(T)());
     mixin(entityListDef!(T)());
 
-    public int getEntityCount()  { return cast(int)entities.length; }
+    override public int getEntityCount()  { return cast(int)entities.length; }
 
-    public EntityInfo[] getEntities()  { return entities; }
-	public EntityInfo[string] getEntityMap()  { return entityMap; }
-    public EntityInfo [TypeInfo_Class] getClassMap() { return classMap; }
+    override public EntityInfo[] getEntities()  { return entities; }
+    override public EntityInfo[string] getEntityMap()  { return entityMap; }
+    override public EntityInfo [TypeInfo_Class] getClassMap() { return classMap; }
 
-    public EntityInfo findEntity(string entityName)  { 
+    override public EntityInfo findEntity(string entityName)  { 
         try {
             return entityMap[entityName]; 
         } catch (Exception e) {
             throw new HibernatedException("Cannot find entity by name " ~ entityName);
         }
     }
-    public EntityInfo findEntity(TypeInfo_Class entityClass) { 
+
+    override public EntityInfo findEntity(TypeInfo_Class entityClass) { 
         try {
             return classMap[entityClass]; 
         } catch (Exception e) {
             throw new HibernatedException("Cannot find entity by class " ~ entityClass.toString());
         }
     }
-    public EntityInfo getEntity(int entityIndex) { 
+
+    override public EntityInfo getEntity(int entityIndex) { 
         try {
             return entities[entityIndex]; 
         } catch (Exception e) {
             throw new HibernatedException("Cannot get entity by index " ~ to!string(entityIndex));
         }
     }
-    public Object createEntity(string entityName) { 
+
+    override public Object createEntity(string entityName) { 
         try {
             return entityMap[entityName].createEntity(); 
         } catch (Exception e) {
             throw new HibernatedException("Cannot find entity by name " ~ entityName);
         }
     }
-    public EntityInfo findEntityForObject(Object obj) {
+
+    override public EntityInfo findEntityForObject(Object obj) {
         try {
             return classMap[obj.classinfo];
         } catch (Exception e) {
@@ -2108,22 +2120,22 @@ unittest {
         Session sess = factory.openSession();
         scope(exit) sess.close();
 
-        User u1 = cast(User)sess.load("User", Variant(1));
+        User u1 = sess.load!User(1);
         //writeln("Loaded value: " ~ u1.toString);
         assert(u1.id == 1);
         assert(u1.name == "user 1");
 
-        User u2 = cast(User)sess.load("User", Variant(2));
+        User u2 = sess.load!User(2);
         assert(u2.name == "user 2");
         assert(u2.flags == 22); // NULL is loaded as 0 if property cannot hold nulls
 
-        User u3 = cast(User)sess.get("User", Variant(3));
+        User u3 = sess.get!User(3);
         assert(u3.name == "user 3");
         assert(u3.flags == 0); // NULL is loaded as 0 if property cannot hold nulls
         assert(u3.getComment() !is null);
 
         User u4 = new User();
-        sess.load(u4, Variant(4));
+        sess.load(u4, 4);
         assert(u4.name == "user 4");
         assert(u4.getComment() is null);
 
@@ -2133,21 +2145,21 @@ unittest {
         assert(u5.name == "test user 5");
         assert(!u5.customerId.isNull);
 
-        User u6 = cast(User)sess.load("User", Variant(6));
+        User u6 = cast(User)sess.load!User(6);
 		assert(u6.name == "test user 6");
         assert(u6.customerId.isNull);
 
 		// 
 		//writeln("loading customer 3");
 		// testing @Embedded property
-		Customer c3 = cast(Customer)sess.load("Customer", Variant(3));
+        Customer c3 = sess.load!Customer(3);
 		assert(c3.address.zip is null);
 		assert(c3.address.streetAddress == "Baker Street, 24");
 		c3.address.streetAddress = "Baker Street, 24/2";
 		c3.address.zip = "55555";
 		//writeln("updating customer 3");
 		sess.update(c3);
-		Customer c3_reloaded = cast(Customer)sess.load("Customer", Variant(3));
+        Customer c3_reloaded = sess.load!Customer(3);
 		assert(c3.address.streetAddress == "Baker Street, 24/2");
 		assert(c3.address.zip == "55555");
 
@@ -2158,13 +2170,13 @@ unittest {
 		c4.name = "Customer_4";
 		sess.save(c4);
 
-		Customer c4_check = cast(Customer)sess.load("Customer", Variant(4));
+        Customer c4_check = sess.load!Customer(4);
 		assert(c4.id == c4_check.id);
 		assert(c4.name == c4_check.name);
 
 		sess.remove(c4);
 
-		c4 = cast(Customer)sess.get("Customer", Variant(4));
+        c4 = sess.get!Customer(4);
 		assert (c4 is null);
 
 		Customer c5 = new Customer();
@@ -2322,7 +2334,7 @@ unittest {
         Session sess = factory.openSession();
         scope(exit) sess.close();
 
-        Person p1 = cast(Person)sess.load("Person", Variant(1));
+        auto p1 = sess.get!Person(1);
         assert(p1.firstName == "Andrei");
     }
 }

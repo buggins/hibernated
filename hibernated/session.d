@@ -37,8 +37,10 @@ interface SessionFactory {
 }
 
 /// Session - main interface to load and persist entities -- similar to org.hibernate.Session
-interface Session
+abstract class Session
 {
+    EntityMetaData getMetaData();
+
 	/// not supported in current implementation
 	Transaction beginTransaction();
 	/// not supported in current implementation
@@ -58,21 +60,50 @@ interface Session
     /// Check if this instance is associated with this Session.
     bool contains(Object object);
 	SessionFactory getSessionFactory();
+
 	string getEntityName(Object object);
+
+    string getEntityName(TypeInfo_Class type);
+
     /// Return the persistent instance of the given named entity with the given identifier, or null if there is no such persistent instance.
-	Object get(string entityName, Variant id);
+    T get(T : Object, ID)(ID id) {
+        Variant v = id;
+        return cast(T)getObject(getEntityName(T.classinfo), v);
+    }
+    
     /// Read the persistent state associated with the given identifier into the given transient instance.
-    Object load(string entityName, Variant id);
+    T load(T : Object, ID)(ID id) {
+        Variant v = id;
+        return cast(T)loadObject(getEntityName(T.classinfo), v);
+    }
+
+    /// Read the persistent state associated with the given identifier into the given transient instance.
+    void load(T : Object, ID)(T obj, ID id) {
+        Variant v = id;
+        loadObject(obj, v);
+    }
+    
+    /// Return the persistent instance of the given named entity with the given identifier, or null if there is no such persistent instance.
+	Object getObject(string entityName, Variant id);
+
+    /// Read the persistent state associated with the given identifier into the given transient instance.
+    Object loadObject(string entityName, Variant id);
+
     /// Read the persistent state associated with the given identifier into the given transient instance
-    void load(Object obj, Variant id);
+    void loadObject(Object obj, Variant id);
+
     /// Re-read the state of the given instance from the underlying database.
 	void refresh(Object obj);
+
     /// Persist the given transient instance, first assigning a generated identifier.
 	Variant save(Object obj);
+
 	/// Persist the given transient instance.
 	void persist(Object obj);
+
 	/// Update the persistent instance with the identifier of the given detached instance.
 	void update(Object object);
+
     /// renamed from Session.delete
     void remove(Object object);
 
@@ -144,6 +175,10 @@ class SessionImpl : Session {
     DataSource connectionPool;
     Connection conn;
 
+    override EntityMetaData getMetaData() {
+        return metaData;
+    }
+
     private void checkClosed() {
         enforceEx!HibernatedException(!closed, "Session is closed");
     }
@@ -193,13 +228,38 @@ class SessionImpl : Session {
         checkClosed();
         return sessionFactory;
     }
+
     override string getEntityName(Object object) {
         checkClosed();
         return metaData.findEntityForObject(object).name;
     }
-    
-    override Object get(string entityName, Variant id) {
+
+    override string getEntityName(TypeInfo_Class type) {
+        checkClosed();
+        return metaData.getEntityName(type);
+    }
+
+    override Object getObject(string entityName, Variant id) {
         EntityInfo info = metaData.findEntity(entityName);
+        return getObject(info, null, id);
+    }
+
+    /// Read the persistent state associated with the given identifier into the given transient instance.
+    override Object loadObject(string entityName, Variant id) {
+        Object obj = getObject(entityName, id);
+        enforceEx!HibernatedException(obj !is null, "Entity " ~ entityName ~ " with id " ~ to!string(id) ~ " not found");
+        return obj;
+    }
+
+    /// Read the persistent state associated with the given identifier into the given transient instance
+    override void loadObject(Object obj, Variant id) {
+        EntityInfo info = metaData.findEntityForObject(obj);
+        Object found = getObject(info, obj, id);
+        enforceEx!HibernatedException(found !is null, "Entity " ~ info.name ~ " with id " ~ to!string(id) ~ " not found");
+    }
+
+    /// Read the persistent state associated with the given identifier into the given transient instance
+    Object getObject(EntityInfo info, Object obj, Variant id) {
         string query = metaData.generateFindByPkForEntity(info);
         //writeln("Finder query: " ~ query);
         PreparedStatement stmt = conn.prepareStatement(query);
@@ -209,7 +269,8 @@ class SessionImpl : Session {
         //writeln("returned rows: " ~ to!string(rs.getFetchSize()));
         scope(exit) rs.close();
         if (rs.next()) {
-            Object obj = info.createEntity();
+            if (obj is null)
+                obj = info.createEntity();
             //writeln("reading columns");
             metaData.readAllColumns(obj, rs, 1);
             //writeln("value: " ~ obj.toString);
@@ -219,35 +280,7 @@ class SessionImpl : Session {
             return null;
         }
     }
-
-    /// Read the persistent state associated with the given identifier into the given transient instance.
-    override Object load(string entityName, Variant id) {
-        Object obj = get(entityName, id);
-        enforceEx!HibernatedException(obj !is null, "Entity " ~ entityName ~ " with id " ~ to!string(id) ~ " not found");
-        return obj;
-    }
-
-    /// Read the persistent state associated with the given identifier into the given transient instance
-    override void load(Object obj, Variant id) {
-        EntityInfo info = metaData.findEntityForObject(obj);
-        string query = metaData.generateFindByPkForEntity(info);
-        //writeln("Finder query: " ~ query);
-        PreparedStatement stmt = conn.prepareStatement(query);
-        scope(exit) stmt.close();
-        stmt.setVariant(1, id);
-        ResultSet rs = stmt.executeQuery();
-        //writeln("returned rows: " ~ to!string(rs.getFetchSize()));
-        scope(exit) rs.close();
-        if (rs.next()) {
-            //writeln("reading columns");
-            metaData.readAllColumns(obj, rs, 1);
-            //writeln("value: " ~ obj.toString);
-        } else {
-            // not found!
-            enforceEx!HibernatedException(false, "Entity " ~ info.name ~ " with id " ~ to!string(id) ~ " not found");
-        }
-    }
-
+    
     /// Re-read the state of the given instance from the underlying database.
     override void refresh(Object obj) {
         EntityInfo info = metaData.findEntityForObject(obj);
@@ -330,7 +363,7 @@ class SessionImpl : Session {
 	}
 
 	/// Create a new instance of Query for the given HQL query string
-	Query createQuery(string queryString) {
+	override Query createQuery(string queryString) {
 		return new QueryImpl(this, queryString);
 	}
 }
