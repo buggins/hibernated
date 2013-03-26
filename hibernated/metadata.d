@@ -140,7 +140,8 @@ public:
 	GetObjectFunc getObjectFunc;
 	SetObjectFunc setObjectFunc;
 
-	@property bool embedded() { return relation == RelationType.Embedded; };
+    @property bool simple() { return relation == RelationType.None; };
+    @property bool embedded() { return relation == RelationType.Embedded; };
 	@property bool oneToOne() { return relation == RelationType.OneToOne; };
 	@property bool oneToMany() { return relation == RelationType.OneToMany; };
 	@property bool manyToOne() { return relation == RelationType.ManyToOne; };
@@ -2252,7 +2253,6 @@ version (unittest) {
 	@Entity("Person")
     class Person {
         @Id
-        @Column
         int id;
 
         @Column @NotNull
@@ -2271,14 +2271,27 @@ version (unittest) {
     @Table("person_info")
     class MoreInfo {
         @Id @Generated
-        @Column
         int id;
         @Column 
         long flags;
         @OneToOne("moreInfo")
         Person person;
+        @OneToOne("personInfo")
+        EvenMoreInfo evenMore;
     }
 
+    @Entity("EvenMore")
+    @Table("person_info2")
+    class EvenMoreInfo {
+        @Id @Generated
+        int id;
+        @Column 
+        long flags;
+        @OneToOne
+        @JoinColumn("person_info_fk")
+        MoreInfo personInfo;
+    }
+    
 }
 
 unittest {
@@ -2309,7 +2322,7 @@ unittest {
 	//	foreach(e; schema["Person"]) {
 	//		writeln("property: " ~ e.propertyName);
 	//	}
-	schema = new SchemaInfoImpl!(Person, MoreInfo);
+    schema = new SchemaInfoImpl!(Person, MoreInfo, EvenMoreInfo);
     if (MYSQL_TESTS_ENABLED) {
         //recreateTestSchema();
 

@@ -42,10 +42,14 @@ struct FromClauseItem {
 	EntityInfo entity;
 	string entityAlias;
 	string sqlAlias;
-    JoinType joinType = JoinType.InnerJoin;
     int startColumn;
     int selectedColumns;
+    // for JOINs
+    JoinType joinType = JoinType.InnerJoin;
     bool fetch;
+    FromClauseItem * base;
+    PropertyInfo baseProperty;
+    string pathString;
 }
 
 class FromClause {
@@ -67,6 +71,13 @@ class FromClause {
     }
     @property FromClauseItem * first() {
         return &items[0];
+    }
+    bool hasAlias(string aliasName) {
+        foreach(ref m; items) {
+            if (m.entityAlias == aliasName)
+                return true;
+        }
+        return false;
     }
     FromClauseItem * findByAlias(string aliasName) {
         foreach(ref m; items) {
@@ -220,13 +231,39 @@ class QueryParser {
         pos = p;
     }
 
-    void appendFromClause(string[] path, string aliasName, bool fetch) {
+    void appendFromClause(Token context, string[] path, string aliasName, JoinType joinType, bool fetch) {
+        int p = 0;
+        enforceEx!SyntaxError(fromClause.hasAlias(path[p]), "Unknown alias " ~ path[p] ~ " in FROM clause" ~ errorContext(context));
+        FromClauseItem * baseClause = findFromClauseByAlias(path[p]);
+        string pathString = path[p];
+        p++;
+        while(true) {
+            EntityInfo baseEntity = baseClause.entity;
+            enforceEx!SyntaxError(p < path.length, "Property name expected in FROM clause" ~ errorContext(context));
+            string propertyName = path[p++];
+            pathString ~= "." ~ propertyName;
+            PropertyInfo property = baseEntity[propertyName];
+            EntityInfo referencedEntity = property.referencedEntity;
+            assert(referencedEntity !is null);
+            enforceEx!SyntaxError(!property.simple, "Simple property " ~ propertyName ~ " cannot be used in JOIN" ~ errorContext(context));
+            enforceEx!SyntaxError(!property.embedded, "Embedded property " ~ propertyName ~ " cannot be used in JOIN" ~ errorContext(context));
+            bool last = (p == path.length);
+            FromClauseItem * item = fromClause.add(referencedEntity, last ? aliasName : null, joinType, fetch);
+            item.base = baseClause;
+            item.baseProperty = property;
+            item.pathString = pathString;
+            updateAlias(referencedEntity, item.entityAlias);
+            baseClause = item;
+            if (last)
+                break;
+        }
     }
 
     void parseFromClause(int start, int end) {
         int p = start;
         parseFirstFromClause(start, end, p);
         while (p < end) {
+            Token context = tokens[p];
             JoinType joinType = JoinType.InnerJoin;
             if (tokens[p].keyword == KeywordType.LEFT) {
                 joinType = JoinType.LeftJoin;
@@ -254,9 +291,9 @@ class QueryParser {
             enforceEx!SyntaxError(p < end && tokens[p].type == TokenType.Ident, "Invalid FROM clause - no alias in JOIN" ~ errorContext(tokens[p]));
             aliasName = tokens[p].text;
             p++;
-            appendFromClause(path, aliasName, fetch);
+            appendFromClause(context, path, aliasName, joinType, fetch);
         }
-		enforceEx!SyntaxError(p == end, "Extra items in FROM clause (only simple FROM Entity [[as] alias] supported so far)" ~ errorContext(tokens[p]));
+		enforceEx!SyntaxError(p == end, "Invalid FROM clause" ~ errorContext(tokens[p]));
 	}
 	
 	// in pairs {: Ident} replace type of ident with Parameter 
@@ -1340,7 +1377,7 @@ unittest {
 
 	//writeln("query unittest");
 	
-	EntityMetaData schema = new SchemaInfoImpl!(User, Customer, Address, Person, MoreInfo);
+    EntityMetaData schema = new SchemaInfoImpl!(User, Customer, Address, Person, MoreInfo, EvenMoreInfo);
 	QueryParser parser = new QueryParser(schema, "SELECT a FROM User AS a WHERE id = :Id AND name != :skipName OR name IS NULL  AND a.flags IS NOT NULL ORDER BY name, a.flags DESC");
 	assert(parser.parameterNames.length == 2);
 	//writeln("param1=" ~ parser.parameterNames[0]);
@@ -1377,6 +1414,10 @@ unittest {
 
 	//writeln(q.hql);
 	//writeln(q.sql);
-    parser = new QueryParser(schema, "SELECT a FROM Person AS a LEFT JOIN a.moreInfo as b WHERE a.id = :Id AND b.flags > 0");
-
+    parser = new QueryParser(schema, "SELECT a FROM Person AS a LEFT JOIN a.moreInfo as b LEFT JOIN b.evenMore c WHERE a.id = :Id AND b.flags > 0 AND c.flags > 0");
+    assert(parser.fromClause.hasAlias("a"));
+    assert(parser.fromClause.hasAlias("b"));
+    assert(parser.fromClause.findByAlias("a").entityName == "Person");
+    assert(parser.fromClause.findByAlias("b").entityName == "More");
+    assert(parser.fromClause.findByAlias("b").joinType == JoinType.LeftJoin);
 }
