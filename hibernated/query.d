@@ -53,14 +53,25 @@ class FromClause {
         FromClauseItem item;
         item.entityName = entity.name;
         item.entity = entity;
-        item.entityAlias = entityAlias is null ? "a" ~ to!string(items.length) : entityAlias;
-        item.sqlAlias = "a" ~ to!string(items.length);
+        item.entityAlias = entityAlias is null ? "_a" ~ to!string(items.length + 1) : entityAlias;
+        item.sqlAlias = "_t" ~ to!string(items.length + 1);
         item.joinType = joinType;
         items ~= item;
         return &items[$-1];
     }
+    @property size_t length() { return items.length; }
     string getSQL() {
         return "";
+    }
+    @property FromClauseItem * first() {
+        return &items[0];
+    }
+    FromClauseItem * findByAlias(string aliasName) {
+        foreach(ref m; items) {
+            if (m.entityAlias == aliasName)
+                return &m;
+        }
+        throw new SyntaxError("Cannot find FROM alias by name " ~ aliasName);
     }
 }
 
@@ -79,7 +90,8 @@ class QueryParser {
 	string query;
 	EntityMetaData metadata;
 	Token[] tokens;
-	FromClauseItem[] fromClause;
+    FromClause fromClause;
+	//FromClauseItem[] fromClause;
 	string[] parameterNames;
 	OrderByClauseItem[] orderByClause;
 	SelectClauseItem[] selectClause;
@@ -89,6 +101,7 @@ class QueryParser {
 	this(EntityMetaData metadata, string query) {
 		this.metadata = metadata;
 		this.query = query;
+        fromClause = new FromClause();
 		//writeln("query: " ~ query);
 		tokens = tokenize(query);
 		parse();
@@ -181,12 +194,7 @@ class QueryParser {
 		enforceEx!SyntaxError(p == end, "Extra items in FROM clause (only simple FROM Entity [[as] alias] supported so far)" ~ errorContext(tokens[p]));
 		if (aliasName != null)
 			updateAlias(ei, aliasName);
-		fromClause = new FromClauseItem[1];
-		fromClause[0].entityName = entityName;
-		fromClause[0].entity = ei;
-		fromClause[0].entityAlias = aliasName;
-		fromClause[0].sqlAlias = "_t1";
-		//writeln("FROM alias is " ~ fromClause[0].entityAlias);
+        fromClause.add(ei, aliasName, JoinType.InnerJoin);
 	}
 	
 	// in pairs {: Ident} replace type of ident with Parameter 
@@ -199,16 +207,12 @@ class QueryParser {
 	}
 	
 	FromClauseItem * findFromClauseByAlias(string aliasName) {
-		foreach(ref m; fromClause) {
-			if (m.entityAlias == aliasName)
-				return &m;
-		}
-		throw new SyntaxError("Cannot find FROM alias by name " ~ aliasName ~ " - in query " ~ query);
+        return fromClause.findByAlias(aliasName);
 	}
 	
 	void addSelectClauseItem(string aliasName, string[] propertyNames) {
 		//writeln("addSelectClauseItem alias=" ~ aliasName ~ " properties=" ~ to!string(propertyNames));
-		FromClauseItem * from = aliasName == null ? &fromClause[0] : findFromClauseByAlias(aliasName);
+		FromClauseItem * from = aliasName == null ? fromClause.first : findFromClauseByAlias(aliasName);
 		SelectClauseItem item;
 		item.aliasPtr = from;
 		item.prop = null;
@@ -230,7 +234,7 @@ class QueryParser {
 	}
 	
 	void addOrderByClauseItem(string aliasName, string propertyName, bool asc) {
-		FromClauseItem * from = aliasName == null ? &fromClause[0] : findFromClauseByAlias(aliasName);
+		FromClauseItem * from = aliasName == null ? fromClause.first : findFromClauseByAlias(aliasName);
 		OrderByClauseItem item;
 		item.aliasPtr = from;
 		item.prop = from.entity.findProperty(propertyName);
@@ -302,7 +306,7 @@ class QueryParser {
 	}
 	
 	void defaultSelectClause() {
-		addSelectClauseItem(fromClause[0].entityAlias, null);
+		addSelectClauseItem(fromClause.first.entityAlias, null);
 	}
 	
 	void validateSelectClause() {
@@ -428,7 +432,7 @@ class QueryParser {
 				idents.popFront();
 			} else {
 				// use first FROM clause if alias is not specified
-				a = &fromClause[0];
+				a = fromClause.first;
 			}
 			string aliasName = a.entityAlias;
 			EntityInfo ei = a.entity;
@@ -591,7 +595,7 @@ class QueryParser {
 	void addFromSQL(Dialect dialect, ParsedQuery res) {
 		res.appendSpace();
 		res.appendSQL("FROM ");
-		res.appendSQL(dialect.quoteIfNeeded(fromClause[0].entity.tableName) ~ " AS " ~ fromClause[0].sqlAlias);
+		res.appendSQL(dialect.quoteIfNeeded(fromClause.first.entity.tableName) ~ " AS " ~ fromClause.first.sqlAlias);
 	}
 	
 	void addWhereCondition(Token t, int basePrecedency, Dialect dialect, ParsedQuery res) {
@@ -1280,8 +1284,8 @@ unittest {
 	assert(parser.parameterNames[0] == "Id");
 	assert(parser.parameterNames[1] == "skipName");
 	assert(parser.fromClause.length == 1);
-	assert(parser.fromClause[0].entity.name == "User");
-	assert(parser.fromClause[0].entityAlias == "a");
+	assert(parser.fromClause.first.entity.name == "User");
+    assert(parser.fromClause.first.entityAlias == "a");
 	assert(parser.selectClause.length == 1);
 	assert(parser.selectClause[0].prop is null);
 	assert(parser.selectClause[0].aliasPtr.entity.name == "User");
