@@ -1420,4 +1420,5 @@ unittest {
     assert(parser.fromClause.findByAlias("a").entityName == "Person");
     assert(parser.fromClause.findByAlias("b").entityName == "More");
     assert(parser.fromClause.findByAlias("b").joinType == JoinType.LeftJoin);
+    assert(parser.fromClause.findByAlias("c").entityName == "EvenMore");
 }
