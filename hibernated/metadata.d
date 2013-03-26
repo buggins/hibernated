@@ -529,89 +529,6 @@ string getPropertyReferencedClassName(T : Object, string m)() {
 
 
 
-version (unittest) {
-	// for testing of Embeddable
-	@Embeddable 
-	class EMName {
-	    @Column
-		string firstName;
-		@Column
-		string lastName;
-	}
-
-	@Entity 
-	class EMUser {
-		@Id @Generated
-		@Column
-		int id;
-
-		@Embedded 
-		EMName userName;
-	}
-
-	// for testing of Embeddable
-	@Entity("Person")
-	class Person {
-		@Id
-		@Column
-		int id;
-
-		@Column
-		string firstName;
-
-		@Column
-		string lastName;
-
-		@OneToOne
-		@JoinColumn("more_info_fk")
-		MoreInfo moreInfo;
-	}
-
-	@Entity("More")
-	class MoreInfo {
-    	@Id @Generated
-    	@Column
-    	int id;
-    	@Column 
-    	long flags;
-    	@OneToOne("moreInfo")
-		Person person;
-	}
-
-}
-
-unittest {
-	static assert(hasAnnotation!(EMName, Embeddable));
-	static assert(hasMemberAnnotation!(EMUser, "userName", Embedded));
-	static assert(!hasMemberAnnotation!(EMUser, "userName", OneToOne));
-	static assert(getPropertyEmbeddedEntityName!(EMUser, "userName") == "EMName");
-	static assert(getPropertyEmbeddedClassName!(EMUser, "userName") == "hibernated.metadata.EMName");
-	//pragma(msg, getEmbeddedPropertyDef!(EMUser, "userName")());
-
-	// Checking generated metadata
-	EntityMetaData schema = new SchemaInfoImpl!(EMName, EMUser);
-
-	static assert(hasMemberAnnotation!(Person, "moreInfo", OneToOne));
-	static assert(getPropertyReferencedEntityName!(Person, "moreInfo") == "More");
-	static assert(getPropertyReferencedClassName!(Person, "moreInfo") == "hibernated.metadata.MoreInfo");
-	pragma(msg, getOneToOnePropertyDef!(Person, "moreInfo"));
-	pragma(msg, getOneToOnePropertyDef!(MoreInfo, "person"));
-	//pragma(msg, "running getOneToOneReferencedPropertyName");
-	//pragma(msg, getOneToOneReferencedPropertyName!(MoreInfo, "person"));
-    static assert(getJoinColumnName!(Person, "moreInfo") == "more_info_fk");
-	static assert(getOneToOneReferencedPropertyName!(MoreInfo, "person") == "moreInfo");
-	static assert(getOneToOneReferencedPropertyName!(Person, "moreInfo") is null);
-	//pragma(msg, "done getOneToOneReferencedPropertyName");
-
-	// Checking generated metadata
-	//EntityMetaData schema = new SchemaInfoImpl!(Person, MoreInfo);
-	//	foreach(e; schema["Person"]) {
-	//		writeln("property: " ~ e.propertyName);
-	//	}
-	schema = new SchemaInfoImpl!(Person, MoreInfo);
-
-}
-
 enum PropertyMemberType : int {
 	BYTE_TYPE,    // byte
 	SHORT_TYPE,   // short
@@ -2093,11 +2010,16 @@ version(unittest) {
         [
          "DROP TABLE IF EXISTS users",
          "DROP TABLE IF EXISTS customers",
-         ];
+         "DROP TABLE IF EXISTS person",
+         "DROP TABLE IF EXISTS person_info",
+        ];
     string[] UNIT_TEST_CREATE_TABLES_SCRIPT = 
 	[
          "CREATE TABLE IF NOT EXISTS users (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags INT, comment TEXT, customer_fk BIGINT NULL)",
          "CREATE TABLE IF NOT EXISTS customers (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, zip varchar(20), city varchar(100), street_address varchar(255))",
+         "CREATE TABLE IF NOT EXISTS person_info (id int not null primary key AUTO_INCREMENT, flags bigint",
+         "CREATE TABLE IF NOT EXISTS person (id int not null primary key AUTO_INCREMENT, first_name varchar(255) not null, last name varchar(255) not null, more_info_fk int",
+
          "INSERT INTO customers SET id=1, name='customer 1', zip='12345'",
          "INSERT INTO customers SET id=2, name='customer 2', zip='54321'",
          "INSERT INTO customers SET id=3, name='customer 3', street_address='Baker Street, 24'",
@@ -2107,7 +2029,13 @@ version(unittest) {
          "INSERT INTO users SET id=4, name='user 4', flags=44,   comment=NULL, customer_fk=3",
          "INSERT INTO users SET id=5, name='test user 5', flags=55,   comment='this user belongs to customer 3, too', customer_fk=3",
 		 "INSERT INTO users SET id=6, name='test user 6', flags=66,   comment='for checking of Nullable!long reading', customer_fk=null",
-         ];
+         "INSERT INTO person_info SET id=3, flags=123",
+         "INSERT INTO person_info SET id=4, flags=234",
+         "INSERT INTO person_info SET id=5, flags=345",
+         "INSERT INTO person SET id=1, first_name='Anrdrei', last_name='Alexandrescu', more_info_fk=3",
+         "INSERT INTO person SET id=2, first_name='Walter', last_name='Bright', more_info_fk=4",
+         "INSERT INTO person SET id=3, first_name='John', last_name='Smith', more_info_fk=5",
+    ];
 
     void recreateTestSchema() {
         DataSource connectionPool = createUnitTestMySQLDataSource();
@@ -2299,4 +2227,103 @@ unittest {
 	}
 }
 
+
+version (unittest) {
+	// for testing of Embeddable
+	@Embeddable 
+    class EMName {
+        @Column
+        string firstName;
+        @Column
+        string lastName;
+    }
+
+	@Entity 
+    class EMUser {
+        @Id @Generated
+        @Column
+        int id;
+
+        @Embedded 
+        EMName userName;
+    }
+
+	// for testing of Embeddable
+	@Entity("Person")
+    class Person {
+        @Id
+        @Column
+        int id;
+
+        @Column @NotNull
+        string firstName;
+
+        @Column @NotNull
+        string lastName;
+
+        @OneToOne
+        @JoinColumn("more_info_fk")
+        MoreInfo moreInfo;
+    }
+
+
+	@Entity("More")
+    @Table("person_info")
+    class MoreInfo {
+        @Id @Generated
+        @Column
+        int id;
+        @Column 
+        long flags;
+        @OneToOne("moreInfo")
+        Person person;
+    }
+
+}
+
+unittest {
+	static assert(hasAnnotation!(EMName, Embeddable));
+	static assert(hasMemberAnnotation!(EMUser, "userName", Embedded));
+	static assert(!hasMemberAnnotation!(EMUser, "userName", OneToOne));
+	static assert(getPropertyEmbeddedEntityName!(EMUser, "userName") == "EMName");
+	static assert(getPropertyEmbeddedClassName!(EMUser, "userName") == "hibernated.metadata.EMName");
+	//pragma(msg, getEmbeddedPropertyDef!(EMUser, "userName")());
+
+	// Checking generated metadata
+	EntityMetaData schema = new SchemaInfoImpl!(EMName, EMUser);
+
+	static assert(hasMemberAnnotation!(Person, "moreInfo", OneToOne));
+	static assert(getPropertyReferencedEntityName!(Person, "moreInfo") == "More");
+	static assert(getPropertyReferencedClassName!(Person, "moreInfo") == "hibernated.metadata.MoreInfo");
+	pragma(msg, getOneToOnePropertyDef!(Person, "moreInfo"));
+	pragma(msg, getOneToOnePropertyDef!(MoreInfo, "person"));
+	//pragma(msg, "running getOneToOneReferencedPropertyName");
+	//pragma(msg, getOneToOneReferencedPropertyName!(MoreInfo, "person"));
+    static assert(getJoinColumnName!(Person, "moreInfo") == "more_info_fk");
+	static assert(getOneToOneReferencedPropertyName!(MoreInfo, "person") == "moreInfo");
+	static assert(getOneToOneReferencedPropertyName!(Person, "moreInfo") is null);
+	//pragma(msg, "done getOneToOneReferencedPropertyName");
+
+	// Checking generated metadata
+	//EntityMetaData schema = new SchemaInfoImpl!(Person, MoreInfo);
+	//	foreach(e; schema["Person"]) {
+	//		writeln("property: " ~ e.propertyName);
+	//	}
+	schema = new SchemaInfoImpl!(Person, MoreInfo);
+    if (MYSQL_TESTS_ENABLED) {
+        //recreateTestSchema();
+
+		//writeln("metadata test 2");
+
+        // Checking generated metadata
+        Dialect dialect = new MySQLDialect();
+        DataSource ds = createUnitTestMySQLDataSource();
+        SessionFactory factory = new SessionFactoryImpl(schema, dialect, ds);
+        Session sess = factory.openSession();
+        scope(exit) sess.close();
+
+        Person p1 = cast(Person)sess.load("Person", Variant(1));
+        assert(p1.firstName == "Andrei");
+    }
+}
 
