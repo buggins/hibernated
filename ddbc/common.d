@@ -24,6 +24,7 @@ module ddbc.common;
 import ddbc.core;
 import std.algorithm;
 import std.exception;
+import std.stdio;
 import std.variant;
 
 class DataSourceImpl : DataSource {
@@ -393,6 +394,7 @@ version (unittest) {
     void unitTestExecuteBatch(Connection conn, string[] queries) {
         Statement stmt = conn.createStatement();
         foreach(query; queries) {
+			writeln("query:" ~ query);
             stmt.executeUpdate(query);
         }
     }

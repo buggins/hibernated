@@ -44,11 +44,8 @@ import std.variant;
 import std.datetime;
 
 class SQLException : Exception {
-    private Exception causedBy;
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
-    this(string msg, Exception causedBy, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); this.causedBy = causedBy; }
-    this(Exception causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); this.causedBy = causedBy; }
-    Exception getCausedBy() { return causedBy; }
+    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
 }
 
 /// JDBC java.sql.Types from http://docs.oracle.com/javase/6/docs/api/java/sql/Types.html

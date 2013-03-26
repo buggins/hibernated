@@ -155,53 +155,60 @@ public:
         mutex = new Mutex();
         this.url = url;
         this.params = params;
-        //writeln("parsing url " ~ url);
-        string urlParams;
-        ptrdiff_t qmIndex = std.string.indexOf(url, '?');
-        if (qmIndex >=0 ) {
-            urlParams = url[qmIndex + 1 .. $];
-            url = url[0 .. qmIndex];
-            // TODO: parse params
-        }
-        string dbName = "";
-		ptrdiff_t firstSlashes = std.string.indexOf(url, "//");
-		ptrdiff_t lastSlash = std.string.lastIndexOf(url, '/');
-		ptrdiff_t hostNameStart = firstSlashes >= 0 ? firstSlashes + 2 : 0;
-		ptrdiff_t hostNameEnd = lastSlash >=0 && lastSlash > firstSlashes + 1 ? lastSlash : url.length;
-        if (hostNameEnd < url.length - 1) {
-            dbName = url[hostNameEnd + 1 .. $];
-        }
-        hostname = url[hostNameStart..hostNameEnd];
-        if (hostname.length == 0)
-            hostname = "localhost";
-		ptrdiff_t portDelimiter = std.string.indexOf(hostname, ":");
-        if (portDelimiter >= 0) {
-            string portString = hostname[portDelimiter + 1 .. $];
-            hostname = hostname[0 .. portDelimiter];
-            if (portString.length > 0)
-                port = to!int(portString);
-            if (port < 1 || port > 65535)
-                port = 3306;
-        }
-        username = params["user"];
-        password = params["password"];
+        try {
+            //writeln("parsing url " ~ url);
+            string urlParams;
+            ptrdiff_t qmIndex = std.string.indexOf(url, '?');
+            if (qmIndex >=0 ) {
+                urlParams = url[qmIndex + 1 .. $];
+                url = url[0 .. qmIndex];
+                // TODO: parse params
+            }
+            string dbName = "";
+    		ptrdiff_t firstSlashes = std.string.indexOf(url, "//");
+    		ptrdiff_t lastSlash = std.string.lastIndexOf(url, '/');
+    		ptrdiff_t hostNameStart = firstSlashes >= 0 ? firstSlashes + 2 : 0;
+    		ptrdiff_t hostNameEnd = lastSlash >=0 && lastSlash > firstSlashes + 1 ? lastSlash : url.length;
+            if (hostNameEnd < url.length - 1) {
+                dbName = url[hostNameEnd + 1 .. $];
+            }
+            hostname = url[hostNameStart..hostNameEnd];
+            if (hostname.length == 0)
+                hostname = "localhost";
+    		ptrdiff_t portDelimiter = std.string.indexOf(hostname, ":");
+            if (portDelimiter >= 0) {
+                string portString = hostname[portDelimiter + 1 .. $];
+                hostname = hostname[0 .. portDelimiter];
+                if (portString.length > 0)
+                    port = to!int(portString);
+                if (port < 1 || port > 65535)
+                    port = 3306;
+            }
+            username = params["user"];
+            password = params["password"];
 
-        //writeln("host " ~ hostname ~ " : " ~ to!string(port) ~ " db=" ~ dbName ~ " user=" ~ username ~ " pass=" ~ password);
+            //writeln("host " ~ hostname ~ " : " ~ to!string(port) ~ " db=" ~ dbName ~ " user=" ~ username ~ " pass=" ~ password);
 
-        conn = new ddbc.drivers.mysql.Connection(hostname, username, password, dbName, cast(ushort)port);
-        closed = false;
-        setAutoCommit(true);
+            conn = new ddbc.drivers.mysql.Connection(hostname, username, password, dbName, cast(ushort)port);
+            closed = false;
+            setAutoCommit(true);
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
     override void close() {
 		checkClosed();
 
         lock();
         scope(exit) unlock();
+        try {
+            closeUnclosedStatements();
 
-        closeUnclosedStatements();
-
-        conn.close();
-        closed = true;
+            conn.close();
+            closed = true;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
     override void commit() {
         checkClosed();
@@ -209,9 +216,13 @@ public:
         lock();
         scope(exit) unlock();
 
-        Statement stmt = createStatement();
-        scope(exit) stmt.close();
-        stmt.executeUpdate("COMMIT");
+        try {
+            Statement stmt = createStatement();
+            scope(exit) stmt.close();
+            stmt.executeUpdate("COMMIT");
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
     override Statement createStatement() {
         checkClosed();
@@ -219,9 +230,13 @@ public:
         lock();
         scope(exit) unlock();
 
-        MySQLStatement stmt = new MySQLStatement(this);
-		activeStatements ~= stmt;
-        return stmt;
+        try {
+            MySQLStatement stmt = new MySQLStatement(this);
+    		activeStatements ~= stmt;
+            return stmt;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
 
     PreparedStatement prepareStatement(string sql) {
@@ -230,9 +245,13 @@ public:
         lock();
         scope(exit) unlock();
 
-        MySQLPreparedStatement stmt = new MySQLPreparedStatement(this, sql);
-        activeStatements ~= stmt;
-        return stmt;
+        try {
+            MySQLPreparedStatement stmt = new MySQLPreparedStatement(this, sql);
+            activeStatements ~= stmt;
+            return stmt;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
 
     override string getCatalog() {
@@ -248,8 +267,12 @@ public:
         lock();
         scope(exit) unlock();
 
-        conn.selectDB(catalog);
-        dbName = catalog;
+        try {
+            conn.selectDB(catalog);
+            dbName = catalog;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
 
     override bool isClosed() {
@@ -262,9 +285,13 @@ public:
         lock();
         scope(exit) unlock();
 
-        Statement stmt = createStatement();
-        scope(exit) stmt.close();
-        stmt.executeUpdate("ROLLBACK");
+        try {
+            Statement stmt = createStatement();
+            scope(exit) stmt.close();
+            stmt.executeUpdate("ROLLBACK");
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
     override bool getAutoCommit() {
         return autocommit;
@@ -276,10 +303,14 @@ public:
         lock();
         scope(exit) unlock();
 
-        Statement stmt = createStatement();
-        scope(exit) stmt.close();
-        stmt.executeUpdate("SET autocommit=" ~ (autoCommit ? "1" : "0"));
-        this.autocommit = autoCommit;
+        try {
+            Statement stmt = createStatement();
+            scope(exit) stmt.close();
+            stmt.executeUpdate("SET autocommit=" ~ (autoCommit ? "1" : "0"));
+            this.autocommit = autoCommit;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
 }
 
@@ -349,36 +380,52 @@ public:
         checkClosed();
         lock();
         scope(exit) unlock();
-        cmd = new Command(conn.getConnection(), query);
-        rs = cmd.execSQLResult();
-        resultSet = new MySQLResultSet(this, rs, createMetadata(cmd.getResultHeaders().getFieldDescriptions()));
-        return resultSet;
-    }
+		try {
+			cmd = new Command(conn.getConnection(), query);
+	        rs = cmd.execSQLResult();
+    	    resultSet = new MySQLResultSet(this, rs, createMetadata(cmd.getResultHeaders().getFieldDescriptions()));
+        	return resultSet;
+		} catch (Throwable e) {
+		    throw new SQLException(e);
+		}
+	}
     override int executeUpdate(string query) {
         checkClosed();
         lock();
         scope(exit) unlock();
-        cmd = new Command(conn.getConnection(), query);
 		ulong rowsAffected = 0;
-		cmd.execSQL(rowsAffected);
-        return cast(int)rowsAffected;
+		try {
+	        cmd = new Command(conn.getConnection(), query);
+			cmd.execSQL(rowsAffected);
+	        return cast(int)rowsAffected;
+		} catch (Throwable e) {
+			throw new SQLException(e);
+		}
     }
 	override int executeUpdate(string query, out Variant insertId) {
 		checkClosed();
 		lock();
 		scope(exit) unlock();
-		cmd = new Command(conn.getConnection(), query);
-		ulong rowsAffected = 0;
-		cmd.execSQL(rowsAffected);
-		insertId = Variant(cmd.lastInsertID);
-		return cast(int)rowsAffected;
+        try {
+            cmd = new Command(conn.getConnection(), query);
+    		ulong rowsAffected = 0;
+    		cmd.execSQL(rowsAffected);
+    		insertId = Variant(cmd.lastInsertID);
+    		return cast(int)rowsAffected;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
 	}
 	override void close() {
         checkClosed();
         lock();
         scope(exit) unlock();
-        closeResultSet();
-        closed = true;
+        try {
+            closeResultSet();
+            closed = true;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
     void closeResultSet() {
         if (cmd == null) {
@@ -402,9 +449,13 @@ class MySQLPreparedStatement : MySQLStatement, PreparedStatement {
     this(MySQLConnection conn, string query) {
         super(conn);
         this.query = query;
-        cmd = new Command(conn.getConnection(), query);
-        cmd.prepare();
-        paramCount = cmd.getParamCount();
+        try {
+            cmd = new Command(conn.getConnection(), query);
+            cmd.prepare();
+            paramCount = cmd.getParamCount();
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
     void checkIndex(int index) {
         if (index < 1 || index > paramCount)
@@ -421,9 +472,13 @@ public:
         checkClosed();
         lock();
         scope(exit) unlock();
-        if (metadata is null)
-            metadata = createMetadata(cmd.getPreparedHeaders().getFieldDescriptions());
-        return metadata;
+        try {
+            if (metadata is null)
+                metadata = createMetadata(cmd.getPreparedHeaders().getFieldDescriptions());
+            return metadata;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
 
     /// Retrieves the number, types and properties of this PreparedStatement object's parameters.
@@ -431,197 +486,297 @@ public:
         checkClosed();
         lock();
         scope(exit) unlock();
-        if (paramMetadata is null)
-            paramMetadata = createMetadata(cmd.getPreparedHeaders().getParamDescriptions());
-        return paramMetadata;
+        try {
+            if (paramMetadata is null)
+                paramMetadata = createMetadata(cmd.getPreparedHeaders().getParamDescriptions());
+            return paramMetadata;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
 
     override int executeUpdate() {
         checkClosed();
         lock();
         scope(exit) unlock();
-        ulong rowsAffected = 0;
-        cmd.execPrepared(rowsAffected);
-        return cast(int)rowsAffected;
+        try {
+            ulong rowsAffected = 0;
+            cmd.execPrepared(rowsAffected);
+            return cast(int)rowsAffected;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
 
 	override int executeUpdate(out Variant insertId) {
 		checkClosed();
 		lock();
 		scope(exit) unlock();
-		ulong rowsAffected = 0;
-		cmd.execPrepared(rowsAffected);
-		insertId = cmd.lastInsertID;
-		return cast(int)rowsAffected;
+        try {
+    		ulong rowsAffected = 0;
+    		cmd.execPrepared(rowsAffected);
+    		insertId = cmd.lastInsertID;
+    		return cast(int)rowsAffected;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
 	}
 
     override ddbc.core.ResultSet executeQuery() {
         checkClosed();
         lock();
         scope(exit) unlock();
-        rs = cmd.execPreparedResult();
-        resultSet = new MySQLResultSet(this, rs, getMetaData());
-        return resultSet;
+        try {
+            rs = cmd.execPreparedResult();
+            resultSet = new MySQLResultSet(this, rs, getMetaData());
+            return resultSet;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
     
     override void clearParameters() {
         checkClosed();
         lock();
         scope(exit) unlock();
-        for (int i = 1; i <= paramCount; i++)
-            setNull(i);
+        try {
+            for (int i = 1; i <= paramCount; i++)
+                setNull(i);
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
     
 	override void setFloat(int parameterIndex, float x) {
 		checkClosed();
 		lock();
 		scope(exit) unlock();
-		checkIndex(parameterIndex);
-		cmd.param(parameterIndex-1) = x;
+        checkIndex(parameterIndex);
+        try {
+    		cmd.param(parameterIndex-1) = x;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
 	}
 	override void setDouble(int parameterIndex, double x){
 		checkClosed();
 		lock();
 		scope(exit) unlock();
-		checkIndex(parameterIndex);
-		cmd.param(parameterIndex-1) = x;
+        checkIndex(parameterIndex);
+        try {
+    		cmd.param(parameterIndex-1) = x;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
 	}
 	override void setBoolean(int parameterIndex, bool x) {
         checkClosed();
         lock();
         scope(exit) unlock();
         checkIndex(parameterIndex);
-        cmd.param(parameterIndex-1) = x;
+        try {
+            cmd.param(parameterIndex-1) = x;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
     override void setLong(int parameterIndex, long x) {
         checkClosed();
         lock();
         scope(exit) unlock();
         checkIndex(parameterIndex);
-        cmd.param(parameterIndex-1) = x;
+        try {
+            cmd.param(parameterIndex-1) = x;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
     override void setUlong(int parameterIndex, ulong x) {
         checkClosed();
         lock();
         scope(exit) unlock();
         checkIndex(parameterIndex);
-        cmd.param(parameterIndex-1) = x;
+        try {
+            cmd.param(parameterIndex-1) = x;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
     override void setInt(int parameterIndex, int x) {
         checkClosed();
         lock();
         scope(exit) unlock();
         checkIndex(parameterIndex);
-        cmd.param(parameterIndex-1) = x;
+        try {
+            cmd.param(parameterIndex-1) = x;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
     override void setUint(int parameterIndex, uint x) {
         checkClosed();
         lock();
         scope(exit) unlock();
         checkIndex(parameterIndex);
-        cmd.param(parameterIndex-1) = x;
+        try {
+            cmd.param(parameterIndex-1) = x;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
     override void setShort(int parameterIndex, short x) {
         checkClosed();
         lock();
         scope(exit) unlock();
         checkIndex(parameterIndex);
-        cmd.param(parameterIndex-1) = x;
+        try {
+            cmd.param(parameterIndex-1) = x;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
     override void setUshort(int parameterIndex, ushort x) {
         checkClosed();
         lock();
         scope(exit) unlock();
         checkIndex(parameterIndex);
-        cmd.param(parameterIndex-1) = x;
+        try {
+            cmd.param(parameterIndex-1) = x;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
     override void setByte(int parameterIndex, byte x) {
         checkClosed();
         lock();
         scope(exit) unlock();
         checkIndex(parameterIndex);
-        cmd.param(parameterIndex-1) = x;
+        try {
+            cmd.param(parameterIndex-1) = x;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
     override void setUbyte(int parameterIndex, ubyte x) {
         checkClosed();
         lock();
         scope(exit) unlock();
         checkIndex(parameterIndex);
-        cmd.param(parameterIndex-1) = x;
+        try {
+            cmd.param(parameterIndex-1) = x;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
     override void setBytes(int parameterIndex, byte[] x) {
         checkClosed();
         lock();
         scope(exit) unlock();
         checkIndex(parameterIndex);
-        if (x == null)
-            setNull(parameterIndex);
-        else
-            cmd.param(parameterIndex-1) = x;
+        try {
+            if (x == null)
+                setNull(parameterIndex);
+            else
+                cmd.param(parameterIndex-1) = x;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
     override void setUbytes(int parameterIndex, ubyte[] x) {
         checkClosed();
         lock();
         scope(exit) unlock();
         checkIndex(parameterIndex);
-        if (x == null)
-            setNull(parameterIndex);
-        else
-            cmd.param(parameterIndex-1) = x;
+        try {
+            if (x == null)
+                setNull(parameterIndex);
+            else
+                cmd.param(parameterIndex-1) = x;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
     override void setString(int parameterIndex, string x) {
         checkClosed();
         lock();
         scope(exit) unlock();
         checkIndex(parameterIndex);
-        if (x == null)
-            setNull(parameterIndex);
-        else
-            cmd.param(parameterIndex-1) = x;
+        try {
+            if (x == null)
+                setNull(parameterIndex);
+            else
+                cmd.param(parameterIndex-1) = x;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
 	override void setDateTime(int parameterIndex, DateTime x) {
 		checkClosed();
 		lock();
 		scope(exit) unlock();
 		checkIndex(parameterIndex);
-		cmd.param(parameterIndex-1) = x;
+        try {
+		    cmd.param(parameterIndex-1) = x;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
 	}
 	override void setDate(int parameterIndex, Date x) {
 		checkClosed();
 		lock();
 		scope(exit) unlock();
 		checkIndex(parameterIndex);
-		cmd.param(parameterIndex-1) = x;
+        try {
+    		cmd.param(parameterIndex-1) = x;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
 	}
 	override void setTime(int parameterIndex, TimeOfDay x) {
 		checkClosed();
 		lock();
 		scope(exit) unlock();
 		checkIndex(parameterIndex);
-		cmd.param(parameterIndex-1) = x;
+        try {
+		    cmd.param(parameterIndex-1) = x;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
 	}
 	override void setVariant(int parameterIndex, Variant x) {
         checkClosed();
         lock();
         scope(exit) unlock();
         checkIndex(parameterIndex);
-        if (x == null)
-            setNull(parameterIndex);
-        else
-            cmd.param(parameterIndex-1) = x;
+        try {
+            if (x == null)
+                setNull(parameterIndex);
+            else
+                cmd.param(parameterIndex-1) = x;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
     override void setNull(int parameterIndex) {
         checkClosed();
         lock();
         scope(exit) unlock();
         checkIndex(parameterIndex);
-        cmd.setNullParam(parameterIndex-1);
+        try {
+            cmd.setNullParam(parameterIndex-1);
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
     override void setNull(int parameterIndex, int sqlType) {
         checkClosed();
         lock();
         scope(exit) unlock();
-        setNull(parameterIndex);
+        try {
+            setNull(parameterIndex);
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
 }
 
@@ -666,11 +821,15 @@ public:
         this.stmt = stmt;
         this.rs = resultSet;
         this.metadata = metadata;
-        closed = false;
-        rowCount = cast(int)rs.length;
-        currentRowIndex = -1;
-        columnMap = rs.getColNameMap();
-		columnCount = cast(int)rs.getColNames().length;
+        try {
+            closed = false;
+            rowCount = cast(int)rs.length;
+            currentRowIndex = -1;
+            columnMap = rs.getColNameMap();
+    		columnCount = cast(int)rs.getColNames().length;
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
     }
 
 	void onStatementClosed() {
