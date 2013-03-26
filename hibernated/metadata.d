@@ -641,48 +641,51 @@ string getPropertyReferencedClassName(T : Object, string m)() {
 version (unittest) {
 	// for testing of Embeddable
 	@Embeddable 
-		class EMName {
-			@Column
-				string firstName;
-			@Column
-				string lastName;
-		}
+	class EMName {
+	    @Column
+		string firstName;
+		@Column
+		string lastName;
+	}
 
 	@Entity 
-		class EMUser {
-			@Id @Generated
-				@Column
-				int id;
+	class EMUser {
+		@Id @Generated
+		@Column
+		int id;
 
-			@Embedded 
-				EMName userName;
-		}
+		@Embedded 
+		EMName userName;
+	}
 
 	// for testing of Embeddable
-	@Entity 
-		class Person {
-			@Id
-				@Column
-				int id;
-			@Column
-				string firstName;
-			@Column
-				string lastName;
-			@OneToOne
-				@JoinColumn("more_info_fk")
-				MoreInfo moreInfo;
-		}
+	@Entity("Person")
+	class Person {
+		@Id
+		@Column
+		int id;
 
-	@Entity 
-		class MoreInfo {
-			@Id @Generated
-				@Column
-				int id;
-			@Column 
-				long flags;
-			@OneToOne("moreInfo")
-				Person person;
-		}
+		@Column
+		string firstName;
+
+		@Column
+		string lastName;
+
+		@OneToOne
+		@JoinColumn("more_info_fk")
+		MoreInfo moreInfo;
+	}
+
+	@Entity("More")
+	class MoreInfo {
+    	@Id @Generated
+    	@Column
+    	int id;
+    	@Column 
+    	long flags;
+    	@OneToOne("moreInfo")
+		Person person;
+	}
 
 }
 
@@ -699,14 +702,15 @@ unittest {
 	EntityMetaData schema = new SchemaInfoImpl!(EMName, EMUser);
 
 	static assert(hasOneToOneAnnotation!(Person, "moreInfo"));
-	static assert(getPropertyReferencedEntityName!(Person, "moreInfo")() == "MoreInfo");
+	static assert(getPropertyReferencedEntityName!(Person, "moreInfo")() == "More");
 	static assert(getPropertyReferencedClassName!(Person, "moreInfo")() == "hibernated.metadata.MoreInfo");
 	pragma(msg, getOneToOnePropertyDef!(Person, "moreInfo")());
 	pragma(msg, getOneToOnePropertyDef!(MoreInfo, "person")());
 	pragma(msg, "running getOneToOneReferencedPropertyName");
 	pragma(msg, getOneToOneReferencedPropertyName!(MoreInfo, "person"));
+    static assert(getJoinColumnName!(Person, "moreInfo") == "more_info_fk");
 	static assert(getOneToOneReferencedPropertyName!(MoreInfo, "person") == "moreInfo");
-	//static assert(getOneToOneReferencedPropertyName!(Person, "moreInfo") is null);
+	static assert(getOneToOneReferencedPropertyName!(Person, "moreInfo") is null);
 	pragma(msg, "done getOneToOneReferencedPropertyName");
 
 	// Checking generated metadata
@@ -714,7 +718,7 @@ unittest {
 	//	foreach(e; schema["Person"]) {
 	//		writeln("property: " ~ e.propertyName);
 	//	}
-	//schema.
+	schema = new SchemaInfoImpl!(Person, MoreInfo);
 
 }
 
