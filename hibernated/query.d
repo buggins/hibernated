@@ -45,17 +45,19 @@ struct FromClauseItem {
     JoinType joinType = JoinType.InnerJoin;
     int startColumn;
     int selectedColumns;
+    bool fetch;
 }
 
 class FromClause {
     FromClauseItem[] items;
-    FromClauseItem * add(EntityInfo entity, string entityAlias, JoinType joinType) {
+    FromClauseItem * add(EntityInfo entity, string entityAlias, JoinType joinType, bool fetch) {
         FromClauseItem item;
         item.entityName = entity.name;
         item.entity = entity;
         item.entityAlias = entityAlias is null ? "_a" ~ to!string(items.length + 1) : entityAlias;
         item.sqlAlias = "_t" ~ to!string(items.length + 1);
         item.joinType = joinType;
+        item.fetch = fetch;
         items ~= item;
         return &items[$-1];
     }
@@ -171,30 +173,90 @@ class QueryParser {
 			}
 		}
 	}
+
+    private int parseFieldRef(int start, int end, ref string[] path) {
+        int pos = start;
+        while (pos < end) {
+            if (tokens[pos].type == TokenType.Ident || tokens[pos].type == TokenType.Alias) {
+                enforceEx!SyntaxError(path.length == 0 || tokens[pos].type != TokenType.Alias, "Alias is allowed only as first item" ~ errorContext(tokens[pos]));
+                path ~= tokens[pos].text;
+                pos++;
+                if (pos == end || tokens[pos].type != TokenType.Dot)
+                    return pos;
+                if (pos == end - 1 || tokens[pos + 1].type != TokenType.Ident)
+                    return pos;
+                pos++;
+            } else {
+                break;
+            }
+        }
+        enforceEx!SyntaxError(tokens[pos].type != TokenType.Dot, "Unexpected dot at end in field list" ~ errorContext(tokens[pos]));
+        enforceEx!SyntaxError(path.length > 0, "Empty field list" ~ errorContext(tokens[pos]));
+        return pos;
+    }
 	
-	void parseFromClause(int start, int end) {
-		enforceEx!SyntaxError(start < end, "Invalid FROM clause " ~ errorContext(tokens[start]));
-		// minimal support:
-		//    Entity
-		//    Entity alias
-		//    Entity AS alias
-		enforceEx!SyntaxError(tokens[start].type == TokenType.Ident, "Entity name identifier expected in FROM clause" ~ errorContext(tokens[start]));
-		string entityName = cast(string)tokens[start].text;
-		EntityInfo ei = metadata.findEntity(entityName);
-		updateEntity(ei, entityName);
-		string aliasName = null;
-		int p = start + 1;
-		if (p < end && tokens[p].type == TokenType.Keyword && tokens[p].keyword == KeywordType.AS)
-			p++;
-		if (p < end) {
-			enforceEx!SyntaxError(tokens[p].type == TokenType.Ident, "Alias name identifier expected in FROM clause" ~ errorContext(tokens[p]));
-			aliasName = cast(string)tokens[p].text;
-			p++;
-		}
+    private void parseFirstFromClause(int start, int end, out int pos) {
+        enforceEx!SyntaxError(start < end, "Invalid FROM clause " ~ errorContext(tokens[start]));
+        // minimal support:
+        //    Entity
+        //    Entity alias
+        //    Entity AS alias
+        enforceEx!SyntaxError(tokens[start].type == TokenType.Ident, "Entity name identifier expected in FROM clause" ~ errorContext(tokens[start]));
+        string entityName = cast(string)tokens[start].text;
+        EntityInfo ei = metadata.findEntity(entityName);
+        updateEntity(ei, entityName);
+        string aliasName = null;
+        int p = start + 1;
+        if (p < end && tokens[p].type == TokenType.Keyword && tokens[p].keyword == KeywordType.AS)
+            p++;
+        if (p < end) {
+            enforceEx!SyntaxError(tokens[p].type == TokenType.Ident, "Alias name identifier expected in FROM clause" ~ errorContext(tokens[p]));
+            aliasName = cast(string)tokens[p].text;
+            p++;
+        }
+        if (aliasName != null)
+            updateAlias(ei, aliasName);
+        fromClause.add(ei, aliasName, JoinType.InnerJoin, true);
+        pos = p;
+    }
+
+    void appendFromClause(string[] path, string aliasName, bool fetch) {
+    }
+
+    void parseFromClause(int start, int end) {
+        int p = start;
+        parseFirstFromClause(start, end, p);
+        while (p < end) {
+            JoinType joinType = JoinType.InnerJoin;
+            if (tokens[p].keyword == KeywordType.LEFT) {
+                joinType = JoinType.LeftJoin;
+                p++;
+            } else if (tokens[p].keyword == KeywordType.INNER) {
+                p++;
+            }
+            enforceEx!SyntaxError(p < end && tokens[p].keyword == KeywordType.JOIN, "Invalid FROM clause" ~ errorContext(tokens[p]));
+            p++;
+            enforceEx!SyntaxError(p < end, "Invalid FROM clause - incomplete JOIN" ~ errorContext(tokens[p]));
+            bool fetch = false;
+            if (tokens[p].keyword == KeywordType.FETCH) {
+                fetch = true;
+                p++;
+                enforceEx!SyntaxError(p < end, "Invalid FROM clause - incomplete JOIN" ~ errorContext(tokens[p]));
+            }
+            string[] path;
+            p = parseFieldRef(p, end, path);
+            string aliasName;
+            bool hasAS = false;
+            if (p < end && tokens[p].keyword == KeywordType.AS) {
+                p++;
+                hasAS = true;
+            }
+            enforceEx!SyntaxError(p < end && tokens[p].type == TokenType.Ident, "Invalid FROM clause - no alias in JOIN" ~ errorContext(tokens[p]));
+            aliasName = tokens[p].text;
+            p++;
+            appendFromClause(path, aliasName, fetch);
+        }
 		enforceEx!SyntaxError(p == end, "Extra items in FROM clause (only simple FROM Entity [[as] alias] supported so far)" ~ errorContext(tokens[p]));
-		if (aliasName != null)
-			updateAlias(ei, aliasName);
-        fromClause.add(ei, aliasName, JoinType.InnerJoin);
 	}
 	
 	// in pairs {: Ident} replace type of ident with Parameter 
@@ -736,7 +798,8 @@ enum KeywordType {
 	OUTER,
 	LEFT,
 	RIGHT,
-	AS,
+    FETCH,
+    AS,
 	LIKE,
 	IN,
 	IS,
@@ -767,7 +830,8 @@ KeywordType isKeyword(char[] str) {
 	if (s=="OUTER") return KeywordType.OUTER;
 	if (s=="LEFT") return KeywordType.LEFT;
 	if (s=="RIGHT") return KeywordType.RIGHT;
-	if (s=="LIKE") return KeywordType.LIKE;
+    if (s=="FETCH") return KeywordType.FETCH;
+    if (s=="LIKE") return KeywordType.LIKE;
 	if (s=="IN") return KeywordType.IN;
 	if (s=="IS") return KeywordType.IS;
 	if (s=="NOT") return KeywordType.NOT;
@@ -1276,7 +1340,7 @@ unittest {
 
 	//writeln("query unittest");
 	
-	EntityMetaData schema = new SchemaInfoImpl!(User, Customer, Address);
+	EntityMetaData schema = new SchemaInfoImpl!(User, Customer, Address, Person, MoreInfo);
 	QueryParser parser = new QueryParser(schema, "SELECT a FROM User AS a WHERE id = :Id AND name != :skipName OR name IS NULL  AND a.flags IS NOT NULL ORDER BY name, a.flags DESC");
 	assert(parser.parameterNames.length == 2);
 	//writeln("param1=" ~ parser.parameterNames[0]);
@@ -1310,8 +1374,9 @@ unittest {
 	ParsedQuery q = parser.makeSQL(dialect);
 	//writeln(parser.whereClause.dump(0));
 	//writeln(q.hql ~ "\n=>\n" ~ q.sql);
-	
+
 	//writeln(q.hql);
 	//writeln(q.sql);
-	
+    parser = new QueryParser(schema, "SELECT a FROM Person AS a LEFT JOIN a.moreInfo as b WHERE a.id = :Id AND b.flags > 0");
+
 }

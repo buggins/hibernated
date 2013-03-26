@@ -1725,43 +1725,28 @@ class SchemaInfoImpl(T...) : SchemaInfo {
     override public EntityInfo [TypeInfo_Class] getClassMap() { return classMap; }
 
     override public EntityInfo findEntity(string entityName)  { 
-        try {
-            return entityMap[entityName]; 
-        } catch (Exception e) {
-            throw new HibernatedException("Cannot find entity by name " ~ entityName);
-        }
+        enforceEx!HibernatedException((entityName in entityMap) !is null, "Cannot find entity by name " ~ entityName);
+        return entityMap[entityName]; 
     }
 
     override public EntityInfo findEntity(TypeInfo_Class entityClass) { 
-        try {
-            return classMap[entityClass]; 
-        } catch (Exception e) {
-            throw new HibernatedException("Cannot find entity by class " ~ entityClass.toString());
-        }
+        enforceEx!HibernatedException((entityClass in classMap) !is null, "Cannot find entity by class " ~ entityClass.toString());
+        return classMap[entityClass]; 
     }
 
     override public EntityInfo getEntity(int entityIndex) { 
-        try {
-            return entities[entityIndex]; 
-        } catch (Exception e) {
-            throw new HibernatedException("Cannot get entity by index " ~ to!string(entityIndex));
-        }
+        enforceEx!HibernatedException(entityIndex >= 0 && entityIndex < entities.length, "Invalid entity index " ~ to!string(entityIndex));
+        return entities[entityIndex]; 
     }
 
     override public Object createEntity(string entityName) { 
-        try {
-            return entityMap[entityName].createEntity(); 
-        } catch (Exception e) {
-            throw new HibernatedException("Cannot find entity by name " ~ entityName);
-        }
+        enforceEx!HibernatedException((entityName in entityMap) !is null, "Cannot find entity by name " ~ entityName);
+        return entityMap[entityName].createEntity(); 
     }
 
     override public EntityInfo findEntityForObject(Object obj) {
-        try {
-            return classMap[obj.classinfo];
-        } catch (Exception e) {
-            throw new HibernatedException("Cannot find entity metadata for " ~ obj.classinfo.toString());
-        }
+        enforceEx!HibernatedException((obj.classinfo in classMap) !is null, "Cannot find entity by class " ~ obj.classinfo.toString());
+        return classMap[obj.classinfo];
     }
     this() {
         // update entity._metadata reference
