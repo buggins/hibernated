@@ -793,6 +793,12 @@ class QueryParser {
     			for(int j = 0; j < from.entity.getPropertyCount(); j++) {
     				PropertyInfo f = from.entity.getProperty(j);
     				string fieldName = f.columnName;
+                    if (f.embedded) {
+                    } else if (f.oneToOne) {
+                    } else {
+                    }
+                    if (fieldName is null)
+                        continue;
     				if (!first) {
     					res.appendSQL(", ");
     				} else

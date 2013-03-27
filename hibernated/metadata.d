@@ -2056,13 +2056,15 @@ version(unittest) {
          "DROP TABLE IF EXISTS customers",
          "DROP TABLE IF EXISTS person",
          "DROP TABLE IF EXISTS person_info",
-        ];
+         "DROP TABLE IF EXISTS person_info2",
+         ];
     string[] UNIT_TEST_CREATE_TABLES_SCRIPT = 
 	[
          "CREATE TABLE IF NOT EXISTS users (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags INT, comment TEXT, customer_fk BIGINT NULL)",
          "CREATE TABLE IF NOT EXISTS customers (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, zip varchar(20), city varchar(100), street_address varchar(255))",
          "CREATE TABLE IF NOT EXISTS person_info (id int not null primary key AUTO_INCREMENT, flags bigint)",
          "CREATE TABLE IF NOT EXISTS person (id int not null primary key AUTO_INCREMENT, first_name varchar(255) not null, last_name varchar(255) not null, more_info_fk int)",
+         "CREATE TABLE IF NOT EXISTS person_info2 (id int not null primary key AUTO_INCREMENT, flags bigint, person_info_fk int)",
 
          "INSERT INTO customers SET id=1, name='customer 1', zip='12345'",
          "INSERT INTO customers SET id=2, name='customer 2', zip='54321'",
@@ -2076,6 +2078,9 @@ version(unittest) {
          "INSERT INTO person_info SET id=3, flags=123",
          "INSERT INTO person_info SET id=4, flags=234",
          "INSERT INTO person_info SET id=5, flags=345",
+         "INSERT INTO person_info2 SET id=10, flags=1, person_info_fk=3",
+         "INSERT INTO person_info2 SET id=11, flags=2, person_info_fk=4",
+         "INSERT INTO person_info2 SET id=12, flags=3, person_info_fk=5",
          "INSERT INTO person SET id=1, first_name='Andrei', last_name='Alexandrescu', more_info_fk=3",
          "INSERT INTO person SET id=2, first_name='Walter', last_name='Bright', more_info_fk=4",
          "INSERT INTO person SET id=3, first_name='John', last_name='Smith', more_info_fk=5",
@@ -2380,6 +2385,10 @@ unittest {
 
         auto p1 = sess.get!Person(1);
         assert(p1.firstName == "Andrei");
+
+        auto q = sess.createQuery("FROM Person WHERE id=:Id").setParameter("Id", Variant(1));
+        Person p2 = cast(Person)q.uniqueResult();
+        assert(p2.firstName == "Andrei");
     }
 }
 
