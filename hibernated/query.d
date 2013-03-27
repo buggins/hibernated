@@ -820,14 +820,45 @@ class QueryParser {
 	}
 	
 	void addFromSQL(Dialect dialect, ParsedQuery res) {
+        res.setFromClause(fromClause);
 		res.appendSpace();
 		res.appendSQL("FROM ");
 		res.appendSQL(dialect.quoteIfNeeded(fromClause.first.entity.tableName) ~ " AS " ~ fromClause.first.sqlAlias);
         for (int i = 1; i < fromClause.length; i++) {
             FromClauseItem join = fromClause[i];
+            FromClauseItem base = join.base;
+            assert(join !is null && base !is null);
             res.appendSpace();
             res.appendSQL(join.joinType == JoinType.LeftJoin ? "LEFT JOIN " : "INNER JOIN ");
             res.appendSQL(dialect.quoteIfNeeded(join.entity.tableName) ~ " AS " ~ join.sqlAlias);
+            res.appendSQL(" ON ");
+            writeln("adding ON");
+            assert(join.baseProperty !is null);
+            if (join.baseProperty.oneToOne) {
+                assert(join.baseProperty.columnName !is null || join.baseProperty.referencedProperty !is null);
+                if (join.baseProperty.columnName !is null) {
+                    writeln("fk is in base");
+                    res.appendSQL(base.sqlAlias);
+                    res.appendSQL(".");
+                    res.appendSQL(dialect.quoteIfNeeded(join.baseProperty.columnName));
+                    res.appendSQL("=");
+                    res.appendSQL(join.sqlAlias);
+                    res.appendSQL(".");
+                    res.appendSQL(dialect.quoteIfNeeded(join.entity.getKeyProperty().columnName));
+                } else {
+                    writeln("fk is in join");
+                    res.appendSQL(base.sqlAlias);
+                    res.appendSQL(".");
+                    res.appendSQL(dialect.quoteIfNeeded(base.entity.getKeyProperty().columnName));
+                    res.appendSQL("=");
+                    res.appendSQL(join.sqlAlias);
+                    res.appendSQL(".");
+                    res.appendSQL(dialect.quoteIfNeeded(join.baseProperty.referencedProperty.columnName));
+                }
+            } else {
+                // TODO: support other relations
+                throw new SyntaxError("Only OneToOne relation is supported so far");
+            }
         }
 	}
 	
@@ -1455,7 +1486,9 @@ class ParsedQuery {
 	private string _sql;
 	private int[][string]params; // contains 1-based indexes of ? ? ? placeholders in SQL for param by name
 	private int paramIndex = 1;
-	private EntityInfo _entity;
+    private FromClause _from;
+    private SelectClauseItem[] _select;
+    private EntityInfo _entity;
 	private int _colCount = 0;
 	this(string hql) {
 		_hql = hql;
@@ -1464,10 +1497,18 @@ class ParsedQuery {
 	@property string sql() { return _sql; }
 	@property EntityInfo entity() { return _entity; }
 	@property int colCount() { return _colCount; }
-	void setEntity(EntityInfo entity) {
+    @property FromClause from() { return _from; }
+    @property SelectClauseItem[] select() { return _select; }
+    void setEntity(EntityInfo entity) {
 		_entity = entity;
 	}
-	void setColCount(int cnt) { _colCount = cnt; }
+    void setFromClause(FromClause from) {
+        _from = from;
+    }
+    void setSelect(SelectClauseItem[] items) {
+        _select = items; 
+    }
+    void setColCount(int cnt) { _colCount = cnt; }
 	void addParam(string paramName) {
 		if ((paramName in params) is null) {
 			params[paramName] = [paramIndex++];
