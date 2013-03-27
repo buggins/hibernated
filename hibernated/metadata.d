@@ -134,6 +134,8 @@ public:
 	string referencedPropertyName; // for @OneToOne, @OneToMany, @ManyToOne
 	PropertyInfo referencedProperty;
 
+    int columnOffset; // offset from first column of this entity in selects
+
 	ReaderFunc readFunc;
 	WriterFunc writeFunc;
 	GetVariantFunc getFunc;
@@ -206,9 +208,11 @@ class EntityInfo {
 		this.propertyMap = map;
         enforceEx!HibernatedException(keyProperty !is null || embeddable, "No key specified for non-embeddable entity " ~ name);
 	}
-	/// returns key value as Variant
+	/// returns key value as Variant from entity instance
 	Variant getKey(Object obj) { return keyProperty.getFunc(obj); }
-	/// sets key value from Variant
+    /// returns key value as Variant from data set
+    Variant getKey(DataSetReader r, int startColumn) { return r.getVariant(startColumn + keyProperty.columnOffset); }
+    /// sets key value from Variant
 	void setKey(Object obj, Variant value) { keyProperty.setFunc(obj, value); }
     /// returns property info for key property
     PropertyInfo getKeyProperty() { return keyProperty; }
@@ -1498,7 +1502,7 @@ string entityListDef(T ...)() {
 		"    classMap = typemap;\n" ~
 		"    //writeln(\"updating referenced entities\");\n" ~
 		"    foreach(e; entities) {\n" ~
-		"        foreach(p; e.getProperties()) {\n" ~
+        "        foreach(p; e.getProperties()) {\n" ~
 		"            if (p.referencedEntityName !is null) {\n" ~
 		"                //writeln(\"embedded entity \" ~ p.referencedEntityName);\n" ~
 		"                enforceEx!HibernatedException((p.referencedEntityName in map) !is null, \"embedded entity not found in schema: \" ~ p.referencedEntityName);\n" ~
@@ -1507,9 +1511,9 @@ string entityListDef(T ...)() {
 		"                    p.referencedProperty = p.referencedEntity[p.referencedPropertyName];\n" ~
 		"				}\n" ~
 		"            }\n" ~
-		"        }\n" ~
+        "        }\n" ~
 		"    }\n" ~
-		"    //writeln(\"finished static initializer\");\n" ~
+        "    //writeln(\"finished static initializer\");\n" ~
 		"}";
 	//pragma(msg, "built entity list");
     return code;
@@ -1777,6 +1781,21 @@ class SchemaInfoImpl(T...) : SchemaInfo {
         // update entity._metadata reference
         foreach(e; entities) {
             e._metadata = this;
+            int columnOffset = 0;
+            foreach(p; e.getProperties()) {
+                p.columnOffset = columnOffset;
+                if (p.embedded) {
+                    EntityInfo emei = p.referencedEntity;
+                    columnOffset += e.metadata.getFieldCount(emei, false);
+                } else if (p.oneToOne) {
+                    if (p.columnName != null) {
+                        // read FK column
+                        columnOffset++;
+                    }
+                } else {
+                    columnOffset++;
+                }
+            }
         }
     }
 }

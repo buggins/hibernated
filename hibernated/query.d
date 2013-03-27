@@ -781,7 +781,7 @@ class QueryParser {
 		int colCount = 0;
 		if (selectClause[0].prop is null) {
 			// object alias is specified: add all properties of object
-            writeln("selected entity count: " ~ to!string(selectClause.length));
+            //writeln("selected entity count: " ~ to!string(selectClause.length));
             res.setEntity(selectClause[0].aliasPtr.entity);
             for(int i = 0; i < fromClause.length; i++) {
                 FromClauseItem from = fromClause[i];
@@ -817,6 +817,7 @@ class QueryParser {
 			}
 		}
 		res.setColCount(colCount);
+        res.setSelect(selectClause);
 	}
 	
 	void addFromSQL(Dialect dialect, ParsedQuery res) {
@@ -832,12 +833,12 @@ class QueryParser {
             res.appendSQL(join.joinType == JoinType.LeftJoin ? "LEFT JOIN " : "INNER JOIN ");
             res.appendSQL(dialect.quoteIfNeeded(join.entity.tableName) ~ " AS " ~ join.sqlAlias);
             res.appendSQL(" ON ");
-            writeln("adding ON");
+            //writeln("adding ON");
             assert(join.baseProperty !is null);
             if (join.baseProperty.oneToOne) {
                 assert(join.baseProperty.columnName !is null || join.baseProperty.referencedProperty !is null);
                 if (join.baseProperty.columnName !is null) {
-                    writeln("fk is in base");
+                    //writeln("fk is in base");
                     res.appendSQL(base.sqlAlias);
                     res.appendSQL(".");
                     res.appendSQL(dialect.quoteIfNeeded(join.baseProperty.columnName));
@@ -846,7 +847,7 @@ class QueryParser {
                     res.appendSQL(".");
                     res.appendSQL(dialect.quoteIfNeeded(join.entity.getKeyProperty().columnName));
                 } else {
-                    writeln("fk is in join");
+                    //writeln("fk is in join");
                     res.appendSQL(base.sqlAlias);
                     res.appendSQL(".");
                     res.appendSQL(dialect.quoteIfNeeded(base.entity.getKeyProperty().columnName));

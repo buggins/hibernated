@@ -165,6 +165,31 @@ class Configuration {
     bool dummy;
 }
 
+class EntityCache {
+    string name;
+    EntityInfo entity;
+    Object[Variant] items;
+    this(EntityInfo entity) {
+        this.entity = entity;
+        this.name = entity.name;
+    }
+    bool hasKey(Variant key) {
+        return ((key in items) !is null);
+    }
+    Object peek(Variant key) {
+        if ((key in items) is null)
+            return null;
+        return items[key];
+    }
+    Object get(Variant key) {
+        enforceEx!HibernatedException((key in items) !is null, "entity " ~ name ~ " with key " ~ key.toString() ~ " not found in cache");
+        return items[key];
+    }
+    void put(Variant key, Object obj) {
+        items[key] = obj;
+    }
+}
+
 /// Implementation of HibernateD session
 class SessionImpl : Session {
 
@@ -175,6 +200,35 @@ class SessionImpl : Session {
     DataSource connectionPool;
     Connection conn;
 
+    EntityCache[string] cache;
+
+    package EntityCache getCache(string entityName) {
+        EntityCache res;
+        if ((entityName in cache) is null) {
+            res = new EntityCache(metaData[entityName]);
+            cache[entityName] = res;
+        } else {
+            res = cache[entityName];
+        }
+        return res;
+    }
+
+    package bool keyInCache(string entityName, Variant key) {
+        return getCache(entityName).hasKey(key);
+    }
+    
+    package Object peekFromCache(string entityName, Variant key) {
+        return getCache(entityName).peek(key);
+    }
+
+    package Object getFromCache(string entityName, Variant key) {
+        return getCache(entityName).get(key);
+    }
+
+    package void putToCache(string entityName, Variant key, Object value) {
+        return getCache(entityName).put(key, value);
+    }
+    
     override EntityMetaData getMetaData() {
         return metaData;
     }
@@ -465,6 +519,10 @@ class QueryImpl : Query
 		return rows[0];
 	}
 
+    private void readRelations(Object obj, DataSetReader r) {
+        // TODO: read other objects
+    }
+
 	/// Return the query results as a List of entity objects
 	override Object[] list() {
 		EntityInfo ei = query.entity;
@@ -479,11 +537,21 @@ class QueryImpl : Query
 		scope(exit) stmt.close();
 		params.applyParams(stmt);
 		ResultSet rs = stmt.executeQuery();
+        assert(query.select !is null && query.select.length > 0);
+        int startColumn = query.select[0].aliasPtr.startColumn;
 		scope(exit) rs.close();
 		while(rs.next()) {
-			Object row = ei.createEntity();
-			sess.metaData.readAllColumns(row, rs, 1);
-			res ~= row;
+            Object row = null;
+            Variant key = ei.getKey(rs, startColumn);
+            row = sess.peekFromCache(ei.name, key);
+            if (row is null) {
+                // not found in session cache, reading
+    			row = ei.createEntity();
+                sess.metaData.readAllColumns(row, rs, startColumn);
+                readRelations(row, rs);
+                sess.putToCache(ei.name, key, row);
+            }
+            res ~= row;
 		}
 		return res.length > 0 ? res : null;
 	}
