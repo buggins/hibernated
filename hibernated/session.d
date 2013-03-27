@@ -519,32 +519,59 @@ class QueryImpl : Query
 		return rows[0];
 	}
 
-    private void readRelations(Object obj, DataSetReader r) {
+    private FromClauseItem findRelation(FromClauseItem from, PropertyInfo prop) {
+        for (int i=0; i<query.from.length; i++) {
+            FromClauseItem f = query.from[i];
+            if (f.base == from && f.baseProperty == prop)
+                return f;
+            if (f.entity == prop.referencedEntity && from.base == f)
+                return f;
+        }
+        return null;
+    }
+
+    private Object readRelations(DataSetReader r) {
         Object[] relations = new Object[query.select.length];
-        // simple read all related objects from DB row
-        relations[0] = obj;
-        for (int i = 1; i < query.select.length; i++) {
+        // read all related objects from DB row
+        for (int i = 0; i < query.select.length; i++) {
             FromClauseItem from = query.select[i].from;
             Object row;
-            Variant key = from.entity.getKey(r, from.startColumn);
-            row = sess.peekFromCache(from.entity.name, key);
-            if (row is null) {
-                row = from.entity.createEntity();
-                sess.metaData.readAllColumns(row, r, from.startColumn);
-                sess.putToCache(from.entity.name, key, row);
+            if (!from.entity.isKeyNull(r, from.startColumn)) {
+                Variant key = from.entity.getKey(r, from.startColumn);
+                row = sess.peekFromCache(from.entity.name, key);
+                if (row is null) {
+                    row = from.entity.createEntity();
+                    sess.metaData.readAllColumns(row, r, from.startColumn);
+                    sess.putToCache(from.entity.name, key, row);
+                }
             }
             relations[i] = row;
         }
-        // TODO: fill relations
+        // fill relations
         for (int i = 0; i < query.select.length; i++) {
-            EntityInfo ei = query.select[i].from.entity;
+            if (relations[i] is null)
+                continue;
+            FromClauseItem from = query.select[i].from;
+            EntityInfo ei = from.entity;
             for (int j=0; j<ei.length; j++) {
                 PropertyInfo pi = ei[j];
                 if (pi.oneToOne) {
-                    //
+                    //writeln("updating relations for " ~ from.pathString ~ "." ~ pi.propertyName);
+                    if (pi.lazyLoad) {
+                        // TODO: support lazy loader
+                    } else {
+                        FromClauseItem rfrom = findRelation(from, pi);
+                        if (rfrom !is null && rfrom.selectIndex >= 0) {
+                            Object rel = relations[rfrom.selectIndex];
+                            pi.setObjectFunc(relations[i], rel);
+                        } else {
+                            //writeln("not found loaded oneToOne relation for " ~ from.pathString ~ "." ~ pi.propertyName);
+                        }
+                    }
                 }
             }
         }
+        return relations[0];
     }
 
 	/// Return the query results as a List of entity objects
@@ -565,17 +592,9 @@ class QueryImpl : Query
         int startColumn = query.select[0].from.startColumn;
 		scope(exit) rs.close();
 		while(rs.next()) {
-            Object row = null;
-            Variant key = ei.getKey(rs, startColumn);
-            row = sess.peekFromCache(ei.name, key);
-            if (row is null) {
-                // not found in session cache, reading
-    			row = ei.createEntity();
-                sess.metaData.readAllColumns(row, rs, startColumn);
-                readRelations(row, rs);
-                sess.putToCache(ei.name, key, row);
-            }
-            res ~= row;
+            Object row = readRelations(rs);
+            if (row !is null)
+                res ~= row;
 		}
 		return res.length > 0 ? res : null;
 	}

@@ -218,7 +218,9 @@ class EntityInfo {
     PropertyInfo getKeyProperty() { return keyProperty; }
     /// checks if primary key is set (for non-nullable member types like int or long, 0 is considered as non-set)
 	bool isKeySet(Object obj) { return keyProperty.keyIsSetFunc(obj); }
-	/// checks if property value is null
+    /// checks if primary key is set (for non-nullable member types like int or long, 0 is considered as non-set)
+    bool isKeyNull(DataSetReader r, int startColumn) { return r.isNull(startColumn + keyProperty.columnOffset); }
+    /// checks if property value is null
 	bool isNull(Object obj) { return keyProperty.isNullFunc(obj); }
 	/// returns property value as Variant
 	Variant getPropertyValue(Object obj, string propertyName) { return findProperty(propertyName).getFunc(obj); }
@@ -2080,7 +2082,6 @@ version(unittest) {
          "INSERT INTO person_info SET id=5, flags=345",
          "INSERT INTO person_info2 SET id=10, flags=1, person_info_fk=3",
          "INSERT INTO person_info2 SET id=11, flags=2, person_info_fk=4",
-         "INSERT INTO person_info2 SET id=12, flags=3, person_info_fk=5",
          "INSERT INTO person SET id=1, first_name='Andrei', last_name='Alexandrescu', more_info_fk=3",
          "INSERT INTO person SET id=2, first_name='Walter', last_name='Bright', more_info_fk=4",
          "INSERT INTO person SET id=3, first_name='John', last_name='Smith', more_info_fk=5",
@@ -2386,9 +2387,28 @@ unittest {
         auto p1 = sess.get!Person(1);
         assert(p1.firstName == "Andrei");
 
+        // all non-null oneToOne relations
         auto q = sess.createQuery("FROM Person WHERE id=:Id").setParameter("Id", Variant(1));
         Person p2 = cast(Person)q.uniqueResult();
         assert(p2.firstName == "Andrei");
+        assert(p2.moreInfo !is null);
+        assert(p2.moreInfo.person !is null);
+        assert(p2.moreInfo.person == p2);
+        assert(p2.moreInfo.flags == 123);
+        assert(p2.moreInfo.evenMore !is null);
+        assert(p2.moreInfo.evenMore.flags == 1);
+        assert(p2.moreInfo.evenMore.personInfo !is null);
+        assert(p2.moreInfo.evenMore.personInfo == p2.moreInfo);
+
+        // null oneToOne relation
+        q = sess.createQuery("FROM Person WHERE id=:Id").setParameter("Id", Variant(3));
+        p2 = cast(Person)q.uniqueResult();
+        assert(p2.firstName == "John");
+        assert(p2.moreInfo !is null);
+        assert(p2.moreInfo.person !is null);
+        assert(p2.moreInfo.person == p2);
+        assert(p2.moreInfo.flags == 345);
+        assert(p2.moreInfo.evenMore is null);
     }
 }
 
