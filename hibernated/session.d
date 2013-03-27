@@ -116,19 +116,32 @@ interface Transaction {
 }
 
 /// Interface for usage of HQL queries.
-interface Query
+abstract class Query
 {
 	///Get the query string.
 	string 	getQueryString();
 	/// Convenience method to return a single instance that matches the query, or null if the query returns no results.
-	Object 	uniqueResult();
+	Object 	uniqueObject();
     /// Convenience method to return a single instance that matches the query, or null if the query returns no results. Reusing existing buffer.
-    Object  uniqueResult(Object obj);
+    Object  uniqueObject(Object obj);
+    /// Convenience method to return a single instance that matches the query, or null if the query returns no results.
+    T uniqueResult(T : Object)() {
+        return cast(T)uniqueObject();
+    }
+    /// Convenience method to return a single instance that matches the query, or null if the query returns no results. Reusing existing buffer.
+    T uniqueResult(T : Object)(T obj) {
+        return cast(T)uniqueObject(obj);
+    }
+
     /// Convenience method to return a single instance that matches the query, or null if the query returns no results.
 	Variant[] uniqueRow();
 	/// Return the query results as a List of entity objects
-	Object[] list();
-	/// Return the query results as a List which each row as Variant array
+	Object[] listObjects();
+    /// Return the query results as a List of entity objects
+    T[] list(T : Object)() {
+        return cast(T[])listObjects();
+    }
+    /// Return the query results as a List which each row as Variant array
 	Variant[][] listRows();
 	
 	/// Bind a value to a named query parameter (all :parameters used in query should be bound before executing query).
@@ -509,13 +522,13 @@ class QueryImpl : Query
 	}
 
 	/// Convenience method to return a single instance that matches the query, or null if the query returns no results.
-	override Object uniqueResult() {
+	override Object uniqueObject() {
         return uniqueResult(null);
 	}
 
     /// Convenience method to return a single instance that matches the query, or null if the query returns no results. Reusing existing buffer.
-    Object  uniqueResult(Object obj) {
-        Object[] rows = list(obj);
+    override Object uniqueObject(Object obj) {
+        Object[] rows = listObjects(obj);
         if (rows == null)
             return null;
         enforceEx!HibernatedException(rows.length == 1, "Query returned more than one object: " ~ getQueryString());
@@ -590,12 +603,12 @@ class QueryImpl : Query
     }
 
 	/// Return the query results as a List of entity objects
-	override Object[] list() {
-        return list(null);
+	override Object[] listObjects() {
+        return listObjects(null);
 	}
 
     /// Return the query results as a List of entity objects
-    Object[] list(Object placeFirstObjectHere) {
+    Object[] listObjects(Object placeFirstObjectHere) {
         EntityInfo ei = query.entity;
         enforceEx!HibernatedException(ei !is null, "No entity expected in result of query " ~ getQueryString());
         params.checkAllParametersSet();

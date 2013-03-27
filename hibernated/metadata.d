@@ -2274,7 +2274,7 @@ unittest {
 
 		// test multiple row query
 		Query q = sess.createQuery("FROM User ORDER BY name");
-		User[] list = cast(User[])q.list();
+        User[] list = q.list!User();
 		assert(list.length == 6);
 		assert(list[0].name == "test user 5");
 		assert(list[1].name == "test user 6");
@@ -2288,21 +2288,21 @@ unittest {
 		//		foreach(row; rows) {
 //			writeln(row);
 //		}
-		assertThrown!HibernatedException(q.uniqueResult());
+		assertThrown!HibernatedException(q.uniqueResult!User());
 		assertThrown!HibernatedException(q.uniqueRow());
 
 		// test single row select
 		q = sess.createQuery("FROM User AS u WHERE id = :Id and (u.name like '%test%' or flags=44)");
-		assertThrown!HibernatedException(q.list()); // cannot execute w/o all parameters set
+		assertThrown!HibernatedException(q.list!User()); // cannot execute w/o all parameters set
 		q.setParameter("Id", Variant(6));
-		list = cast(User[])q.list();
+		list = q.list!User();
 		assert(list.length == 1);
 		assert(list[0].name == "test user 6");
 //		writeln("Read " ~ to!string(list.length) ~ " rows from User");
 //		foreach(row; list) {
 //			writeln(row.toString());
 //		}
-		User uu = cast(User)q.uniqueResult();
+        User uu = q.uniqueResult!User();
 		assert(uu.name == "test user 6");
 		Variant[] row = q.uniqueRow();
 		assert(row[0] == 6L);
@@ -2312,7 +2312,7 @@ unittest {
 		q.setParameter("Id", Variant(7));
 		row = q.uniqueRow();
 		assert(row is null);
-		uu = cast(User)q.uniqueResult();
+        uu = q.uniqueResult!User();
 		assert(uu is null);
 
 		q = sess.createQuery("SELECT c.name, c.address.zip FROM Customer AS c WHERE id = :Id").setParameter("Id", Variant(1));
@@ -2437,7 +2437,7 @@ unittest {
 
         // all non-null oneToOne relations
         auto q = sess.createQuery("FROM Person WHERE id=:Id").setParameter("Id", Variant(1));
-        Person p2 = cast(Person)q.uniqueResult();
+        Person p2 = q.uniqueResult!Person();
         assert(p2.firstName == "Andrei");
         assert(p2.moreInfo !is null);
         assert(p2.moreInfo.person !is null);
@@ -2450,7 +2450,7 @@ unittest {
 
         // null oneToOne relation
         q = sess.createQuery("FROM Person WHERE id=:Id").setParameter("Id", Variant(3));
-        p2 = cast(Person)q.uniqueResult();
+        p2 = q.uniqueResult!Person();
         assert(p2.firstName == "John");
         assert(p2.moreInfo !is null);
         assert(p2.moreInfo.person !is null);
