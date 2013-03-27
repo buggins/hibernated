@@ -50,6 +50,8 @@ class FromClauseItem {
     FromClauseItem base;
     PropertyInfo baseProperty;
     string pathString;
+    int index;
+    int selectIndex;
 
     string getFullPath() {
         if (base is null)
@@ -72,6 +74,8 @@ class FromClause {
         item.base = base;
         item.baseProperty = baseProperty;
         item.pathString = item.getFullPath();
+        item.index = cast(int)items.length;
+        item.selectIndex = -1;
         items ~= item;
         return item;
     }
@@ -113,13 +117,13 @@ class FromClause {
 }
 
 struct OrderByClauseItem {
-	FromClauseItem aliasPtr;
+	FromClauseItem from;
 	PropertyInfo prop;
 	bool asc;
 }
 
 struct SelectClauseItem {
-	FromClauseItem aliasPtr;
+	FromClauseItem from;
 	PropertyInfo prop;
 }
 
@@ -196,7 +200,7 @@ class QueryParser {
     }
 
     private void processAutoFetchReferences() {
-        FromClauseItem a = selectClause[0].aliasPtr;
+        FromClauseItem a = selectClause[0].from;
         a.fetch = true;
         processAutoFetchReferences(a);
     }
@@ -216,14 +220,14 @@ class QueryParser {
         }
         bool selectFound = false;
         foreach(s; selectClause) {
-            if (s.aliasPtr == res) {
+            if (s.from == res) {
                 selectFound = true;
                 break;
             }
         }
         if (!selectFound) {
             SelectClauseItem item;
-            item.aliasPtr = res;
+            item.from = res;
             item.prop = null;
             selectClause ~= item;
         }
@@ -414,7 +418,7 @@ class QueryParser {
 		//writeln("addSelectClauseItem alias=" ~ aliasName ~ " properties=" ~ to!string(propertyNames));
 		FromClauseItem from = aliasName == null ? fromClause.first : findFromClauseByAlias(aliasName);
 		SelectClauseItem item;
-		item.aliasPtr = from;
+		item.from = from;
 		item.prop = null;
 		EntityInfo ei = from.entity;
 		if (propertyNames.length > 0) {
@@ -436,7 +440,7 @@ class QueryParser {
 	void addOrderByClauseItem(string aliasName, string propertyName, bool asc) {
 		FromClauseItem from = aliasName == null ? fromClause.first : findFromClauseByAlias(aliasName);
 		OrderByClauseItem item;
-		item.aliasPtr = from;
+		item.from = from;
 		item.prop = from.entity.findProperty(propertyName);
 		item.asc = asc;
 		orderByClause ~= item;
@@ -804,10 +808,13 @@ class QueryParser {
 		bool first = true;
 		assert(selectClause.length > 0);
 		int colCount = 0;
+        foreach(i, s; selectClause) {
+            s.from.selectIndex = i;
+        }
 		if (selectClause[0].prop is null) {
 			// object alias is specified: add all properties of object
             //writeln("selected entity count: " ~ to!string(selectClause.length));
-            res.setEntity(selectClause[0].aliasPtr.entity);
+            res.setEntity(selectClause[0].from.entity);
             for(int i = 0; i < fromClause.length; i++) {
                 FromClauseItem from = fromClause[i];
                 if (!from.fetch)
@@ -822,7 +829,7 @@ class QueryParser {
 			res.setEntity(null);
 			foreach(a; selectClause) {
 				string fieldName = a.prop.columnName;
-				string tableName = a.aliasPtr.sqlAlias;
+				string tableName = a.from.sqlAlias;
 				if (!first) {
 					res.appendSQL(", ");
 				} else
@@ -980,7 +987,7 @@ class QueryParser {
 		// individual fields specified
 		foreach(a; orderByClause) {
 			string fieldName = a.prop.columnName;
-			string tableName = a.aliasPtr.sqlAlias;
+			string tableName = a.from.sqlAlias;
 			if (!first) {
 				res.appendSQL(", ");
 			} else 
@@ -1580,13 +1587,13 @@ unittest {
     assert(parser.fromClause.first.entityAlias == "a");
 	assert(parser.selectClause.length == 1);
 	assert(parser.selectClause[0].prop is null);
-	assert(parser.selectClause[0].aliasPtr.entity.name == "User");
+	assert(parser.selectClause[0].from.entity.name == "User");
 	assert(parser.orderByClause.length == 2);
 	assert(parser.orderByClause[0].prop.propertyName == "name");
-	assert(parser.orderByClause[0].aliasPtr.entity.name == "User");
+	assert(parser.orderByClause[0].from.entity.name == "User");
 	assert(parser.orderByClause[0].asc == true);
 	assert(parser.orderByClause[1].prop.propertyName == "flags");
-	assert(parser.orderByClause[1].aliasPtr.entity.name == "User");
+	assert(parser.orderByClause[1].from.entity.name == "User");
 	assert(parser.orderByClause[1].asc == false);
 	
 	parser = new QueryParser(schema, "SELECT a FROM User AS a WHERE ((id = :Id) OR (name LIKE 'a%' AND flags = (-5 + 7))) AND name != :skipName AND flags BETWEEN 2*2 AND 42/5 ORDER BY name, a.flags DESC");

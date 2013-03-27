@@ -520,7 +520,31 @@ class QueryImpl : Query
 	}
 
     private void readRelations(Object obj, DataSetReader r) {
-        // TODO: read other objects
+        Object[] relations = new Object[query.select.length];
+        // simple read all related objects from DB row
+        relations[0] = obj;
+        for (int i = 1; i < query.select.length; i++) {
+            FromClauseItem from = query.select[i].from;
+            Object row;
+            Variant key = from.entity.getKey(r, from.startColumn);
+            row = sess.peekFromCache(from.entity.name, key);
+            if (row is null) {
+                row = from.entity.createEntity();
+                sess.metaData.readAllColumns(row, r, from.startColumn);
+                sess.putToCache(from.entity.name, key, row);
+            }
+            relations[i] = row;
+        }
+        // TODO: fill relations
+        for (int i = 0; i < query.select.length; i++) {
+            EntityInfo ei = query.select[i].from.entity;
+            for (int j=0; j<ei.length; j++) {
+                PropertyInfo pi = ei[j];
+                if (pi.oneToOne) {
+                    //
+                }
+            }
+        }
     }
 
 	/// Return the query results as a List of entity objects
@@ -538,7 +562,7 @@ class QueryImpl : Query
 		params.applyParams(stmt);
 		ResultSet rs = stmt.executeQuery();
         assert(query.select !is null && query.select.length > 0);
-        int startColumn = query.select[0].aliasPtr.startColumn;
+        int startColumn = query.select[0].from.startColumn;
 		scope(exit) rs.close();
 		while(rs.next()) {
             Object row = null;
