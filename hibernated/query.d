@@ -50,6 +50,13 @@ struct FromClauseItem {
     FromClauseItem * base;
     PropertyInfo baseProperty;
     string pathString;
+
+    string getFullPath() {
+        if (base is null)
+            return entityAlias;
+        return base.getFullPath() ~ "." ~ baseProperty.propertyName;
+    }
+
 }
 
 class FromClause {
@@ -62,6 +69,7 @@ class FromClause {
         item.sqlAlias = "_t" ~ to!string(items.length + 1);
         item.joinType = joinType;
         item.fetch = fetch;
+        item.pathString = item.entityAlias;
         items ~= item;
         return &items[$-1];
     }
@@ -71,6 +79,13 @@ class FromClause {
     }
     @property FromClauseItem * first() {
         return &items[0];
+    }
+    FromClauseItem * opIndex(int index) {
+        enforceEx!HibernatedException(index >= 0 && index < items.length, "FromClause index out of range: " ~ to!string(index));
+        return &items[index];
+    }
+    FromClauseItem * opIndex(string aliasName) {
+        return findByAlias(aliasName);
     }
     bool hasAlias(string aliasName) {
         foreach(ref m; items) {
@@ -85,6 +100,13 @@ class FromClause {
                 return &m;
         }
         throw new SyntaxError("Cannot find FROM alias by name " ~ aliasName);
+    }
+    FromClauseItem * findByPath(string path) {
+        foreach(ref m; items) {
+            if (m.pathString == path)
+                return &m;
+        }
+        return null;
     }
 }
 
@@ -235,13 +257,12 @@ class QueryParser {
         int p = 0;
         enforceEx!SyntaxError(fromClause.hasAlias(path[p]), "Unknown alias " ~ path[p] ~ " in FROM clause" ~ errorContext(context));
         FromClauseItem * baseClause = findFromClauseByAlias(path[p]);
-        string pathString = path[p];
+        //string pathString = path[p];
         p++;
         while(true) {
             EntityInfo baseEntity = baseClause.entity;
             enforceEx!SyntaxError(p < path.length, "Property name expected in FROM clause" ~ errorContext(context));
             string propertyName = path[p++];
-            pathString ~= "." ~ propertyName;
             PropertyInfo property = baseEntity[propertyName];
             EntityInfo referencedEntity = property.referencedEntity;
             assert(referencedEntity !is null);
@@ -251,7 +272,7 @@ class QueryParser {
             FromClauseItem * item = fromClause.add(referencedEntity, last ? aliasName : null, joinType, fetch);
             item.base = baseClause;
             item.baseProperty = property;
-            item.pathString = pathString;
+            item.pathString = item.getFullPath();
             updateAlias(referencedEntity, item.entityAlias);
             baseClause = item;
             if (last)
@@ -379,12 +400,15 @@ class QueryParser {
 		string aliasName;
 		int p = start;
 		if (tokens[p].type == TokenType.Alias) {
-			aliasName = cast(string)tokens[start].text;
+            //writeln("select clause alias: " ~ tokens[p].text ~ " query: " ~ query);
+			aliasName = cast(string)tokens[p].text;
 			p++;
 			enforceEx!SyntaxError(p == end || tokens[p].type == TokenType.Dot, "SELECT clause item is invalid (only  [alias.]field{[.field2]}+ allowed) " ~ errorContext(tokens[start]));
 			if (p < end - 1 && tokens[p].type == TokenType.Dot)
 				p++;
-		}
+		} else {
+            //writeln("select clause non-alias: " ~ tokens[p].text ~ " query: " ~ query);
+        }
 		string[] fieldNames;
 		while (p < end && tokens[p].type == TokenType.Ident) {
 			fieldNames ~= tokens[p].text;
@@ -536,17 +560,38 @@ class QueryParser {
 			string aliasName = a.entityAlias;
 			EntityInfo ei = a.entity;
 			enforceEx!SyntaxError(idents.length > 0, "Syntax error in WHERE condition - alias w/o property name: " ~ aliasName ~ errorContext(items[p]));
-			string propertyName = idents[0];
-			idents.popFront();
-			fullName = aliasName ~ "." ~ propertyName;
-			PropertyInfo pi = ei.findProperty(propertyName);
-			while (pi.embedded) { // loop to allow nested @Embedded
-				enforceEx!SyntaxError(idents.length > 0, "Syntax error in WHERE condition - @Embedded property reference should include reference to @Embeddable property " ~ aliasName ~ errorContext(items[p]));
-				propertyName = idents[0];
-				idents.popFront();
-				pi = pi.referencedEntity.findProperty(propertyName);
-				fullName = fullName ~ "." ~ propertyName;
-			}
+            PropertyInfo pi;
+            fullName = aliasName;
+            while(true) {
+    			string propertyName = idents[0];
+    			idents.popFront();
+    			fullName ~= "." ~ propertyName;
+    			pi = ei.findProperty(propertyName);
+    			while (pi.embedded) { // loop to allow nested @Embedded
+    				enforceEx!SyntaxError(idents.length > 0, "Syntax error in WHERE condition - @Embedded property reference should include reference to @Embeddable property " ~ aliasName ~ errorContext(items[p]));
+    				propertyName = idents[0];
+    				idents.popFront();
+    				pi = pi.referencedEntity.findProperty(propertyName);
+    				fullName = fullName ~ "." ~ propertyName;
+    			}
+                if (idents.length == 0)
+                    break;
+                if (idents.length > 0) {
+                    // more field names
+                    string pname = idents[0];
+                    enforceEx!SyntaxError(pi.referencedEntity !is null, "Unexpected extra field name " ~ pname ~ " - property " ~ propertyName ~ " doesn't content subproperties " ~ errorContext(items[p]));
+                    ei = pi.referencedEntity;
+                    FromClauseItem * newClause = fromClause.findByPath(fullName);
+                    if (newClause is null) {
+                        // autogenerate FROM clause
+                        newClause = fromClause.add(ei, null, JoinType.InnerJoin, false);
+                        newClause.base = a;
+                        newClause.baseProperty = pi;
+                        newClause.pathString = fullName;
+                    }
+                    a = newClause;
+                }
+            }
 			enforceEx!SyntaxError(idents.length == 0, "Unexpected extra field name " ~ idents[0] ~ errorContext(items[p]));
 			//writeln("full name = " ~ fullName);
 			Token t = new Token(items[p].pos, TokenType.Field, fullName);
@@ -1421,4 +1466,26 @@ unittest {
     assert(parser.fromClause.findByAlias("b").entityName == "More");
     assert(parser.fromClause.findByAlias("b").joinType == JoinType.LeftJoin);
     assert(parser.fromClause.findByAlias("c").entityName == "EvenMore");
+    // indirect JOIN
+    parser = new QueryParser(schema, "SELECT a FROM Person a WHERE a.id = :Id AND a.moreInfo.evenMore.flags > 0");
+    assert(parser.fromClause.hasAlias("a"));
+    assert(parser.fromClause.length == 3);
+    assert(parser.fromClause[0].entity.tableName == "person");
+    assert(parser.fromClause[1].entity.tableName == "person_info");
+    assert(parser.fromClause[1].joinType == JoinType.InnerJoin);
+    assert(parser.fromClause[1].pathString == "a.moreInfo");
+    assert(parser.fromClause[2].entity.tableName == "person_info2");
+    assert(parser.fromClause[2].joinType == JoinType.InnerJoin);
+    assert(parser.fromClause[2].pathString == "a.moreInfo.evenMore");
+    // indirect JOIN, no alias
+    parser = new QueryParser(schema, "FROM Person WHERE id = :Id AND moreInfo.evenMore.flags > 0");
+    assert(parser.fromClause.length == 3);
+    assert(parser.fromClause[0].entity.tableName == "person");
+    assert(parser.fromClause[1].entity.tableName == "person_info");
+    assert(parser.fromClause[1].joinType == JoinType.InnerJoin);
+    assert(parser.fromClause[1].pathString == "a.moreInfo");
+    assert(parser.fromClause[2].entity.tableName == "person_info2");
+    assert(parser.fromClause[2].joinType == JoinType.InnerJoin);
+    assert(parser.fromClause[2].pathString == "a.moreInfo.evenMore");
+
 }
