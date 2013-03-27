@@ -37,7 +37,7 @@ enum JoinType {
     LeftJoin,
 }
 
-struct FromClauseItem {
+class FromClauseItem {
 	string entityName;
 	EntityInfo entity;
 	string entityAlias;
@@ -47,7 +47,7 @@ struct FromClauseItem {
     // for JOINs
     JoinType joinType = JoinType.InnerJoin;
     bool fetch;
-    FromClauseItem * base;
+    FromClauseItem base;
     PropertyInfo baseProperty;
     string pathString;
 
@@ -61,30 +61,32 @@ struct FromClauseItem {
 
 class FromClause {
     FromClauseItem[] items;
-    FromClauseItem * add(EntityInfo entity, string entityAlias, JoinType joinType, bool fetch) {
-        FromClauseItem item;
+    FromClauseItem add(EntityInfo entity, string entityAlias, JoinType joinType, bool fetch, FromClauseItem base = null, PropertyInfo baseProperty = null) {
+        FromClauseItem item = new FromClauseItem();
         item.entityName = entity.name;
         item.entity = entity;
         item.entityAlias = entityAlias is null ? "_a" ~ to!string(items.length + 1) : entityAlias;
         item.sqlAlias = "_t" ~ to!string(items.length + 1);
         item.joinType = joinType;
         item.fetch = fetch;
-        item.pathString = item.entityAlias;
+        item.base = base;
+        item.baseProperty = baseProperty;
+        item.pathString = item.getFullPath();
         items ~= item;
-        return &items[$-1];
+        return items[$-1];
     }
     @property size_t length() { return items.length; }
     string getSQL() {
         return "";
     }
-    @property FromClauseItem * first() {
-        return &items[0];
+    @property FromClauseItem first() {
+        return items[0];
     }
-    FromClauseItem * opIndex(int index) {
+    FromClauseItem opIndex(int index) {
         enforceEx!HibernatedException(index >= 0 && index < items.length, "FromClause index out of range: " ~ to!string(index));
-        return &items[index];
+        return items[index];
     }
-    FromClauseItem * opIndex(string aliasName) {
+    FromClauseItem opIndex(string aliasName) {
         return findByAlias(aliasName);
     }
     bool hasAlias(string aliasName) {
@@ -94,30 +96,30 @@ class FromClause {
         }
         return false;
     }
-    FromClauseItem * findByAlias(string aliasName) {
+    FromClauseItem findByAlias(string aliasName) {
         foreach(ref m; items) {
             if (m.entityAlias == aliasName)
-                return &m;
+                return m;
         }
         throw new SyntaxError("Cannot find FROM alias by name " ~ aliasName);
     }
-    FromClauseItem * findByPath(string path) {
+    FromClauseItem findByPath(string path) {
         foreach(ref m; items) {
             if (m.pathString == path)
-                return &m;
+                return m;
         }
         return null;
     }
 }
 
 struct OrderByClauseItem {
-	FromClauseItem * aliasPtr;
+	FromClauseItem aliasPtr;
 	PropertyInfo prop;
 	bool asc;
 }
 
 struct SelectClauseItem {
-	FromClauseItem * aliasPtr;
+	FromClauseItem aliasPtr;
 	PropertyInfo prop;
 }
 
@@ -167,14 +169,63 @@ class QueryParser {
 			parseSelectClause(selectPos + 1, fromPos);
 		else
 			defaultSelectClause();
-		validateSelectClause();
+		bool selectedEntities = validateSelectClause();
 		if (wherePos >= 0 && whereEnd > wherePos)
 			parseWhereClause(wherePos + 1, whereEnd);
 		if (orderPos >= 0 && orderEnd > orderPos)
 			parseOrderClause(orderPos + 2, orderEnd);
+        if (selectedEntities)
+            processAutoFetchReferences();
 	}
 	
-	private void updateEntity(EntityInfo entity, string name) {
+    private void processAutoFetchReferences() {
+        FromClauseItem a = selectClause[0].aliasPtr;
+        processAutoFetchReferences(a);
+    }
+
+    private FromClauseItem ensureItemFetched(FromClauseItem a, PropertyInfo p) {
+        FromClauseItem res;
+        string path = a.pathString ~ "." ~ p.propertyName;
+        writeln("ensureItemFetched " ~ path);
+        res = fromClause.findByPath(path);
+        if (res is null) {
+            // autoadd join
+            assert(p.referencedEntity !is null);
+            res = fromClause.add(p.referencedEntity, null, p.nullable ? JoinType.LeftJoin : JoinType.InnerJoin, true, a, p);
+        } else {
+            // force fetch
+            res.fetch = true;
+        }
+        return res;
+    }
+
+    private bool isBackReferenceProperty(FromClauseItem a, PropertyInfo p) {
+        if (a.base is null)
+            return false;
+        EntityInfo baseEntity = a.base.entity;
+        assert(baseEntity !is null);
+        if (p.referencedEntity != baseEntity)
+            return false;
+
+        if (p.referencedProperty !is null && p.referencedProperty == a.baseProperty)
+            return true;
+        if (a.baseProperty.referencedProperty !is null && p == a.baseProperty.referencedProperty)
+            return true;
+        return false;
+    }
+
+    private void processAutoFetchReferences(FromClauseItem a) {
+        foreach (p; a.entity.properties) {
+            if (p.lazyLoad)
+                continue;
+            if (p.oneToOne && !isBackReferenceProperty(a, p)) {
+                FromClauseItem res = ensureItemFetched(a, p);
+                processAutoFetchReferences(res);
+            }
+        }
+    }
+    
+    private void updateEntity(EntityInfo entity, string name) {
 		foreach(t; tokens) {
 			if (t.type == TokenType.Ident && t.text == name) {
 				t.entity = entity;
@@ -256,7 +307,7 @@ class QueryParser {
     void appendFromClause(Token context, string[] path, string aliasName, JoinType joinType, bool fetch) {
         int p = 0;
         enforceEx!SyntaxError(fromClause.hasAlias(path[p]), "Unknown alias " ~ path[p] ~ " in FROM clause" ~ errorContext(context));
-        FromClauseItem * baseClause = findFromClauseByAlias(path[p]);
+        FromClauseItem baseClause = findFromClauseByAlias(path[p]);
         //string pathString = path[p];
         p++;
         while(true) {
@@ -269,11 +320,9 @@ class QueryParser {
             enforceEx!SyntaxError(!property.simple, "Simple property " ~ propertyName ~ " cannot be used in JOIN" ~ errorContext(context));
             enforceEx!SyntaxError(!property.embedded, "Embedded property " ~ propertyName ~ " cannot be used in JOIN" ~ errorContext(context));
             bool last = (p == path.length);
-            FromClauseItem * item = fromClause.add(referencedEntity, last ? aliasName : null, joinType, fetch);
-            item.base = baseClause;
-            item.baseProperty = property;
-            item.pathString = item.getFullPath();
-            updateAlias(referencedEntity, item.entityAlias);
+            FromClauseItem item = fromClause.add(referencedEntity, last ? aliasName : null, joinType, fetch, baseClause, property);
+            if (last && aliasName !is null)
+                updateAlias(referencedEntity, item.entityAlias);
             baseClause = item;
             if (last)
                 break;
@@ -326,13 +375,13 @@ class QueryParser {
 		}
 	}
 	
-	FromClauseItem * findFromClauseByAlias(string aliasName) {
+	FromClauseItem findFromClauseByAlias(string aliasName) {
         return fromClause.findByAlias(aliasName);
 	}
 	
 	void addSelectClauseItem(string aliasName, string[] propertyNames) {
 		//writeln("addSelectClauseItem alias=" ~ aliasName ~ " properties=" ~ to!string(propertyNames));
-		FromClauseItem * from = aliasName == null ? fromClause.first : findFromClauseByAlias(aliasName);
+		FromClauseItem from = aliasName == null ? fromClause.first : findFromClauseByAlias(aliasName);
 		SelectClauseItem item;
 		item.aliasPtr = from;
 		item.prop = null;
@@ -354,7 +403,7 @@ class QueryParser {
 	}
 	
 	void addOrderByClauseItem(string aliasName, string propertyName, bool asc) {
-		FromClauseItem * from = aliasName == null ? fromClause.first : findFromClauseByAlias(aliasName);
+		FromClauseItem from = aliasName == null ? fromClause.first : findFromClauseByAlias(aliasName);
 		OrderByClauseItem item;
 		item.aliasPtr = from;
 		item.prop = from.entity.findProperty(propertyName);
@@ -432,7 +481,7 @@ class QueryParser {
 		addSelectClauseItem(fromClause.first.entityAlias, null);
 	}
 	
-	void validateSelectClause() {
+	bool validateSelectClause() {
 		enforceEx!SyntaxError(selectClause != null && selectClause.length > 0, "Invalid SELECT clause");
 		int aliasCount = 0;
 		int fieldCount = 0;
@@ -443,6 +492,7 @@ class QueryParser {
 				aliasCount++;
 		}
 		enforceEx!SyntaxError((aliasCount == 1 && fieldCount == 0) || (aliasCount == 0 && fieldCount > 0), "You should either use single entity alias or one or more properties in SELECT clause. Don't mix objects with primitive fields");
+        return aliasCount > 0;
 	}
 	
 	void parseWhereClause(int start, int end) {
@@ -549,7 +599,7 @@ class QueryParser {
 				idents ~= items[i + 1].text;
 			}
 			string fullName;
-			FromClauseItem * a;
+			FromClauseItem a;
 			if (items[p].type == TokenType.Alias) {
 				a = findFromClauseByAlias(idents[0]);
 				idents.popFront();
@@ -581,13 +631,10 @@ class QueryParser {
                     string pname = idents[0];
                     enforceEx!SyntaxError(pi.referencedEntity !is null, "Unexpected extra field name " ~ pname ~ " - property " ~ propertyName ~ " doesn't content subproperties " ~ errorContext(items[p]));
                     ei = pi.referencedEntity;
-                    FromClauseItem * newClause = fromClause.findByPath(fullName);
+                    FromClauseItem newClause = fromClause.findByPath(fullName);
                     if (newClause is null) {
                         // autogenerate FROM clause
-                        newClause = fromClause.add(ei, null, JoinType.InnerJoin, false);
-                        newClause.base = a;
-                        newClause.baseProperty = pi;
-                        newClause.pathString = fullName;
+                        newClause = fromClause.add(ei, null, JoinType.InnerJoin, false, a, pi);
                     }
                     a = newClause;
                 }
@@ -704,7 +751,7 @@ class QueryParser {
 			// object alias is specified: add all properties of object
 			SelectClauseItem a = selectClause[0];
 			string tableName = a.aliasPtr.sqlAlias;
-			FromClauseItem * from = a.aliasPtr;
+			FromClauseItem from = a.aliasPtr;
 			res.setEntity(from.entity);
 			assert(from !is null);
 			assert(from.entity !is null);
@@ -1063,7 +1110,7 @@ class Token {
 	string spaceAfter;
 	EntityInfo entity;
 	PropertyInfo field;
-	FromClauseItem * from;
+	FromClauseItem from;
 	Token[] children;
 	this(int pos, TokenType type, string text) {
 		this.pos = pos;
@@ -1483,9 +1530,10 @@ unittest {
     assert(parser.fromClause[0].entity.tableName == "person");
     assert(parser.fromClause[1].entity.tableName == "person_info");
     assert(parser.fromClause[1].joinType == JoinType.InnerJoin);
-    assert(parser.fromClause[1].pathString == "a.moreInfo");
+    //writeln("path: " ~ parser.fromClause[1].pathString);
+    assert(parser.fromClause[1].pathString == "_a1.moreInfo");
     assert(parser.fromClause[2].entity.tableName == "person_info2");
     assert(parser.fromClause[2].joinType == JoinType.InnerJoin);
-    assert(parser.fromClause[2].pathString == "a.moreInfo.evenMore");
+    assert(parser.fromClause[2].pathString == "_a1.moreInfo.evenMore");
 
 }

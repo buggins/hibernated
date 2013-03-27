@@ -115,6 +115,7 @@ public:
     package EntityInfo _entity;
     @property EntityInfo entity() { return _entity; }
     @property EntityMetaData metadata() { return _entity.metadata; }
+    @property bool lazyLoad() { return false; } // TODO: support lazy loading
 
 	string propertyName;
 	string columnName;

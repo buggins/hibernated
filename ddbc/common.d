@@ -394,7 +394,7 @@ version (unittest) {
     void unitTestExecuteBatch(Connection conn, string[] queries) {
         Statement stmt = conn.createStatement();
         foreach(query; queries) {
-			writeln("query:" ~ query);
+			//writeln("query:" ~ query);
             stmt.executeUpdate(query);
         }
     }
