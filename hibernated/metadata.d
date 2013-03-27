@@ -2457,6 +2457,7 @@ unittest {
         assert(p2.moreInfo.person == p2);
         assert(p2.moreInfo.flags == 345);
         assert(p2.moreInfo.evenMore is null);
+
     }
 }
 
