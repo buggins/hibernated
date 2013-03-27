@@ -108,7 +108,8 @@ public:
 	alias void function(Object, DataSetReader, int index) ReaderFunc;
 	alias void function(Object, DataSetWriter, int index) WriterFunc;
 	alias Variant function(Object) GetVariantFunc;
-	alias void function(Object, Variant value) SetVariantFunc;
+    alias void function(Object, Object) CopyFunc;
+    alias void function(Object, Variant value) SetVariantFunc;
 	alias bool function(Object) KeyIsSetFunc;
 	alias bool function(Object) IsNullFunc;
 	alias Object function(Object) GetObjectFunc;
@@ -144,6 +145,7 @@ public:
 	IsNullFunc isNullFunc;
 	GetObjectFunc getObjectFunc;
 	SetObjectFunc setObjectFunc;
+    CopyFunc copyFieldFunc;
 
     @property bool simple() { return relation == RelationType.None; };
     @property bool embedded() { return relation == RelationType.Embedded; };
@@ -152,7 +154,7 @@ public:
 	@property bool manyToOne() { return relation == RelationType.ManyToOne; };
 	@property bool manyToMany() { return relation == RelationType.ManyToMany; };
 
-	this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, RelationType relation, string referencedEntityName, string referencedPropertyName, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, KeyIsSetFunc keyIsSetFunc, IsNullFunc isNullFunc, GetObjectFunc getObjectFunc = null, SetObjectFunc setObjectFunc = null) {
+    this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, RelationType relation, string referencedEntityName, string referencedPropertyName, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, KeyIsSetFunc keyIsSetFunc, IsNullFunc isNullFunc, CopyFunc copyFieldFunc, GetObjectFunc getObjectFunc = null, SetObjectFunc setObjectFunc = null) {
 		this.propertyName = propertyName;
 		this.columnName = columnName;
 		this.columnType = columnType;
@@ -171,6 +173,7 @@ public:
 		this.isNullFunc = isNullFunc;
 		this.getObjectFunc = getObjectFunc;
 		this.setObjectFunc = setObjectFunc;
+        this.copyFieldFunc = copyFieldFunc;
 	}
 
 	//int onApply();
@@ -250,6 +253,11 @@ class EntityInfo {
 	PropertyInfo findProperty(string propertyName) { try { return propertyMap[propertyName]; } catch (Throwable e) { throw new HibernatedException("No property " ~ propertyName ~ " found in entity " ~ name); } }
 	/// create instance of entity object (using default constructor)
 	Object createEntity() { return Object.factory(classInfo.name); }
+
+    void copyAllProperties(Object to, Object from) {
+        for (int i=0; i<length; i++)
+            getProperty(i).copyFieldFunc(to, from);
+    }
 }
 
 string capitalizeFieldName(immutable string name) {
@@ -916,6 +924,19 @@ string getPropertyWriteCode(T, string m)() {
 	}
 }
 
+string getPropertyCopyCode(T, string m)() {
+    immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
+    static if (kind == PropertyMemberKind.FIELD_MEMBER) {
+        return "toentity." ~ m ~ " = fromentity." ~ m ~ ";";
+    } else if (kind == PropertyMemberKind.GETTER_MEMBER) {
+        return "toentity." ~ getterNameToSetterName(m) ~ "(fromentity." ~ m ~ "());";
+    } else if (kind == PropertyMemberKind.PROPERTY_MEMBER) {
+        return "toentity." ~ m ~ " = fromentity." ~ m ~ ";";
+    } else {
+        assert(0);
+    }
+}
+
 string getPropertyVariantWriteCode(T, string m)() {
 	immutable memberType = getPropertyMemberType!(T,m)();
 	immutable string nullValueCode = ColumnTypeSetNullCode[memberType];
@@ -1142,6 +1163,7 @@ string getOneToOnePropertyDef(T, immutable string m)() {
 	immutable string propertyObjectGetCode = propertyReadCode; //getPropertyVariantReadCode!(T,m)();
 	immutable string keyIsSetCode = null; //getColumnTypeKeyIsSetCode!(T,m)();
 	immutable string isNullCode = propertyReadCode ~ " is null";
+    immutable string copyFieldCode = getPropertyCopyCode!(T,m);
 	//	pragma(msg, "property read: " ~ propertyReadCode);
 	//	pragma(msg, "property write: " ~ propertyWriteCode);
 	//	pragma(msg, "variant get: " ~ propertyVariantGetCode);
@@ -1191,7 +1213,14 @@ string getOneToOnePropertyDef(T, immutable string m)() {
 			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
 			"    " ~ propertyObjectSetCode ~ "\n" ~
 			" }\n";
-	//	pragma(msg, propertyReadCode);
+    immutable string copyFuncDef = 
+        "\n" ~
+            "function(Object to, Object from) { \n" ~ 
+            "    " ~ entityClassName ~ " toentity = cast(" ~ entityClassName ~ ")to; \n" ~
+            "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
+            "    " ~ copyFieldCode ~ "\n" ~
+            " }\n";
+    //	pragma(msg, propertyReadCode);
 	//	pragma(msg, datasetReadCode);
 	//	pragma(msg, propertyWriteCode);
 	//	pragma(msg, datasetWriteCode);
@@ -1212,7 +1241,8 @@ string getOneToOnePropertyDef(T, immutable string m)() {
 		    setVariantFuncDef ~ ", " ~
 		    keyIsSetFuncDef ~ ", " ~
 		    isNullFuncDef ~ ", " ~
-		    getObjectFuncDef ~ ", " ~
+            copyFuncDef ~ ", " ~
+            getObjectFuncDef ~ ", " ~
 		    setObjectFuncDef ~ 
 		    ")";
 }
@@ -1244,7 +1274,8 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
 	immutable string propertyObjectGetCode = propertyReadCode; //getPropertyVariantReadCode!(T,m)();
 	immutable string keyIsSetCode = null; //getColumnTypeKeyIsSetCode!(T,m)();
 	immutable string isNullCode = propertyReadCode ~ " is null";
-	//	pragma(msg, "property read: " ~ propertyReadCode);
+    immutable string copyFieldCode = getPropertyCopyCode!(T,m);
+    //	pragma(msg, "property read: " ~ propertyReadCode);
 	//	pragma(msg, "property write: " ~ propertyWriteCode);
 	//	pragma(msg, "variant get: " ~ propertyVariantGetCode);
 	immutable string readerFuncDef = "null";
@@ -1293,7 +1324,14 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
 			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
 			"    " ~ propertyObjectSetCode ~ "\n" ~
 			" }\n";
-	//	pragma(msg, propertyReadCode);
+    immutable string copyFuncDef = 
+        "\n" ~
+            "function(Object to, Object from) { \n" ~ 
+            "    " ~ entityClassName ~ " toentity = cast(" ~ entityClassName ~ ")to; \n" ~
+            "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
+            "    " ~ copyFieldCode ~ "\n" ~
+            " }\n";
+    //	pragma(msg, propertyReadCode);
 	//	pragma(msg, datasetReadCode);
 	//	pragma(msg, propertyWriteCode);
 	//	pragma(msg, datasetWriteCode);
@@ -1312,7 +1350,8 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
 			setVariantFuncDef ~ ", " ~
 			keyIsSetFuncDef ~ ", " ~
 			isNullFuncDef ~ ", " ~
-			getObjectFuncDef ~ ", " ~
+            copyFuncDef ~ ", " ~
+            getObjectFuncDef ~ ", " ~
 			setObjectFuncDef ~ 
 			")";
 }
@@ -1339,7 +1378,8 @@ string getSimplePropertyDef(T, immutable string m)() {
 	immutable string propertyVariantGetCode = getPropertyVariantReadCode!(T,m);
 	immutable string keyIsSetCode = getColumnTypeKeyIsSetCode!(T,m);
 	immutable string isNullCode = getColumnTypeIsNullCode!(T,m);
-	immutable string readerFuncDef = "\n" ~
+    immutable string copyFieldCode = getPropertyCopyCode!(T,m);
+    immutable string readerFuncDef = "\n" ~
 		"function(Object obj, DataSetReader r, int index) { \n" ~ 
 			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
 			"    " ~ propertyWriteCode ~ " \n" ~
@@ -1369,7 +1409,14 @@ string getSimplePropertyDef(T, immutable string m)() {
 			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
 			"    return " ~ isNullCode ~ ";\n" ~
 			" }\n";
-	//	pragma(msg, propertyReadCode);
+    immutable string copyFuncDef = 
+        "\n" ~
+            "function(Object to, Object from) { \n" ~ 
+            "    " ~ entityClassName ~ " toentity = cast(" ~ entityClassName ~ ")to; \n" ~
+            "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
+            "    " ~ copyFieldCode ~ "\n" ~
+            " }\n";
+    //	pragma(msg, propertyReadCode);
 	//	pragma(msg, datasetReadCode);
 	//	pragma(msg, propertyWriteCode);
 	//	pragma(msg, datasetWriteCode);
@@ -1388,7 +1435,8 @@ string getSimplePropertyDef(T, immutable string m)() {
 			getVariantFuncDef ~ ", " ~
 			setVariantFuncDef ~ ", " ~
 			keyIsSetFuncDef ~ ", " ~
-			isNullFuncDef ~
+            isNullFuncDef ~ ", " ~
+            copyFuncDef ~
 			")";
 }
 
@@ -1850,7 +1898,7 @@ unittest {
 
 
 	EntityInfo entity = new EntityInfo("user", "users",  false, [
-	                                                             new PropertyInfo("id", "id", new NumberType(10,false,SqlType.INTEGER), 0, true, true, false, RelationType.None, null, null, null, null, null, null, null, null)
+	                                                             new PropertyInfo("id", "id", new NumberType(10,false,SqlType.INTEGER), 0, true, true, false, RelationType.None, null, null, null, null, null, null, null, null, null)
 	                                                     ], null);
 
 	assert(entity.properties.length == 1);
@@ -1860,11 +1908,11 @@ unittest {
 //	immutable string infos = entityListDef!(User, Customer)();
 
 	EntityInfo ei = new EntityInfo("User", "users", false, [
-	                                                        new PropertyInfo("id", "id_column", new NumberType(10,false,SqlType.INTEGER), 0, true, true, false, RelationType.None, null, null, null, null, null, null, null, null),
-	                                                        new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, RelationType.None, null, null, null, null, null, null, null, null),
-	                                                        new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null, null),
-	                                                        new PropertyInfo("login", "login", new StringType(), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null, null),
-	                                                        new PropertyInfo("testColumn", "testcolumn", new NumberType(10,false,SqlType.INTEGER), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null, null)], null);
+                                                            new PropertyInfo("id", "id_column", new NumberType(10,false,SqlType.INTEGER), 0, true, true, false, RelationType.None, null, null, null, null, null, null, null, null, null),
+                                                            new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, RelationType.None, null, null, null, null, null, null, null, null, null),
+                                                            new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null, null, null),
+                                                            new PropertyInfo("login", "login", new StringType(), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null, null, null),
+                                                            new PropertyInfo("testColumn", "testcolumn", new NumberType(10,false,SqlType.INTEGER), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null, null, null)], null);
 
 	//void function(User, DataSetReader, int) readFunc = function(User entity, DataSetReader reader, int index) { };
 
@@ -1875,15 +1923,15 @@ unittest {
 
 	EntityInfo[] entities3 =  [
 	                           new EntityInfo("User", "users", false, [
-	                                        new PropertyInfo("id", "id_column", new NumberType(10,false,SqlType.INTEGER), 0, true, true, false, RelationType.None, null, null, null, null, null, null, null, null),
-	                                        new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, RelationType.None, null, null, null, null, null, null, null, null),
-	                                        new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null, null),
-	                                        new PropertyInfo("login", "login", new StringType(), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null, null),
-	                                        new PropertyInfo("testColumn", "testcolumn", new NumberType(10,false,SqlType.INTEGER), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null, null)], null)
+	                                        new PropertyInfo("id", "id_column", new NumberType(10,false,SqlType.INTEGER), 0, true, true, false, RelationType.None, null, null, null, null, null, null, null, null, null),
+	                                        new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, RelationType.None, null, null, null, null, null, null, null, null, null),
+	                                        new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null, null, null),
+	                                        new PropertyInfo("login", "login", new StringType(), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null, null, null),
+	                                        new PropertyInfo("testColumn", "testcolumn", new NumberType(10,false,SqlType.INTEGER), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null, null, null)], null)
 	                                                                 ,
 	                           new EntityInfo("Customer", "customer", false, [
-	                                               new PropertyInfo("id", "id", new NumberType(10,false,SqlType.INTEGER), 0, true, true, true, RelationType.None, null, null, null, null, null, null, null, null),
-	                                               new PropertyInfo("name", "name", new StringType(), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null, null)], null)
+	                                               new PropertyInfo("id", "id", new NumberType(10,false,SqlType.INTEGER), 0, true, true, true, RelationType.None, null, null, null, null, null, null, null, null, null),
+                                                   new PropertyInfo("name", "name", new StringType(), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null, null, null)], null)
 	                                                                 ];
 
 

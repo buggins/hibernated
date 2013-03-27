@@ -122,7 +122,9 @@ interface Query
 	string 	getQueryString();
 	/// Convenience method to return a single instance that matches the query, or null if the query returns no results.
 	Object 	uniqueResult();
-	/// Convenience method to return a single instance that matches the query, or null if the query returns no results.
+    /// Convenience method to return a single instance that matches the query, or null if the query returns no results. Reusing existing buffer.
+    Object  uniqueResult(Object obj);
+    /// Convenience method to return a single instance that matches the query, or null if the query returns no results.
 	Variant[] uniqueRow();
 	/// Return the query results as a List of entity objects
 	Object[] list();
@@ -314,25 +316,30 @@ class SessionImpl : Session {
 
     /// Read the persistent state associated with the given identifier into the given transient instance
     Object getObject(EntityInfo info, Object obj, Variant id) {
-        string query = metaData.generateFindByPkForEntity(info);
-        //writeln("Finder query: " ~ query);
-        PreparedStatement stmt = conn.prepareStatement(query);
-        scope(exit) stmt.close();
-        stmt.setVariant(1, id);
-        ResultSet rs = stmt.executeQuery();
-        //writeln("returned rows: " ~ to!string(rs.getFetchSize()));
-        scope(exit) rs.close();
-        if (rs.next()) {
-            if (obj is null)
-                obj = info.createEntity();
-            //writeln("reading columns");
-            metaData.readAllColumns(obj, rs, 1);
-            //writeln("value: " ~ obj.toString);
-            return obj;
-        } else {
-            // not found!
-            return null;
-        }
+        string hql = "FROM " ~ info.name ~ " WHERE " ~ info.getKeyProperty().propertyName ~ "=:Id";
+        Query q = createQuery(hql).setParameter("Id", id);
+        Object res = q.uniqueResult(obj);
+        return res;
+
+//        string query = metaData.generateFindByPkForEntity(info);
+//        //writeln("Finder query: " ~ query);
+//        PreparedStatement stmt = conn.prepareStatement(query);
+//        scope(exit) stmt.close();
+//        stmt.setVariant(1, id);
+//        ResultSet rs = stmt.executeQuery();
+//        //writeln("returned rows: " ~ to!string(rs.getFetchSize()));
+//        scope(exit) rs.close();
+//        if (rs.next()) {
+//            if (obj is null)
+//                obj = info.createEntity();
+//            //writeln("reading columns");
+//            metaData.readAllColumns(obj, rs, 1);
+//            //writeln("value: " ~ obj.toString);
+//            return obj;
+//        } else {
+//            // not found!
+//            return null;
+//        }
     }
     
     /// Re-read the state of the given instance from the underlying database.
@@ -503,12 +510,17 @@ class QueryImpl : Query
 
 	/// Convenience method to return a single instance that matches the query, or null if the query returns no results.
 	override Object uniqueResult() {
-		Object[] rows = list();
-		if (rows == null)
-			return null;
-		enforceEx!HibernatedException(rows.length == 1, "Query returned more than one object: " ~ getQueryString());
-		return rows[0];
+        return uniqueResult(null);
 	}
+
+    /// Convenience method to return a single instance that matches the query, or null if the query returns no results. Reusing existing buffer.
+    Object  uniqueResult(Object obj) {
+        Object[] rows = list(obj);
+        if (rows == null)
+            return null;
+        enforceEx!HibernatedException(rows.length == 1, "Query returned more than one object: " ~ getQueryString());
+        return rows[0];
+    }
 
 	/// Convenience method to return a single instance that matches the query, or null if the query returns no results.
 	override Variant[] uniqueRow() {
@@ -530,7 +542,7 @@ class QueryImpl : Query
         return null;
     }
 
-    private Object readRelations(DataSetReader r) {
+    private Object readRelations(Object objectContainer, DataSetReader r) {
         Object[] relations = new Object[query.select.length];
         // read all related objects from DB row
         for (int i = 0; i < query.select.length; i++) {
@@ -540,9 +552,12 @@ class QueryImpl : Query
                 Variant key = from.entity.getKey(r, from.startColumn);
                 row = sess.peekFromCache(from.entity.name, key);
                 if (row is null) {
-                    row = from.entity.createEntity();
+                    row = (objectContainer !is null && i == 0) ? objectContainer : from.entity.createEntity();
                     sess.metaData.readAllColumns(row, r, from.startColumn);
                     sess.putToCache(from.entity.name, key, row);
+                } else if (objectContainer !is null) {
+                    writeln("copying all properties to existing container");
+                    from.entity.copyAllProperties(objectContainer, row);
                 }
             }
             relations[i] = row;
@@ -576,30 +591,35 @@ class QueryImpl : Query
 
 	/// Return the query results as a List of entity objects
 	override Object[] list() {
-		EntityInfo ei = query.entity;
-		enforceEx!HibernatedException(ei !is null, "No entity expected in result of query " ~ getQueryString());
-		params.checkAllParametersSet();
-		sess.checkClosed();
-
-		Object[] res;
-
-		//writeln("SQL: " ~ query.sql);
-		PreparedStatement stmt = sess.conn.prepareStatement(query.sql);
-		scope(exit) stmt.close();
-		params.applyParams(stmt);
-		ResultSet rs = stmt.executeQuery();
-        assert(query.select !is null && query.select.length > 0);
-        int startColumn = query.select[0].from.startColumn;
-		scope(exit) rs.close();
-		while(rs.next()) {
-            Object row = readRelations(rs);
-            if (row !is null)
-                res ~= row;
-		}
-		return res.length > 0 ? res : null;
+        return list(null);
 	}
 
-	/// Return the query results as a List which each row as Variant array
+    /// Return the query results as a List of entity objects
+    Object[] list(Object placeFirstObjectHere) {
+        EntityInfo ei = query.entity;
+        enforceEx!HibernatedException(ei !is null, "No entity expected in result of query " ~ getQueryString());
+        params.checkAllParametersSet();
+        sess.checkClosed();
+        
+        Object[] res;
+        
+        //writeln("SQL: " ~ query.sql);
+        PreparedStatement stmt = sess.conn.prepareStatement(query.sql);
+        scope(exit) stmt.close();
+        params.applyParams(stmt);
+        ResultSet rs = stmt.executeQuery();
+        assert(query.select !is null && query.select.length > 0);
+        int startColumn = query.select[0].from.startColumn;
+        scope(exit) rs.close();
+        while(rs.next()) {
+            Object row = readRelations(res.length > 0 ? null : placeFirstObjectHere, rs);
+            if (row !is null)
+                res ~= row;
+        }
+        return res.length > 0 ? res : null;
+    }
+    
+    /// Return the query results as a List which each row as Variant array
 	override Variant[][] listRows() {
 		params.checkAllParametersSet();
 		sess.checkClosed();
