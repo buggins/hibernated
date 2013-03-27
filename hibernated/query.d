@@ -774,6 +774,31 @@ class QueryParser {
 		return -1;
 	}
 	
+    int addSelectSQL(Dialect dialect, ParsedQuery res, string tableName, bool first, EntityInfo ei) {
+        int colCount = 0;
+        for(int j = 0; j < ei.getPropertyCount(); j++) {
+            PropertyInfo f = ei.getProperty(j);
+            string fieldName = f.columnName;
+            if (f.embedded) {
+                // put embedded cols here
+                colCount += addSelectSQL(dialect, res, tableName, first && colCount == 0, f.referencedEntity);
+                continue;
+            } else if (f.oneToOne) {
+            } else {
+            }
+            if (fieldName is null)
+                continue;
+            if (!first || colCount > 0) {
+                res.appendSQL(", ");
+            } else
+                first = false;
+            
+            res.appendSQL(tableName ~ "." ~ dialect.quoteIfNeeded(fieldName));
+            colCount++;
+        }
+        return colCount;
+    }
+
 	void addSelectSQL(Dialect dialect, ParsedQuery res) {
 		res.appendSQL("SELECT ");
 		bool first = true;
@@ -790,23 +815,7 @@ class QueryParser {
                 string tableName = from.sqlAlias;
     			assert(from !is null);
     			assert(from.entity !is null);
-    			for(int j = 0; j < from.entity.getPropertyCount(); j++) {
-    				PropertyInfo f = from.entity.getProperty(j);
-    				string fieldName = f.columnName;
-                    if (f.embedded) {
-                    } else if (f.oneToOne) {
-                    } else {
-                    }
-                    if (fieldName is null)
-                        continue;
-    				if (!first) {
-    					res.appendSQL(", ");
-    				} else
-    					first = false;
-    				
-    				res.appendSQL(tableName ~ "." ~ dialect.quoteIfNeeded(fieldName));
-    				colCount++;
-    			}
+                colCount += addSelectSQL(dialect, res, tableName, colCount == 0, from.entity);
             }
 		} else {
 			// individual fields specified
