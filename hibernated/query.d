@@ -73,7 +73,7 @@ class FromClause {
         item.baseProperty = baseProperty;
         item.pathString = item.getFullPath();
         items ~= item;
-        return items[$-1];
+        return item;
     }
     @property size_t length() { return items.length; }
     string getSQL() {
@@ -174,19 +174,37 @@ class QueryParser {
 			parseWhereClause(wherePos + 1, whereEnd);
 		if (orderPos >= 0 && orderEnd > orderPos)
 			parseOrderClause(orderPos + 2, orderEnd);
-        if (selectedEntities)
+        if (selectedEntities) {
             processAutoFetchReferences();
+            prepareSelectFields();
+        }
 	}
 	
+    private void prepareSelectFields() {
+        int startColumn = 1;
+        for (int i=0; i < fromClause.length; i++) {
+            FromClauseItem item = fromClause[i];
+            if (!item.fetch)
+                continue;
+            int count = item.entity.metadata.getFieldCount(item.entity, false);
+            if (count > 0) {
+                item.startColumn = startColumn;
+                item.selectedColumns = count;
+                startColumn += count;
+            }
+        }
+    }
+
     private void processAutoFetchReferences() {
         FromClauseItem a = selectClause[0].aliasPtr;
+        a.fetch = true;
         processAutoFetchReferences(a);
     }
 
     private FromClauseItem ensureItemFetched(FromClauseItem a, PropertyInfo p) {
         FromClauseItem res;
         string path = a.pathString ~ "." ~ p.propertyName;
-        writeln("ensureItemFetched " ~ path);
+        //writeln("ensureItemFetched " ~ path);
         res = fromClause.findByPath(path);
         if (res is null) {
             // autoadd join
@@ -195,6 +213,19 @@ class QueryParser {
         } else {
             // force fetch
             res.fetch = true;
+        }
+        bool selectFound = false;
+        foreach(s; selectClause) {
+            if (s.aliasPtr == res) {
+                selectFound = true;
+                break;
+            }
+        }
+        if (!selectFound) {
+            SelectClauseItem item;
+            item.aliasPtr = res;
+            item.prop = null;
+            selectClause ~= item;
         }
         return res;
     }
@@ -300,7 +331,7 @@ class QueryParser {
         }
         if (aliasName != null)
             updateAlias(ei, aliasName);
-        fromClause.add(ei, aliasName, JoinType.InnerJoin, true);
+        fromClause.add(ei, aliasName, JoinType.InnerJoin, false);
         pos = p;
     }
 
@@ -634,7 +665,7 @@ class QueryParser {
                     FromClauseItem newClause = fromClause.findByPath(fullName);
                     if (newClause is null) {
                         // autogenerate FROM clause
-                        newClause = fromClause.add(ei, null, JoinType.InnerJoin, false, a, pi);
+                        newClause = fromClause.add(ei, null, pi.nullable ? JoinType.LeftJoin : JoinType.InnerJoin, false, a, pi);
                     }
                     a = newClause;
                 }
@@ -670,6 +701,7 @@ class QueryParser {
 	string errorContext(Token token) {
 		return " near `" ~ query[token.pos .. $] ~ "` in query `" ~ query ~ "`";
 	}
+
 	void foldOperators(ref Token[] items) {
 		foreach (t; items) {
 			if (t.children.length > 0)
@@ -749,23 +781,27 @@ class QueryParser {
 		int colCount = 0;
 		if (selectClause[0].prop is null) {
 			// object alias is specified: add all properties of object
-			SelectClauseItem a = selectClause[0];
-			string tableName = a.aliasPtr.sqlAlias;
-			FromClauseItem from = a.aliasPtr;
-			res.setEntity(from.entity);
-			assert(from !is null);
-			assert(from.entity !is null);
-			for(int i=0; i<from.entity.getPropertyCount(); i++) {
-				PropertyInfo f = from.entity.getProperty(i);
-				string fieldName = f.columnName;
-				if (!first) {
-					res.appendSQL(", ");
-				} else
-					first = false;
-				
-				res.appendSQL(tableName ~ "." ~ dialect.quoteIfNeeded(fieldName));
-				colCount++;
-			}
+            writeln("selected entity count: " ~ to!string(selectClause.length));
+            res.setEntity(selectClause[0].aliasPtr.entity);
+            for(int i = 0; i < fromClause.length; i++) {
+                FromClauseItem from = fromClause[i];
+                if (!from.fetch)
+                    continue;
+                string tableName = from.sqlAlias;
+    			assert(from !is null);
+    			assert(from.entity !is null);
+    			for(int j = 0; j < from.entity.getPropertyCount(); j++) {
+    				PropertyInfo f = from.entity.getProperty(j);
+    				string fieldName = f.columnName;
+    				if (!first) {
+    					res.appendSQL(", ");
+    				} else
+    					first = false;
+    				
+    				res.appendSQL(tableName ~ "." ~ dialect.quoteIfNeeded(fieldName));
+    				colCount++;
+    			}
+            }
 		} else {
 			// individual fields specified
 			res.setEntity(null);
@@ -787,6 +823,12 @@ class QueryParser {
 		res.appendSpace();
 		res.appendSQL("FROM ");
 		res.appendSQL(dialect.quoteIfNeeded(fromClause.first.entity.tableName) ~ " AS " ~ fromClause.first.sqlAlias);
+        for (int i = 1; i < fromClause.length; i++) {
+            FromClauseItem join = fromClause[i];
+            res.appendSpace();
+            res.appendSQL(join.joinType == JoinType.LeftJoin ? "LEFT JOIN " : "INNER JOIN ");
+            res.appendSQL(dialect.quoteIfNeeded(join.entity.tableName) ~ " AS " ~ join.sqlAlias);
+        }
 	}
 	
 	void addWhereCondition(Token t, int basePrecedency, Dialect dialect, ParsedQuery res) {
@@ -1522,18 +1564,30 @@ unittest {
     assert(parser.fromClause[1].joinType == JoinType.InnerJoin);
     assert(parser.fromClause[1].pathString == "a.moreInfo");
     assert(parser.fromClause[2].entity.tableName == "person_info2");
-    assert(parser.fromClause[2].joinType == JoinType.InnerJoin);
+    assert(parser.fromClause[2].joinType == JoinType.LeftJoin);
     assert(parser.fromClause[2].pathString == "a.moreInfo.evenMore");
     // indirect JOIN, no alias
     parser = new QueryParser(schema, "FROM Person WHERE id = :Id AND moreInfo.evenMore.flags > 0");
     assert(parser.fromClause.length == 3);
     assert(parser.fromClause[0].entity.tableName == "person");
+    assert(parser.fromClause[0].fetch == true);
+    //writeln("select fields [" ~ to!string(parser.fromClause[0].startColumn) ~ ", " ~ to!string(parser.fromClause[0].selectedColumns) ~ "]");
+    //writeln("select fields [" ~ to!string(parser.fromClause[1].startColumn) ~ ", " ~ to!string(parser.fromClause[1].selectedColumns) ~ "]");
+    //writeln("select fields [" ~ to!string(parser.fromClause[2].startColumn) ~ ", " ~ to!string(parser.fromClause[2].selectedColumns) ~ "]");
+    assert(parser.fromClause[0].selectedColumns == 4);
     assert(parser.fromClause[1].entity.tableName == "person_info");
     assert(parser.fromClause[1].joinType == JoinType.InnerJoin);
-    //writeln("path: " ~ parser.fromClause[1].pathString);
     assert(parser.fromClause[1].pathString == "_a1.moreInfo");
+    assert(parser.fromClause[1].fetch == true);
+    assert(parser.fromClause[1].selectedColumns == 2);
     assert(parser.fromClause[2].entity.tableName == "person_info2");
-    assert(parser.fromClause[2].joinType == JoinType.InnerJoin);
+    assert(parser.fromClause[2].joinType == JoinType.LeftJoin);
     assert(parser.fromClause[2].pathString == "_a1.moreInfo.evenMore");
+    assert(parser.fromClause[2].fetch == true);
+    assert(parser.fromClause[2].selectedColumns == 3);
+
+    q = parser.makeSQL(dialect);
+    writeln(q.hql);
+    writeln(q.sql);
 
 }

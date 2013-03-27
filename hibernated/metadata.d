@@ -76,6 +76,8 @@ abstract class EntityMetaData {
 
 	public string generateFindAllForEntity(string entityName);
 
+    public int getFieldCount(EntityInfo ei, bool exceptKey);
+
 	public string getAllFieldList(EntityInfo ei, bool exceptKey = false);
 	public string getAllFieldList(string entityName, bool exceptKey = false);
 
@@ -1585,7 +1587,28 @@ abstract class SchemaInfo : EntityMetaData {
 		return query;
 	}
 	
-	public string getAllFieldPlaceholderList(EntityInfo ei, bool exceptKey = false) {
+    override public int getFieldCount(EntityInfo ei, bool exceptKey) {
+        int count = 0;
+        for (int i = 0; i < ei.getPropertyCount(); i++) {
+            PropertyInfo pi = ei.getProperty(i);
+            if (pi.key && exceptKey)
+                continue;
+            if (pi.embedded) {
+                EntityInfo emei = pi.referencedEntity;
+                count += getFieldCount(emei, exceptKey);
+            } else if (pi.oneToOne) {
+                if (pi.columnName != null) {
+                    // read FK column
+                    count++;
+                }
+            } else {
+                count++;
+            }
+        }
+        return count;
+    }
+    
+    public string getAllFieldPlaceholderList(EntityInfo ei, bool exceptKey = false) {
 		string query;
 		for (int i = 0; i < ei.getPropertyCount(); i++) {
 			PropertyInfo pi = ei.getProperty(i);
@@ -2262,7 +2285,7 @@ version (unittest) {
         @Column @NotNull
         string lastName;
 
-        @OneToOne
+        @OneToOne @NotNull
         @JoinColumn("more_info_fk")
         MoreInfo moreInfo;
     }
