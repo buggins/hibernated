@@ -308,7 +308,7 @@ unittest {
 
 /// returns true if class member has at least one known property level annotation (@Column, @Id, @Generated)
 bool hasHibernatedPropertyAnnotation(T, string m)() {
-	return hasOneOfMemberAnnotations!(T, m, Id, Embedded, Column, OneToOne, Generated);
+    return hasOneOfMemberAnnotations!(T, m, Id, Embedded, Column, OneToOne, ManyToOne, ManyToMany, OneToMany, Generated);
 }
 
 /// returns true if class has one of specified anotations
@@ -1136,14 +1136,15 @@ string getEmbeddedPropertyObjectWriteCode(T, string m, string className)() {
 
 
 
-/// create source code for creation of Embedded definition
+/// generate source code for creation of OneToOne definition
 string getOneToOnePropertyDef(T, immutable string m)() {
-	immutable string referencedEntityName = getPropertyReferencedEntityName!(T,m);
+    immutable string referencedEntityName = getPropertyReferencedEntityName!(T,m);
 	immutable string referencedClassName = getPropertyReferencedClassName!(T,m);
 	immutable string referencedPropertyName = getOneToOneReferencedPropertyName!(T,m);
 	immutable string entityClassName = fullyQualifiedName!T;
-	immutable string propertyName = getPropertyName!(T,m)();
-	static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
+    immutable string propertyName = getPropertyName!(T,m)();
+    static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
+    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, ManyToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": OneToOne property cannot have Column, Id, Generated, ManyToOne, ManyToMany or Embedded annotation");
 	immutable bool isId = hasMemberAnnotation!(T, m, Id);
 	immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
 	immutable string columnName = getJoinColumnName!(T, m)();
@@ -1247,15 +1248,127 @@ string getOneToOnePropertyDef(T, immutable string m)() {
 		    ")";
 }
 
+/// generate source code for creation of ManyToOne definition
+string getManyToOnePropertyDef(T, immutable string m)() {
+    immutable string referencedEntityName = getPropertyReferencedEntityName!(T,m);
+    immutable string referencedClassName = getPropertyReferencedClassName!(T,m);
+    immutable string referencedPropertyName = getOneToOneReferencedPropertyName!(T,m);
+    immutable string entityClassName = fullyQualifiedName!T;
+    immutable string propertyName = getPropertyName!(T,m)();
+    static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
+    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, OneToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": ManyToOne property cannot have Column, Id, Generated, OneToOne, ManyToMany or Embedded annotation");
+    immutable bool isId = hasMemberAnnotation!(T, m, Id);
+    immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
+    immutable string columnName = getJoinColumnName!(T, m)();
+    immutable length = getColumnLength!(T, m)();
+    immutable bool hasNull = hasMemberAnnotation!(T,m, Null);
+    immutable bool hasNotNull = hasMemberAnnotation!(T,m, NotNull);
+    immutable bool nullable = hasNull ? true : (hasNotNull ? false : true); //canColumnTypeHoldNulls!(T.m)
+    immutable bool unique = hasMemberAnnotation!(T, m, UniqueKey);
+    immutable string typeName = "new EntityType(cast(immutable TypeInfo_Class)" ~ entityClassName ~ ".classinfo, \"" ~ entityClassName ~ "\")"; //getColumnTypeName!(T, m)();
+    immutable string propertyReadCode = getPropertyReadCode!(T,m)();
+    immutable string datasetReadCode = null; //getColumnTypeDatasetReadCode!(T,m)();
+    immutable string propertyWriteCode = null; //getPropertyWriteCode!(T,m)();
+    immutable string datasetWriteCode = null; //getColumnTypeDatasetWriteCode!(T,m)();
+    immutable string propertyVariantSetCode = getEmbeddedPropertyVariantWriteCode!(T, m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
+    immutable string propertyVariantGetCode = "Variant(" ~ propertyReadCode ~ " is null ? null : " ~ propertyReadCode ~ ")"; //getPropertyVariantReadCode!(T,m)();
+    immutable string propertyObjectSetCode = getEmbeddedPropertyObjectWriteCode!(T,m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
+    immutable string propertyObjectGetCode = propertyReadCode; //getPropertyVariantReadCode!(T,m)();
+    immutable string keyIsSetCode = null; //getColumnTypeKeyIsSetCode!(T,m)();
+    immutable string isNullCode = propertyReadCode ~ " is null";
+    immutable string copyFieldCode = getPropertyCopyCode!(T,m);
+    //  pragma(msg, "property read: " ~ propertyReadCode);
+    //  pragma(msg, "property write: " ~ propertyWriteCode);
+    //  pragma(msg, "variant get: " ~ propertyVariantGetCode);
+    immutable string readerFuncDef = "null";
+    //      "\n" ~
+    //      "function(Object obj, DataSetReader r, int index) { \n" ~ 
+    //          "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+    //          "    " ~ propertyWriteCode ~ " \n" ~
+    //          " }\n";
+    immutable string writerFuncDef = "null";
+    //      "\n" ~
+    //      "function(Object obj, DataSetWriter r, int index) { \n" ~ 
+    //          "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+    //          "    " ~ datasetWriteCode ~ " \n" ~
+    //          " }\n";
+    immutable string getVariantFuncDef = 
+        "\n" ~
+            "function(Object obj) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    return " ~ propertyVariantGetCode ~ "; \n" ~
+            " }\n";
+    immutable string setVariantFuncDef = 
+        "\n" ~
+            "function(Object obj, Variant value) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    " ~ propertyVariantSetCode ~ "\n" ~
+            " }\n";
+    immutable string keyIsSetFuncDef = "\n" ~
+        "function(Object obj) { \n" ~ 
+            "    return false;\n" ~
+            " }\n";
+    immutable string isNullFuncDef = "\n" ~
+        "function(Object obj) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    return " ~ isNullCode ~ ";\n" ~
+            " }\n";
+    immutable string getObjectFuncDef = 
+        "\n" ~
+            "function(Object obj) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    assert(entity !is null);\n" ~
+            "    return " ~ propertyObjectGetCode ~ "; \n" ~
+            " }\n";
+    immutable string setObjectFuncDef = 
+        "\n" ~
+            "function(Object obj, Object value) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    " ~ propertyObjectSetCode ~ "\n" ~
+            " }\n";
+    immutable string copyFuncDef = 
+        "\n" ~
+            "function(Object to, Object from) { \n" ~ 
+            "    " ~ entityClassName ~ " toentity = cast(" ~ entityClassName ~ ")to; \n" ~
+            "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
+            "    " ~ copyFieldCode ~ "\n" ~
+            " }\n";
+    //  pragma(msg, propertyReadCode);
+    //  pragma(msg, datasetReadCode);
+    //  pragma(msg, propertyWriteCode);
+    //  pragma(msg, datasetWriteCode);
+    //  pragma(msg, readerFuncDef);
+    //  pragma(msg, writerFuncDef);
+    
+    return "    new PropertyInfo(\"" ~ propertyName ~ "\", " ~ 
+        (columnName is null ? "null" : "\"" ~ columnName ~ "\"") ~ ", " ~ 
+            typeName ~ ", " ~ 
+            format("%s",length) ~ ", " ~ (isId ? "true" : "false")  ~ ", " ~ 
+            (isGenerated ? "true" : "false")  ~ ", " ~ (nullable ? "true" : "false") ~ ", " ~ 
+            "RelationType.ManyToOne, " ~
+            (referencedEntityName !is null ? "\"" ~ referencedEntityName ~ "\"" : "null")  ~ ", " ~ 
+            (referencedPropertyName !is null ? "\"" ~ referencedPropertyName ~ "\"" : "null")  ~ ", " ~ 
+            readerFuncDef ~ ", " ~
+            writerFuncDef ~ ", " ~
+            getVariantFuncDef ~ ", " ~
+            setVariantFuncDef ~ ", " ~
+            keyIsSetFuncDef ~ ", " ~
+            isNullFuncDef ~ ", " ~
+            copyFuncDef ~ ", " ~
+            getObjectFuncDef ~ ", " ~
+            setObjectFuncDef ~ 
+            ")";
+}
 
-/// create source code for creation of Embedded definition
+/// generate source code for creation of Embedded definition
 string getEmbeddedPropertyDef(T, immutable string m)() {
 	immutable string referencedEntityName = getPropertyEmbeddedEntityName!(T,m)();
 	immutable string referencedClassName = getPropertyEmbeddedClassName!(T,m)();
 	immutable string entityClassName = fullyQualifiedName!T;
 	immutable string propertyName = getPropertyName!(T,m)();
 	static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
-	immutable bool isId = hasMemberAnnotation!(T, m, Id);
+    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, ManyToOne, ManyToMany, OneToOne), entityClassName ~ "." ~ propertyName ~ ": Embedded property cannot have Column, Id, Generated, OneToOne, ManyToOne, ManyToMany annotation");
+    immutable bool isId = hasMemberAnnotation!(T, m, Id);
 	immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
 	immutable string columnName = getColumnName!(T, m);
 	immutable length = getColumnLength!(T, m)();
@@ -1356,12 +1469,14 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
 			")";
 }
 
+/// generate source code for creation of simple property definition
 string getSimplePropertyDef(T, immutable string m)() {
 	//getPropertyReferencedEntityName(
 	immutable string entityClassName = fullyQualifiedName!T;
 	immutable string propertyName = getPropertyName!(T,m);
 	static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
-	immutable bool isId = hasMemberAnnotation!(T, m, Id);
+    static assert (!hasOneOfMemberAnnotations!(T, m, ManyToOne, OneToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": simple property cannot have OneToOne, ManyToOne, ManyToMany or Embedded annotation");
+    immutable bool isId = hasMemberAnnotation!(T, m, Id);
 	immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
 	immutable string columnName = getColumnName!(T, m);
 	immutable length = getColumnLength!(T, m)();
@@ -1444,7 +1559,10 @@ string getSimplePropertyDef(T, immutable string m)() {
 string getPropertyDef(T, string m)() {
 	immutable bool isEmbedded = hasMemberAnnotation!(T, m, Embedded);
 	immutable bool isOneToOne = hasMemberAnnotation!(T, m, OneToOne);
-	immutable bool isSimple = !isEmbedded && !isOneToOne;
+    immutable bool isManyToOne = hasMemberAnnotation!(T, m, ManyToOne);
+    immutable bool isManyToMany = hasMemberAnnotation!(T, m, ManyToMany);
+    immutable bool isOneToMany = hasMemberAnnotation!(T, m, OneToMany);
+    immutable bool isSimple = !isEmbedded && !isOneToOne;
 //	pragma(msg, m ~ " isEmbedded=" ~ (isEmbedded ? "true" : "false"))
 //	pragma(msg, m ~ " isOneToOne=" ~ (isOneToOne ? "true" : "false"))
 //	pragma(msg, m ~ " isSimple=" ~ (isSimple ? "true" : "false"))
@@ -1459,6 +1577,14 @@ string getPropertyDef(T, string m)() {
 		//pragma(msg, getOneToOnePropertyDef!(T, m)());
 		return getOneToOnePropertyDef!(T, m)();
 	}
+    static if (isManyToOne) {
+        //pragma(msg, getOneToOnePropertyDef!(T, m)());
+        return getManyToOnePropertyDef!(T, m)();
+    }
+    static if (isManyToMany || isOneToMany) {
+        //pragma(msg, getOneToOnePropertyDef!(T, m)());
+        static assert(false, "@ManyToMany and @OneToMany relations are not supported so far");
+    }
 }
 
 string getEntityDef(T)() {
