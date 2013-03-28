@@ -386,7 +386,7 @@ class SessionImpl : Session {
 				string query = metaData.generateInsertNoKeyForEntity(info);
 				PreparedStatement stmt = conn.prepareStatement(query);
 				scope(exit) stmt.close();
-				metaData.writeAllColumnsExceptKey(obj, stmt, 1);
+				metaData.writeAllColumns(obj, stmt, 1, true);
 				Variant generatedKey;
 				stmt.executeUpdate(generatedKey);
 				info.setKey(obj, generatedKey);
@@ -422,7 +422,7 @@ class SessionImpl : Session {
 		//writeln("Query: " ~ query);
 		PreparedStatement stmt = conn.prepareStatement(query);
 		scope(exit) stmt.close();
-		int columnCount = metaData.writeAllColumnsExceptKey(obj, stmt, 1);
+		int columnCount = metaData.writeAllColumns(obj, stmt, 1, true);
 		info.keyProperty.writeFunc(obj, stmt, columnCount + 1);
 		stmt.executeUpdate();
 	}
@@ -615,17 +615,23 @@ class QueryImpl : Query
         return null;
     }
 
-    private Object readRelations(Object objectContainer, DataSetReader r) {
+    private Object readRelations(Object objectContainer, DataSetReader r, PropertyLoadMap loadMap) {
         Object[] relations = new Object[query.select.length];
+        writeln("select clause len = " ~ to!string(query.select.length));
         // read all related objects from DB row
         for (int i = 0; i < query.select.length; i++) {
             FromClauseItem from = query.select[i].from;
+            writeln("reading " ~ from.entityName);
             Object row;
             if (!from.entity.isKeyNull(r, from.startColumn)) {
+                writeln("key is not null");
                 Variant key = from.entity.getKey(r, from.startColumn);
+                writeln("key is " ~ key.toString);
                 row = sess.peekFromCache(from.entity.name, key);
                 if (row is null) {
+                    writeln("row not found in cache");
                     row = (objectContainer !is null && i == 0) ? objectContainer : from.entity.createEntity();
+                    writeln("reading all columns");
                     sess.metaData.readAllColumns(row, r, from.startColumn);
                     sess.putToCache(from.entity.name, key, row);
                 } else if (objectContainer !is null) {
@@ -635,6 +641,7 @@ class QueryImpl : Query
             }
             relations[i] = row;
         }
+        writeln("fill relations...");
         // fill relations
         for (int i = 0; i < query.select.length; i++) {
             if (relations[i] is null)
@@ -643,8 +650,8 @@ class QueryImpl : Query
             auto ei = from.entity;
             for (int j=0; j<ei.length; j++) {
                 auto pi = ei[j];
-                if (pi.oneToOne) {
-                    //writeln("updating relations for " ~ from.pathString ~ "." ~ pi.propertyName);
+                if (pi.oneToOne || pi.manyToOne) {
+                    writeln("updating relations for " ~ from.pathString ~ "." ~ pi.propertyName);
                     if (pi.lazyLoad) {
                         // TODO: support lazy loader
                     } else {
@@ -654,6 +661,18 @@ class QueryImpl : Query
                             pi.setObjectFunc(relations[i], rel);
                         } else {
                             //writeln("not found loaded oneToOne relation for " ~ from.pathString ~ "." ~ pi.propertyName);
+                            if (pi.columnName != null) {
+                                if (r.isNull(from.startColumn + pi.columnOffset)) {
+                                    // FK is null, set NULL to field
+                                    pi.setObjectFunc(relations[i], null);
+                                    writeln("relation " ~ pi.propertyName ~ " has null FK");
+                                } else {
+                                    // FK is not null
+                                    Variant id = r.getVariant(from.startColumn + pi.columnOffset);
+                                    writeln("relation " ~ pi.propertyName ~ " with FK " ~ id.toString() ~ " will be loaded later");
+                                    loadMap.add(pi, id, relations[i]); // to load later
+                                }
+                            }
                         }
                     }
                 }
@@ -669,13 +688,16 @@ class QueryImpl : Query
 
     /// Return the query results as a List of entity objects
     Object[] listObjects(Object placeFirstObjectHere) {
+        writeln("Entering loadObjects");
         auto ei = query.entity;
         enforceEx!HibernatedException(ei !is null, "No entity expected in result of query " ~ getQueryString());
         params.checkAllParametersSet();
         sess.checkClosed();
         
         Object[] res;
-        
+
+        PropertyLoadMap loadMap = new PropertyLoadMap();
+
         //writeln("SQL: " ~ query.sql);
         PreparedStatement stmt = sess.conn.prepareStatement(query.sql);
         scope(exit) stmt.close();
@@ -683,12 +705,19 @@ class QueryImpl : Query
         ResultSet rs = stmt.executeQuery();
         assert(query.select !is null && query.select.length > 0);
         int startColumn = query.select[0].from.startColumn;
-        scope(exit) rs.close();
-        while(rs.next()) {
-            Object row = readRelations(res.length > 0 ? null : placeFirstObjectHere, rs);
-            if (row !is null)
-                res ~= row;
+        {
+            scope(exit) rs.close();
+            while(rs.next()) {
+                writeln("read relations...");
+                Object row = readRelations(res.length > 0 ? null : placeFirstObjectHere, rs, loadMap);
+                if (row !is null)
+                    res ~= row;
+            }
         }
+        if (loadMap.length > 0) {
+            writeln("relation properties scheduled for load: loadMap.length == " ~ to!string(loadMap.length));
+        }
+        writeln("Exiting loadObjects");
         return res.length > 0 ? res : null;
     }
     
