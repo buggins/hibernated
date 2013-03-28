@@ -709,6 +709,27 @@ class QueryParser {
 		return " near `" ~ query[token.pos .. $] ~ "` in query `" ~ query ~ "`";
 	}
 
+    void foldCommaSeparatedList(Token braces) {
+        // fold inside braces
+        Token[] items = braces.children;
+        int start = 0;
+        Token[] list;
+        for (int i=0; i <= items.length; i++) {
+            if (i == items.length || items[i].type == TokenType.Comma) {
+                enforceEx!SyntaxError(i > start, "Empty item in comma separated list" ~ errorContext(items[i]));
+                enforceEx!SyntaxError(i != items.length - 1, "Empty item in comma separated list" ~ errorContext(items[i]));
+                Token item = new Token(items[start].pos, TokenType.Expression, braces.children, start, i);
+                foldOperators(item.children);
+                enforceEx!SyntaxError(item.children.length == 1, "Invalid expression in list item" ~ errorContext(items[i]));
+                list ~= item.children[0];
+                start = i + 1;
+            }
+        }
+        enforceEx!SyntaxError(list.length > 0, "Empty list" ~ errorContext(items[0]));
+        braces.type = TokenType.CommaDelimitedList;
+        braces.children = list;
+    }
+
 	void foldOperators(ref Token[] items) {
 		foreach (t; items) {
 			if (t.children.length > 0)
@@ -752,13 +773,24 @@ class QueryParser {
 				folded.children ~= items[bestOpPosition + 1];
 				folded.children ~= items[bestOpPosition + 3];
 				replaceInPlace(items, bestOpPosition - 1, bestOpPosition + 4, [folded]);
-			} else {
+            } else if (t == OperatorType.IN) {
+                // fold  X IN (A, B, ...)
+                enforceEx!SyntaxError(bestOpPosition > 0, "Syntax error in WHERE condition - no left arg for IN operator");
+                enforceEx!SyntaxError(bestOpPosition < items.length - 1, "Syntax error in WHERE condition - no value list for IN operator " ~ errorContext(items[bestOpPosition]));
+                enforceEx!SyntaxError(items[bestOpPosition + 1].type == TokenType.Braces, "Syntax error in WHERE condition - no value list in braces for IN operator" ~ errorContext(items[bestOpPosition]));
+                Token folded = new Token(items[bestOpPosition - 1].pos, t, items[bestOpPosition].text, items[bestOpPosition - 1]);
+                folded.children ~= items[bestOpPosition + 1];
+                foldCommaSeparatedList(items[bestOpPosition + 1]);
+                replaceInPlace(items, bestOpPosition - 1, bestOpPosition + 2, [folded]);
+                // fold value list
+                writeln("IN operator found: " ~ folded.dump(3));
+            } else {
 				// fold binary
 				enforceEx!SyntaxError(bestOpPosition > 0, "Syntax error in WHERE condition - no left arg for binary operator " ~ errorContext(items[bestOpPosition]));
 				enforceEx!SyntaxError(bestOpPosition < items.length - 1, "Syntax error in WHERE condition - no right arg for binary operator " ~ errorContext(items[bestOpPosition]));
 				//writeln("binary op " ~ items[bestOpPosition - 1].toString() ~ " " ~ items[bestOpPosition].toString() ~ " " ~ items[bestOpPosition + 1].toString());
 				enforceEx!SyntaxError(items[bestOpPosition - 1].isExpression(), "Syntax error in WHERE condition - wrong type of left arg for binary operator " ~ errorContext(items[bestOpPosition]));
-				enforceEx!SyntaxError(items[bestOpPosition - 1].isExpression(), "Syntax error in WHERE condition - wrong type of right arg for binary operator " ~ errorContext(items[bestOpPosition]));
+				enforceEx!SyntaxError(items[bestOpPosition + 1].isExpression(), "Syntax error in WHERE condition - wrong type of right arg for binary operator " ~ errorContext(items[bestOpPosition]));
 				Token folded = new Token(items[bestOpPosition - 1].pos, t, items[bestOpPosition].text, items[bestOpPosition - 1], items[bestOpPosition + 1]);
 				auto oldlen = items.length;
 				replaceInPlace(items, bestOpPosition - 1, bestOpPosition + 2, [folded]);
@@ -916,7 +948,16 @@ class QueryParser {
 			res.appendSpace();
 			res.appendSQL("?");
 			res.addParam(t.text);
-		} else if (t.type == TokenType.OpExpr) {
+        } else if (t.type == TokenType.CommaDelimitedList) {
+            bool first = true;
+            for (int i=0; i<t.children.length; i++) {
+                if (!first)
+                    res.appendSQL(", ");
+                else
+                    first = false;
+                addWhereCondition(t.children[i], 0, dialect, res);
+            }
+        } else if (t.type == TokenType.OpExpr) {
 			int currentPrecedency = operatorPrecedency(t.operator);
 			bool needBraces = currentPrecedency < basePrecedency;
 			if (needBraces)
@@ -972,7 +1013,14 @@ class QueryParser {
 					res.appendSQL(" AND ");
 					addWhereCondition(t.children[2], currentPrecedency, dialect, res);
 					break;
-				case OperatorType.IN:
+                case OperatorType.IN:
+                    if (!needBraces)
+                        res.appendSpace();
+                    addWhereCondition(t.children[0], currentPrecedency, dialect, res);
+                    res.appendSQL(" IN (");
+                    addWhereCondition(t.children[1], currentPrecedency, dialect, res);
+                    res.appendSQL(")");
+                    break;
 				case OperatorType.IS:
 				default:
 					enforceEx!SyntaxError(false, "Unexpected operator" ~ errorContext(t));
@@ -1290,7 +1338,7 @@ class Token {
 			case TokenType.Dot: return ".";          // .
 			case TokenType.OpenBracket: return "(";  // (
 			case TokenType.CloseBracket: return ")"; // )
-			case TokenType.Comma: return ".";        // ,
+			case TokenType.Comma: return ",";        // ,
 			case TokenType.Entity: return "entity: " ~ entity.name;       // entity name
 			case TokenType.Field: return from.entityAlias ~ "." ~ field.propertyName;        // field name of some entity
 			case TokenType.Alias: return "alias: " ~ text;        // alias name of some entity
@@ -1663,6 +1711,12 @@ unittest {
     assert(parser.fromClause[2].fetch == true);
     assert(parser.fromClause[2].selectedColumns == 3);
 
+    q = parser.makeSQL(dialect);
+    writeln(q.hql);
+    writeln(q.sql);
+
+    parser = new QueryParser(schema, "FROM User WHERE id in (1, 2, (3 - 1 * 25) / 2, 4 + :Id, 5)");
+    writeln(parser.whereClause.dump(0));
     q = parser.makeSQL(dialect);
     writeln(q.hql);
     writeln(q.sql);
