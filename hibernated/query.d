@@ -881,6 +881,16 @@ class QueryParser {
                     res.appendSQL(".");
                     res.appendSQL(dialect.quoteIfNeeded(join.baseProperty.referencedProperty.columnName));
                 }
+            } else if (join.baseProperty.manyToOne) {
+                assert(join.baseProperty.columnName !is null, "ManyToOne should have JoinColumn as well");
+                //writeln("fk is in base");
+                res.appendSQL(base.sqlAlias);
+                res.appendSQL(".");
+                res.appendSQL(dialect.quoteIfNeeded(join.baseProperty.columnName));
+                res.appendSQL("=");
+                res.appendSQL(join.sqlAlias);
+                res.appendSQL(".");
+                res.appendSQL(dialect.quoteIfNeeded(join.entity.getKeyProperty().columnName));
             } else {
                 // TODO: support other relations
                 throw new SyntaxError("Only OneToOne relation is supported so far");

@@ -1748,7 +1748,7 @@ abstract class SchemaInfo : EntityMetaData {
 			if (pi.embedded) {
                 auto emei = pi.referencedEntity;
                 appendCommaDelimitedList(query, getAllFieldListForUpdate(emei, exceptKey));
-            } else if (pi.oneToOne) {
+            } else if (pi.oneToOne || pi.manyToOne) {
                 if (pi.columnName != null) {
                     // read FK column
                     appendCommaDelimitedList(query, pi.columnName);
@@ -1768,7 +1768,7 @@ abstract class SchemaInfo : EntityMetaData {
 			if (pi.embedded) {
                 auto emei = pi.referencedEntity;
                 appendCommaDelimitedList(query, getAllFieldList(emei, exceptKey));
-            } else if (pi.oneToOne) {
+            } else if (pi.oneToOne || pi.manyToOne) {
                 if (pi.columnName != null) {
                     // read FK column
                     appendCommaDelimitedList(query, pi.columnName);
@@ -1788,7 +1788,7 @@ abstract class SchemaInfo : EntityMetaData {
             if (pi.embedded) {
                 auto emei = pi.referencedEntity;
                 count += getFieldCount(emei, exceptKey);
-            } else if (pi.oneToOne) {
+            } else if (pi.oneToOne || pi.manyToOne) {
                 if (pi.columnName != null) {
                     // read FK column
                     count++;
@@ -1808,7 +1808,7 @@ abstract class SchemaInfo : EntityMetaData {
             if (pi.embedded) {
                 auto emei = pi.referencedEntity;
                 appendCommaDelimitedList(query, getAllFieldPlaceholderList(emei));
-            } else if (pi.oneToOne) {
+            } else if (pi.oneToOne || pi.manyToOne) {
                 if (pi.columnName != null) {
                     // read FK column
                     appendCommaDelimitedList(query, "?");
@@ -1980,7 +1980,7 @@ class SchemaInfoImpl(T...) : SchemaInfo {
                 if (p.embedded) {
                     auto emei = p.referencedEntity;
                     columnOffset += e.metadata.getFieldCount(emei, false);
-                } else if (p.oneToOne) {
+                } else if (p.oneToOne || p.manyToOne) {
                     if (p.columnName != null) {
                         // read FK column
                         columnOffset++;
