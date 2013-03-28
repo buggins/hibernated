@@ -175,8 +175,6 @@ public:
 		this.setObjectFunc = setObjectFunc;
         this.copyFieldFunc = copyFieldFunc;
 	}
-
-	//int onApply();
 }
 
 /// Metadata of single entity

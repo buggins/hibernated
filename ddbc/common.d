@@ -122,7 +122,17 @@ public:
 // Helper implementation of ResultSet - throws Method not implemented for most of methods.
 class ResultSetImpl : ddbc.core.ResultSet {
 public:
-	override void close() {
+    override int opApply(int delegate(DataSetReader) dg) { 
+        int result = 0;
+        if (!first())
+            return 0;
+        do { 
+            result = dg(cast(DataSetReader)this); 
+            if (result) break; 
+        } while (next());
+        return result; 
+    }
+    override void close() {
 		throw new SQLException("Method not implemented");
 	}
 	override bool first() {

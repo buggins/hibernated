@@ -320,6 +320,10 @@ interface ResultSet : DataSetReader {
 	Date getDate(int columnIndex);
 	TimeOfDay getTime(int columnIndex);
 	Variant getVariant(string columnName);
+
+    /// to iterate through all rows in result set
+    int opApply(int delegate(DataSetReader) dg);
+
 }
 
 interface Statement {
