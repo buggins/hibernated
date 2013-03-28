@@ -51,6 +51,9 @@ abstract class EntityMetaData {
         return getClassMap()[T.classinfo].name;
     }
 
+    int opApply(int delegate(ref const EntityInfo) dg) const;
+    
+
     public const(EntityInfo[]) getEntities() const;
     public const(EntityInfo[string]) getEntityMap() const;
     public const(EntityInfo[TypeInfo_Class]) getClassMap() const;
@@ -193,7 +196,18 @@ class EntityInfo {
     private PropertyInfo _keyProperty;
     @property const(PropertyInfo) keyProperty() const { return _keyProperty; }
 
-	bool embeddable;
+	immutable bool embeddable;
+
+
+    int opApply(int delegate(ref const PropertyInfo) dg) const { 
+        int result = 0; 
+        for (int i = 0; i < _properties.length; i++) { 
+            result = dg(_properties[i]); 
+            if (result) break; 
+        } 
+        return result; 
+    }
+
 	public this(string name, string tableName, bool embeddable, PropertyInfo [] properties, TypeInfo_Class classInfo) {
 		this.name = name;
 		this.tableName = tableName;
@@ -257,8 +271,8 @@ class EntityInfo {
 	Object createEntity() const { return Object.factory(classInfo.name); }
 
     void copyAllProperties(Object to, Object from) const {
-        for (int i=0; i<length; i++)
-            getProperty(i).copyFieldFunc(to, from);
+        foreach(pi; this)
+            pi.copyFieldFunc(to, from);
     }
 }
 
@@ -1730,9 +1744,8 @@ abstract class SchemaInfo : EntityMetaData {
 
 	public string getAllFieldListForUpdate(const EntityInfo ei, bool exceptKey = false) const {
 		string query;
-		for (int i = 0; i < ei.getPropertyCount(); i++) {
-			auto pi = ei.getProperty(i);
-			if (pi.key && exceptKey)
+        foreach(pi; ei) {
+            if (pi.key && exceptKey)
 				continue;
 			if (pi.embedded) {
                 auto emei = pi.referencedEntity;
@@ -1751,8 +1764,7 @@ abstract class SchemaInfo : EntityMetaData {
 	
     override public string getAllFieldList(const EntityInfo ei, bool exceptKey = false) const {
 		string query;
-		for (int i = 0; i < ei.getPropertyCount(); i++) {
-            auto pi = ei.getProperty(i);
+        foreach(pi; ei) {
             if (pi.key && exceptKey)
 				continue;
 			if (pi.embedded) {
@@ -1772,8 +1784,7 @@ abstract class SchemaInfo : EntityMetaData {
 	
     override public int getFieldCount(const EntityInfo ei, bool exceptKey) const {
         int count = 0;
-        for (int i = 0; i < ei.getPropertyCount(); i++) {
-            auto pi = ei.getProperty(i);
+        foreach(pi; ei) {
             if (pi.key && exceptKey)
                 continue;
             if (pi.embedded) {
@@ -1793,8 +1804,7 @@ abstract class SchemaInfo : EntityMetaData {
     
     public string getAllFieldPlaceholderList(const EntityInfo ei, bool exceptKey = false) const {
 		string query;
-		for (int i = 0; i < ei.getPropertyCount(); i++) {
-            auto pi = ei.getProperty(i);
+        foreach(pi; ei) {
             if (pi.key && exceptKey)
                 continue;
             if (pi.embedded) {
@@ -1819,8 +1829,7 @@ abstract class SchemaInfo : EntityMetaData {
     override public int readAllColumns(Object obj, DataSetReader r, int startColumn) const {
         auto ei = findEntityForObject(obj);
 		int columnCount = 0;
-		for (int i = 0; i<ei.getPropertyCount(); i++) {
-            auto pi = ei.getProperty(i);
+        foreach(pi; ei) {
 			if (pi.embedded) {
                 auto emei = pi.referencedEntity;
 				Object em = emei.createEntity();
@@ -1847,8 +1856,7 @@ abstract class SchemaInfo : EntityMetaData {
         auto ei = findEntityForObject(obj);
 		//writeln(ei.name ~ ".writeAllColumns");
 		int columnCount = 0;
-		for (int i = 0; i<ei.getPropertyCount(); i++) {
-            auto pi = ei.getProperty(i);
+        foreach(pi; ei) {
 			if (pi.embedded) {
                 auto emei = pi.referencedEntity;
 				//writeln("getting embedded entity " ~ emei.name);
@@ -1872,9 +1880,8 @@ abstract class SchemaInfo : EntityMetaData {
     override public int writeAllColumnsExceptKey(Object obj, DataSetWriter w, int startColumn) const {
         auto ei = findEntityForObject(obj);
 		int columnCount = 0;
-		for (int i = 0; i<ei.getPropertyCount(); i++) {
-            auto pi = ei.getProperty(i);
-			if (pi.key)
+        foreach(pi; ei) {
+            if (pi.key)
 				continue;
 			if (pi.embedded) {
                 auto emei = pi.referencedEntity;
@@ -1931,6 +1938,15 @@ class SchemaInfoImpl(T...) : SchemaInfo {
     override public const(EntityInfo[]) getEntities() const  { return entities; }
     override public const(EntityInfo[string]) getEntityMap() const  { return entityMap; }
     override public const(EntityInfo [TypeInfo_Class]) getClassMap() const  { return classMap; }
+
+    override int opApply(int delegate(ref const EntityInfo) dg) const { 
+        int result = 0; 
+        for (int i = 0; i < entities.length; i++) { 
+            result = dg(entities[i]); 
+            if (result) break; 
+        } 
+        return result; 
+    }
 
     override public const(EntityInfo) findEntity(string entityName) const  { 
         enforceEx!HibernatedException((entityName in entityMap) !is null, "Cannot find entity by name " ~ entityName);
