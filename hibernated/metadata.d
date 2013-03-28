@@ -175,6 +175,18 @@ public:
 		this.setObjectFunc = setObjectFunc;
         this.copyFieldFunc = copyFieldFunc;
 	}
+
+    const hash_t opHash() const {
+        return (cast(hash_t)(cast(void*)this)) * 31;
+    }
+
+    const bool opEquals(ref const PropertyInfo s) const {
+        return this == s;
+    }
+
+    const int opCmp(ref const PropertyInfo s) const {
+        return this == s ? 0 : (opHash() > s.opHash() ? 1 : -1);
+    }
 }
 
 /// Metadata of single entity
@@ -1994,7 +2006,6 @@ class SchemaInfoImpl(T...) : SchemaInfo {
 }
 
 
-
 unittest {
 
 	User uuu1 = new User();
@@ -2534,6 +2545,7 @@ version (unittest) {
     
 }
 
+
 unittest {
 	static assert(hasAnnotation!(EMName, Embeddable));
 	static assert(hasMemberAnnotation!(EMUser, "userName", Embedded));
@@ -2563,6 +2575,51 @@ unittest {
 	//		writeln("property: " ~ e.propertyName);
 	//	}
     schema = new SchemaInfoImpl!(Person, MoreInfo, EvenMoreInfo);
+
+    {
+
+        int[Variant] map0;
+        map0[Variant(1)] = 3;
+        assert(map0[Variant(1)] == 3);
+        map0[Variant(1)]++;
+        assert(map0[Variant(1)] == 4);
+
+        //writeln("map test");
+        PropertyLoadMap map = new PropertyLoadMap();
+        Person ppp1 = new Person();
+        Person ppp2 = new Person();
+        Person ppp3 = new Person();
+        //writeln("adding first");
+        map.add(schema["Person"]["moreInfo"], Variant(1), ppp1);
+        //writeln("adding second");
+        auto prop1 = schema["Person"]["moreInfo"];
+        auto prop2 = schema["Person"]["moreInfo"];
+        map.add(prop1, Variant(2), ppp2);
+        map.add(prop2, Variant(2), ppp3);
+        map.add(prop2, Variant(2), ppp3);
+        map.add(prop2, Variant(2), ppp3);
+        map.add(prop2, Variant(2), ppp3);
+        assert(prop1 == prop2);
+        assert(prop1.opHash() == prop2.opHash());
+        //writeln("checking length");
+        assert(Variant(3) == Variant(3L));
+        assert(map.length == 1);
+        assert(map.map.length == 1);
+        assert(map.keys.length == 1);
+        assert(map.map.values.length == 1);
+        //writeln("length of moreInfo is " ~ to!string(map[prop1].length));
+        auto m = map[prop1];
+        assert(m == map[prop2]);
+        assert(m.map.length == 2);
+        Variant v1 = 1;
+        Variant v2 = 2;
+        //writeln("length for id 1 " ~ to!string(m[Variant(1)].length));
+        //writeln("length for id 2 " ~ to!string(m[Variant(2)].length));
+        assert(m.length == 2);
+        assert(m[Variant(1)].length == 1);
+        assert(m[Variant(2)].length == 2);
+    }
+
     if (MYSQL_TESTS_ENABLED) {
         //recreateTestSchema();
 

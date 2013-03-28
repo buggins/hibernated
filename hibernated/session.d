@@ -503,6 +503,66 @@ class SessionFactoryImpl : SessionFactory {
     }
 }
 
+struct ObjectList {
+    Object[] list;
+    void add(Object obj) {
+        foreach(v; list) {
+            if (v == obj) {
+                return; // avoid duplicates
+            }
+        }
+        list ~= obj;
+    }
+    @property int length() { return cast(int)list.length; }
+    ref Object opIndex(size_t index) {
+        return list[index];
+    }
+}
+
+/// task to load reference entity
+class PropertyLoadItem {
+    const PropertyInfo property;
+    private ObjectList[Variant] _map; // ID to object list
+    this(const PropertyInfo property) {
+        this.property = property;
+    }
+    @property ref ObjectList[Variant] map() { return _map; }
+    @property Variant[] keys() { return _map.keys; }
+    @property int length() { return cast(int)_map.length; }
+    ObjectList * opIndex(Variant id) {
+        if ((id in _map) is null) {
+            _map[id] = ObjectList();
+        }
+        //assert(length > 0);
+        return &_map[id];
+    }
+    void add(ref Variant id, Object obj) {
+        auto item = opIndex(id);
+        item.add(obj);
+        //assert(item.length == opIndex(id).length);
+    }
+}
+
+class PropertyLoadMap {
+    private PropertyLoadItem[const PropertyInfo] _map;
+    PropertyLoadItem opIndex(const PropertyInfo prop) {
+        if ((prop in _map) is null) {
+            //writeln("creating new PropertyLoadItem for " ~ prop.propertyName);
+            _map[prop] = new PropertyLoadItem(prop);
+        }
+        assert(_map.length > 0);
+        return _map[prop];
+    }
+    @property ref PropertyLoadItem[const PropertyInfo] map() { return _map; }
+    @property int length() { return cast(int)_map.length; }
+    @property const (PropertyInfo)[] keys() { return _map.keys; }
+    void add(const PropertyInfo property, Variant id, Object obj) {
+        auto item = opIndex(property);
+        item.add(id, obj);
+        //assert(item.length > 0);
+    }
+}
+
 /// Implementation of HibernateD Query
 class QueryImpl : Query
 {
