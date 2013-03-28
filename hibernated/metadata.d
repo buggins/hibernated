@@ -462,7 +462,8 @@ string getPropertyName(T, string m)() {
 enum PropertyMemberKind : int {
 	FIELD_MEMBER,    // int field;
 	GETTER_MEMBER,   // getField() + setField() or isField() and setField()
-	PROPERTY_MEMBER  // @property int field() { return _field; }
+	PROPERTY_MEMBER, // @property int field() { return _field; }
+    LAZY_MEMBER,     // Lazy!Object field;
 }
 
 bool hasPercentSign(immutable string str) {
@@ -499,11 +500,13 @@ string substituteParamTwice(immutable string fmt, immutable string value) {
         return fmt;
 }
 
-static immutable string[] PropertyMemberKind_ReadCode = [
-	"entity.%s",
-    "entity.%s()",
- 	"entity.%s",
-];
+static immutable string[] PropertyMemberKind_ReadCode = 
+    [
+    	"entity.%s",
+        "entity.%s()",
+     	"entity.%s",
+        "entity.%s()",
+    ];
 
 PropertyMemberKind getPropertyMemberKind(T : Object, string m)() {
 	alias typeof(__traits(getMember, T, m)) ti;
@@ -513,7 +516,11 @@ PropertyMemberKind getPropertyMemberKind(T : Object, string m)() {
 		else
 			return PropertyMemberKind.GETTER_MEMBER;
 	} else {
-		return PropertyMemberKind.FIELD_MEMBER;
+        static if (isLazyInstance!(ti)) {
+            return PropertyMemberKind.LAZY_MEMBER;
+        } else {
+		    return PropertyMemberKind.FIELD_MEMBER;
+        }
 	}
 }
 
@@ -534,21 +541,52 @@ string getPropertyEmbeddedEntityName(T : Object, string m)() {
 	}
 }
 
+template isLazyInstance(T) {
+    static if (is(T x == Lazy!Args, Args...))
+        enum bool isLazyInstance = true;
+    else
+        enum bool isLazyInstance = false;
+}
+
+template isLazyMember(T : Object, string m) {
+    static if (is(typeof(__traits(getMember, T, m)) x == Lazy!Args, Args...))
+        enum bool isLazyMember = true;
+    else
+        enum bool isLazyMember = false;
+}
+
+template getLazyInstanceType(T) {
+    static if (is(T x == Lazy!Args, Args...))
+        alias Args[0] getLazyInstanceType;
+    else {
+        static if (isImplicitlyConvertible!(T, Object))
+            alias T getLazyInstanceType;
+        else
+            static assert(false, "Not a Lazy! instance");
+    }
+}
+
+template getReferencedInstanceType(T) {
+    static if (is(ti == function)) {
+        static if (isImplicitlyConvertible!(ReturnType!(ti), Object)) {
+            alias ReturnType!(ti) getReferencedInstanceType;
+        } else
+            static assert(false, "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany property can be only class or Lazy!class");
+    } else {
+        static if (isImplicitlyConvertible!(T, Object))
+            alias T getReferencedInstanceType;
+        else {
+            static if (is(T x == Lazy!Args, Args...))
+                alias Args[0] getReferencedInstanceType;
+            else
+                static assert(false, "Type cannot be used as relation " ~ T.stringof);
+        }
+    }
+}
+
 string getPropertyReferencedEntityName(T : Object, string m)() {
 	alias typeof(__traits(getMember, T, m)) ti;
-	static if (is(ti == function)) {
-		static if (isImplicitlyConvertible!(ReturnType!(ti), Object)) {
-			static assert(!hasAnnotation!(ReturnType!(ti), Embeddable), "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany referenced property class should not have @Embeddable annotation");
-			return getEntityName!(ReturnType!(ti));
-		} else
-			static assert(false, "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany property can be only class");
-	} else {
-		static if (isImplicitlyConvertible!(ti, Object)) {
-			static assert(!hasAnnotation!(ti, Embeddable), "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany referenced property class should not have @Embeddable annotation");
-			return getEntityName!ti;
-		} else 
-			static assert(false, "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany property can be only class");
-	}
+    return getEntityName!(getReferencedInstanceType!ti);
 }
 
 string getPropertyEmbeddedClassName(T : Object, string m)() {
@@ -570,19 +608,20 @@ string getPropertyEmbeddedClassName(T : Object, string m)() {
 
 string getPropertyReferencedClassName(T : Object, string m)() {
 	alias typeof(__traits(getMember, T, m)) ti;
-	static if (is(ti == function)) {
-		static if (isImplicitlyConvertible!(ReturnType!(ti), Object)) {
-			static assert(!hasAnnotation!(ReturnType!(ti), Embeddable), "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany referenced property class should not have @Embeddable annotation");
-			return fullyQualifiedName!(ReturnType!(ti));
-		} else
-			static assert(false, "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany property can be only class");
-	} else {
-		static if (isImplicitlyConvertible!(ti, Object)) {
-			static assert(!hasAnnotation!(ti, Embeddable), "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany referenced property class should not have @Embeddable annotation");
-			return fullyQualifiedName!ti;
-		} else 
-			static assert(false, "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany property can be only class");
-	}
+    return fullyQualifiedName!(getReferencedInstanceType!ti);
+//    static if (is(ti == function)) {
+//		static if (isImplicitlyConvertible!(ReturnType!(ti), Object)) {
+//			static assert(!hasAnnotation!(ReturnType!(ti), Embeddable), "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany referenced property class should not have @Embeddable annotation");
+//			return fullyQualifiedName!(ReturnType!(ti));
+//		} else
+//			static assert(false, "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany property can be only class");
+//	} else {
+//		static if (isImplicitlyConvertible!(ti, Object)) {
+//			static assert(!hasAnnotation!(ti, Embeddable), "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany referenced property class should not have @Embeddable annotation");
+//			return fullyQualifiedName!ti;
+//		} else 
+//			static assert(false, "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany property can be only class");
+//	}
 }
 
 
@@ -937,27 +976,29 @@ string getPropertyWriteCode(T, string m)() {
 	immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
 	immutable string nullValueCode = ColumnTypeSetNullCode[getPropertyMemberType!(T,m)()];
 	immutable string datasetReader = "(!r.isNull(index) ? " ~ getColumnTypeDatasetReadCode!(T, m)() ~ " : nv)";
-	static if (kind == PropertyMemberKind.FIELD_MEMBER) {
-		return nullValueCode ~ "entity." ~ m ~ " = " ~ datasetReader ~ ";";
-	} else if (kind == PropertyMemberKind.GETTER_MEMBER) {
-		return nullValueCode ~ "entity." ~ getterNameToSetterName(m) ~ "(" ~ datasetReader ~ ");";
-	} else if (kind == PropertyMemberKind.PROPERTY_MEMBER) {
-		return nullValueCode ~ "entity." ~ m ~ " = " ~ datasetReader ~ ";";
-	} else {
-		assert(0);
-	}
+	final switch (kind) {
+        case PropertyMemberKind.FIELD_MEMBER:
+    		return nullValueCode ~ "entity." ~ m ~ " = " ~ datasetReader ~ ";";
+        case PropertyMemberKind.LAZY_MEMBER:
+            return nullValueCode ~ "entity." ~ m ~ " = " ~ datasetReader ~ ";";
+        case PropertyMemberKind.GETTER_MEMBER:
+    		return nullValueCode ~ "entity." ~ getterNameToSetterName(m) ~ "(" ~ datasetReader ~ ");";
+        case PropertyMemberKind.PROPERTY_MEMBER:
+	        return nullValueCode ~ "entity." ~ m ~ " = " ~ datasetReader ~ ";";
+    }
 }
 
 string getPropertyCopyCode(T, string m)() {
     immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
-    static if (kind == PropertyMemberKind.FIELD_MEMBER) {
-        return "toentity." ~ m ~ " = fromentity." ~ m ~ ";";
-    } else if (kind == PropertyMemberKind.GETTER_MEMBER) {
-        return "toentity." ~ getterNameToSetterName(m) ~ "(fromentity." ~ m ~ "());";
-    } else if (kind == PropertyMemberKind.PROPERTY_MEMBER) {
-        return "toentity." ~ m ~ " = fromentity." ~ m ~ ";";
-    } else {
-        assert(0);
+    final switch (kind) {
+        case PropertyMemberKind.FIELD_MEMBER:
+            return "toentity." ~ m ~ " = fromentity." ~ m ~ ";";
+        case PropertyMemberKind.LAZY_MEMBER:
+            return "toentity." ~ m ~ " = fromentity." ~ m ~ "();";
+        case PropertyMemberKind.GETTER_MEMBER:
+            return "toentity." ~ getterNameToSetterName(m) ~ "(fromentity." ~ m ~ "());";
+        case PropertyMemberKind.PROPERTY_MEMBER:
+            return "toentity." ~ m ~ " = fromentity." ~ m ~ ";";
     }
 }
 
@@ -1129,28 +1170,30 @@ string getColumnTypeDatasetWriteCode(T, string m)() {
 
 string getEmbeddedPropertyVariantWriteCode(T, string m, string className)() {
 	immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
-	static if (kind == PropertyMemberKind.FIELD_MEMBER) {
-		return "entity." ~ m ~ " = (value == null ? null : value.get!(" ~ className ~ "));";
-	} else if (kind == PropertyMemberKind.GETTER_MEMBER) {
-		return "entity." ~ getterNameToSetterName(m) ~ "(value == null ? null : value.get!(" ~ className ~ "));";
-	} else if (kind == PropertyMemberKind.PROPERTY_MEMBER) {
-		return "entity." ~ m ~ " = (value == null ? null : value.get!(" ~ className ~ "));";
-	} else {
-		assert(0);
-	}
+	final switch (kind) {
+        case PropertyMemberKind.FIELD_MEMBER:
+		    return "entity." ~ m ~ " = (value == null ? null : value.get!(" ~ className ~ "));";
+        case PropertyMemberKind.GETTER_MEMBER:
+    		return "entity." ~ getterNameToSetterName(m) ~ "(value == null ? null : value.get!(" ~ className ~ "));";
+        case PropertyMemberKind.LAZY_MEMBER:
+            return "entity." ~ m ~ " = (value == null ? null : value.get!(" ~ className ~ "));";
+        case PropertyMemberKind.PROPERTY_MEMBER:
+       		return "entity." ~ m ~ " = (value == null ? null : value.get!(" ~ className ~ "));";
+    }
 }
 
 string getEmbeddedPropertyObjectWriteCode(T, string m, string className)() {
 	immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
-	static if (kind == PropertyMemberKind.FIELD_MEMBER) {
-		return "entity." ~ m ~ " = cast(" ~ className ~ ")value;";
-	} else if (kind == PropertyMemberKind.GETTER_MEMBER) {
-		return "entity." ~ getterNameToSetterName(m) ~ "(cast(" ~ className ~ ")value);";
-	} else if (kind == PropertyMemberKind.PROPERTY_MEMBER) {
-		return "entity." ~ m ~ " = cast(" ~ className ~ ")value;";
-	} else {
-		assert(0);
-	}
+    final switch (kind) {
+	    case PropertyMemberKind.FIELD_MEMBER:
+		    return "entity." ~ m ~ " = cast(" ~ className ~ ")value;";
+        case PropertyMemberKind.GETTER_MEMBER:
+		    return "entity." ~ getterNameToSetterName(m) ~ "(cast(" ~ className ~ ")value);";
+        case PropertyMemberKind.PROPERTY_MEMBER:
+    		return "entity." ~ m ~ " = cast(" ~ className ~ ")value;";
+        case PropertyMemberKind.LAZY_MEMBER:
+            return "entity." ~ m ~ " = cast(" ~ className ~ ")value;";
+    }
 }
 
 
@@ -1169,8 +1212,8 @@ string getOneToOnePropertyDef(T, immutable string m)() {
     immutable string propertyName = getPropertyName!(T,m)();
     static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
     static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, ManyToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": OneToOne property cannot have Column, Id, Generated, ManyToOne, ManyToMany or Embedded annotation");
-	immutable bool isId = hasMemberAnnotation!(T, m, Id);
-	immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
+    immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
+    immutable bool isId = hasMemberAnnotation!(T, m, Id) || isGenerated;
 	immutable string columnName = getJoinColumnName!(T, m)();
 	immutable length = getColumnLength!(T, m)();
 	immutable bool hasNull = hasMemberAnnotation!(T,m, Null);
@@ -1281,13 +1324,12 @@ string getManyToOnePropertyDef(T, immutable string m)() {
     immutable string propertyName = getPropertyName!(T,m)();
     static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
     static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, OneToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": ManyToOne property cannot have Column, Id, Generated, OneToOne, ManyToMany or Embedded annotation");
-    immutable bool isId = hasMemberAnnotation!(T, m, Id);
     immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
+    immutable bool isId = hasMemberAnnotation!(T, m, Id) || isGenerated;
     immutable string columnName = getJoinColumnName!(T, m)();
-    static if (columnName == null) {
-        pragma(msg, "ManyToOne property " ~ m ~ " has no JoinColumn name");
-    }
-    immutable length = getColumnLength!(T, m)();
+    static assert (columnName != null, "ManyToOne property " ~ m ~ " has no JoinColumn name");
+    immutable bool isLazy = isLazyMember!(T,m);
+    immutable length = getColumnLength!(T, m);
     immutable bool hasNull = hasMemberAnnotation!(T,m, Null);
     immutable bool hasNotNull = hasMemberAnnotation!(T,m, NotNull);
     immutable bool nullable = hasNull ? true : (hasNotNull ? false : true); //canColumnTypeHoldNulls!(T.m)
@@ -1395,9 +1437,9 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
 	immutable string propertyName = getPropertyName!(T,m)();
 	static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
     static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, ManyToOne, ManyToMany, OneToOne), entityClassName ~ "." ~ propertyName ~ ": Embedded property cannot have Column, Id, Generated, OneToOne, ManyToOne, ManyToMany annotation");
-    immutable bool isId = hasMemberAnnotation!(T, m, Id);
-	immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
-	immutable string columnName = getColumnName!(T, m);
+    immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
+    immutable bool isId = hasMemberAnnotation!(T, m, Id) || isGenerated;
+    immutable string columnName = getColumnName!(T, m);
 	immutable length = getColumnLength!(T, m)();
 	immutable bool hasNull = hasMemberAnnotation!(T, m, Null);
 	immutable bool hasNotNull = hasMemberAnnotation!(T, m, NotNull);
@@ -1503,8 +1545,8 @@ string getSimplePropertyDef(T, immutable string m)() {
 	immutable string propertyName = getPropertyName!(T,m);
 	static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
     static assert (!hasOneOfMemberAnnotations!(T, m, ManyToOne, OneToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": simple property cannot have OneToOne, ManyToOne, ManyToMany or Embedded annotation");
-    immutable bool isId = hasMemberAnnotation!(T, m, Id);
-	immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
+    immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
+    immutable bool isId = hasMemberAnnotation!(T, m, Id) || isGenerated;
 	immutable string columnName = getColumnName!(T, m);
 	immutable length = getColumnLength!(T, m)();
 	immutable bool hasNull = hasMemberAnnotation!(T,m,Null);
@@ -1708,7 +1750,7 @@ string entityListDef(T ...)() {
         "        foreach(p; e._properties) {\n" ~
 		"            if (p.referencedEntityName !is null) {\n" ~
 		"                //writeln(\"embedded entity \" ~ p.referencedEntityName);\n" ~
-		"                enforceEx!HibernatedException((p.referencedEntityName in map) !is null, \"embedded entity not found in schema: \" ~ p.referencedEntityName);\n" ~
+		"                enforceEx!HibernatedException((p.referencedEntityName in map) !is null, \"referenced entity not found in schema: \" ~ p.referencedEntityName);\n" ~
 		"                p._referencedEntity = map[p.referencedEntityName];\n" ~
 		"                if (p.referencedPropertyName !is null) {\n" ~
         "                    enforceEx!HibernatedException((p.referencedPropertyName in p._referencedEntity._propertyMap) !is null, \"embedded entity property not found in schema: \" ~ p.referencedEntityName);\n" ~
@@ -2133,6 +2175,10 @@ version(unittest) {
 		@Embedded
 		Address address;
 
+        @ManyToOne
+        @JoinColumn("account_type_fk")
+        Lazy!AccountType accountType;
+
 		this() {
 			address = new Address();
 		}
@@ -2152,6 +2198,14 @@ version(unittest) {
         override string toString() {
             return " zip=" ~ zip ~ ", city=" ~ city ~ ", streetAddress=" ~ streetAddress;
         }
+    }
+
+    @Entity
+    class AccountType {
+        @Generated
+        int id;
+        @Column
+        string name;
     }
 
     @Entity
@@ -2257,6 +2311,7 @@ version(unittest) {
 
     string[] UNIT_TEST_DROP_TABLES_SCRIPT = 
         [
+         "DROP TABLE IF EXISTS account_type",
          "DROP TABLE IF EXISTS users",
          "DROP TABLE IF EXISTS customers",
          "DROP TABLE IF EXISTS person",
@@ -2265,8 +2320,9 @@ version(unittest) {
          ];
     string[] UNIT_TEST_CREATE_TABLES_SCRIPT = 
 	[
+         "CREATE TABLE IF NOT EXISTS account_type (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)",
          "CREATE TABLE IF NOT EXISTS users (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags INT, comment TEXT, customer_fk BIGINT NULL)",
-         "CREATE TABLE IF NOT EXISTS customers (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, zip varchar(20), city varchar(100), street_address varchar(255))",
+         "CREATE TABLE IF NOT EXISTS customers (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, zip varchar(20), city varchar(100), street_address varchar(255), account_type_fk int)",
          "CREATE TABLE IF NOT EXISTS person_info (id int not null primary key AUTO_INCREMENT, flags bigint)",
          "CREATE TABLE IF NOT EXISTS person (id int not null primary key AUTO_INCREMENT, first_name varchar(255) not null, last_name varchar(255) not null, more_info_fk int)",
          "CREATE TABLE IF NOT EXISTS person_info2 (id int not null primary key AUTO_INCREMENT, flags bigint, person_info_fk int)",
@@ -2304,11 +2360,11 @@ version(unittest) {
 unittest {
 
 	// Checking generated metadata
-	EntityMetaData schema = new SchemaInfoImpl!(User, Customer, T1, TypeTest, Address);
+	EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, T1, TypeTest, Address);
 
 	writeln("metadata test 1");
 
-	assert(schema.getEntityCount() == 5);
+	assert(schema.getEntityCount() == 6);
 	assert(schema["User"]["name"].columnName == "name");
 	assert(schema["User"][0].columnName == "id");
 	assert(schema["User"][2].propertyName == "flags");
@@ -2361,7 +2417,7 @@ unittest {
 		writeln("metadata test 2");
 
         // Checking generated metadata
-		EntityMetaData schema = new SchemaInfoImpl!(User, Customer, T1, TypeTest, Address);
+		EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, T1, TypeTest, Address);
         Dialect dialect = new MySQLDialect();
         DataSource ds = createUnitTestMySQLDataSource();
         SessionFactory factory = new SessionFactoryImpl(schema, dialect, ds);
