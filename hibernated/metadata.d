@@ -1284,6 +1284,9 @@ string getManyToOnePropertyDef(T, immutable string m)() {
     immutable bool isId = hasMemberAnnotation!(T, m, Id);
     immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
     immutable string columnName = getJoinColumnName!(T, m)();
+    static if (columnName == null) {
+        pragma(msg, "ManyToOne property " ~ m ~ " has no JoinColumn name");
+    }
     immutable length = getColumnLength!(T, m)();
     immutable bool hasNull = hasMemberAnnotation!(T,m, Null);
     immutable bool hasNotNull = hasMemberAnnotation!(T,m, NotNull);
@@ -2317,6 +2320,7 @@ unittest {
 	assert(schema["Customer"]["address"].embedded == true);
 	assert(schema["Customer"]["address"].referencedEntity !is null);
 	assert(schema["Customer"]["address"].referencedEntity["streetAddress"].columnName == "street_address");
+    assert(schema["User"]["customer"].columnName !is null);
 
 	assert(schema["User"]["id"].readFunc !is null);
 
@@ -2389,9 +2393,15 @@ unittest {
         assert(u5.name == "test user 5");
         //assert(u5.customer !is null);
 
-        User u6 = cast(User)sess.load!User(6);
+        u5 = sess.load!User(5);
+        assert(u5.name == "test user 5");
+        assert(u5.customer !is null);
+        assert(u5.customer.id == 3);
+        assert(u5.customer.name == "customer 3");
+
+        User u6 = sess.load!User(6);
 		assert(u6.name == "test user 6");
-        //assert(u6.customer is null);
+        assert(u6.customer is null);
 
 		// 
 		//writeln("loading customer 3");
@@ -2571,6 +2581,7 @@ unittest {
     static assert(getJoinColumnName!(Person, "moreInfo") == "more_info_fk");
 	static assert(getOneToOneReferencedPropertyName!(MoreInfo, "person") == "moreInfo");
 	static assert(getOneToOneReferencedPropertyName!(Person, "moreInfo") is null);
+
 	//pragma(msg, "done getOneToOneReferencedPropertyName");
 
 	// Checking generated metadata

@@ -529,7 +529,16 @@ class PropertyLoadItem {
     @property ref ObjectList[Variant] map() { return _map; }
     @property Variant[] keys() { return _map.keys; }
     @property int length() { return cast(int)_map.length; }
-    ObjectList * opIndex(Variant id) {
+    Variant normalize(Variant v) {
+        // variants of different type are not equal, normalize to make sure that keys Variant(1) and Variant(1L) are the same
+        if (v.convertsTo!long)
+            return Variant(v.get!long);
+        else if (v.convertsTo!ulong)
+            return Variant(v.get!ulong);
+        return Variant(v.toString);
+    }
+    ObjectList * opIndex(Variant key) {
+        Variant id = normalize(key);
         if ((id in _map) is null) {
             _map[id] = ObjectList();
         }
@@ -540,6 +549,21 @@ class PropertyLoadItem {
         auto item = opIndex(id);
         item.add(obj);
         //assert(item.length == opIndex(id).length);
+    }
+    string createCommaSeparatedKeyList() {
+        assert(map.length > 0);
+        string res;
+        foreach(v; map.keys) {
+            if (res.length > 0)
+                res ~= ", ";
+            if (v.convertsTo!long || v.convertsTo!ulong) {
+                res ~= v.toString();
+            } else {
+                // TODO: add escaping
+                res ~= "'" ~ v.toString() ~ "'";
+            }
+        }
+        return res;
     }
 }
 
@@ -552,6 +576,11 @@ class PropertyLoadMap {
         }
         assert(_map.length > 0);
         return _map[prop];
+    }
+    PropertyLoadItem remove(const PropertyInfo pi) {
+        PropertyLoadItem item = _map[pi];
+        _map.remove(pi);
+        return item;
     }
     @property ref PropertyLoadItem[const PropertyInfo] map() { return _map; }
     @property int length() { return cast(int)_map.length; }
@@ -617,25 +646,25 @@ class QueryImpl : Query
 
     private Object readRelations(Object objectContainer, DataSetReader r, PropertyLoadMap loadMap) {
         Object[] relations = new Object[query.select.length];
-        writeln("select clause len = " ~ to!string(query.select.length));
+        //writeln("select clause len = " ~ to!string(query.select.length));
         // read all related objects from DB row
         for (int i = 0; i < query.select.length; i++) {
             FromClauseItem from = query.select[i].from;
-            writeln("reading " ~ from.entityName);
+            //writeln("reading " ~ from.entityName);
             Object row;
             if (!from.entity.isKeyNull(r, from.startColumn)) {
-                writeln("key is not null");
+                //writeln("key is not null");
                 Variant key = from.entity.getKey(r, from.startColumn);
-                writeln("key is " ~ key.toString);
+                //writeln("key is " ~ key.toString);
                 row = sess.peekFromCache(from.entity.name, key);
                 if (row is null) {
-                    writeln("row not found in cache");
+                    //writeln("row not found in cache");
                     row = (objectContainer !is null && i == 0) ? objectContainer : from.entity.createEntity();
-                    writeln("reading all columns");
+                    //writeln("reading all columns");
                     sess.metaData.readAllColumns(row, r, from.startColumn);
                     sess.putToCache(from.entity.name, key, row);
                 } else if (objectContainer !is null) {
-                    writeln("copying all properties to existing container");
+                    //writeln("copying all properties to existing container");
                     from.entity.copyAllProperties(objectContainer, row);
                 }
             }
@@ -660,8 +689,9 @@ class QueryImpl : Query
                             Object rel = relations[rfrom.selectIndex];
                             pi.setObjectFunc(relations[i], rel);
                         } else {
-                            //writeln("not found loaded oneToOne relation for " ~ from.pathString ~ "." ~ pi.propertyName);
-                            if (pi.columnName != null) {
+                            writeln("not found loaded oneToOne relation for " ~ from.pathString ~ "." ~ pi.propertyName);
+                            if (pi.columnName !is null) {
+                                writeln("relation " ~ pi.propertyName ~ " has column name");
                                 if (r.isNull(from.startColumn + pi.columnOffset)) {
                                     // FK is null, set NULL to field
                                     pi.setObjectFunc(relations[i], null);
@@ -672,6 +702,8 @@ class QueryImpl : Query
                                     writeln("relation " ~ pi.propertyName ~ " with FK " ~ id.toString() ~ " will be loaded later");
                                     loadMap.add(pi, id, relations[i]); // to load later
                                 }
+                            } else {
+                                writeln("relation " ~ pi.propertyName ~ " has no column name");
                             }
                         }
                     }
@@ -686,8 +718,41 @@ class QueryImpl : Query
         return listObjects(null);
 	}
 
+    private void delayedLoadRelations(PropertyLoadMap loadMap) {
+        auto types = loadMap.keys;
+        foreach(pi; types) {
+            assert(pi.referencedEntity !is null);
+            auto map = loadMap.remove(pi);
+            if (map.length == 0)
+                continue;
+            string keys = map.createCommaSeparatedKeyList();
+            string hql = "FROM " ~ pi.referencedEntity.name ~ " WHERE " ~ pi.referencedEntity.keyProperty.propertyName ~ " IN (" ~ keys ~ ")";
+            writeln("delayedLoadRelations: loading " ~ pi.propertyName ~ " HQL: " ~ hql);
+            QueryImpl q = cast(QueryImpl)sess.createQuery(hql);
+
+            Object[] list = q.listObjects(null, loadMap);
+            writeln("delayedLoadRelations: objects loaded " ~ to!string(list.length));
+            foreach(rel; list) {
+                Variant key = pi.referencedEntity.getKey(rel);
+                //writeln("map length before: " ~ to!string(map.length));
+                auto objectsToUpdate = map[key].list;
+                //writeln("map length after: " ~ to!string(map.length));
+                //writeln("updating relations with key " ~ key.toString() ~ " (" ~ to!string(objectsToUpdate.length) ~ ")");
+                foreach(obj; objectsToUpdate) {
+                    pi.setObjectFunc(obj, rel);
+                }
+            }
+        }
+    }
+
     /// Return the query results as a List of entity objects
     Object[] listObjects(Object placeFirstObjectHere) {
+        PropertyLoadMap loadMap = new PropertyLoadMap();
+        return listObjects(placeFirstObjectHere, loadMap);
+    }
+
+    /// Return the query results as a List of entity objects
+    Object[] listObjects(Object placeFirstObjectHere, PropertyLoadMap loadMap) {
         writeln("Entering loadObjects");
         auto ei = query.entity;
         enforceEx!HibernatedException(ei !is null, "No entity expected in result of query " ~ getQueryString());
@@ -696,7 +761,6 @@ class QueryImpl : Query
         
         Object[] res;
 
-        PropertyLoadMap loadMap = new PropertyLoadMap();
 
         //writeln("SQL: " ~ query.sql);
         PreparedStatement stmt = sess.conn.prepareStatement(query.sql);
@@ -716,6 +780,7 @@ class QueryImpl : Query
         }
         if (loadMap.length > 0) {
             writeln("relation properties scheduled for load: loadMap.length == " ~ to!string(loadMap.length));
+            delayedLoadRelations(loadMap);
         }
         writeln("Exiting loadObjects");
         return res.length > 0 ? res : null;

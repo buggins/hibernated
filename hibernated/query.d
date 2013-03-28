@@ -783,7 +783,7 @@ class QueryParser {
                 foldCommaSeparatedList(items[bestOpPosition + 1]);
                 replaceInPlace(items, bestOpPosition - 1, bestOpPosition + 2, [folded]);
                 // fold value list
-                writeln("IN operator found: " ~ folded.dump(3));
+                //writeln("IN operator found: " ~ folded.dump(3));
             } else {
 				// fold binary
 				enforceEx!SyntaxError(bestOpPosition > 0, "Syntax error in WHERE condition - no left arg for binary operator " ~ errorContext(items[bestOpPosition]));
@@ -1712,13 +1712,13 @@ unittest {
     assert(parser.fromClause[2].selectedColumns == 3);
 
     q = parser.makeSQL(dialect);
-    writeln(q.hql);
-    writeln(q.sql);
+    //writeln(q.hql);
+    //writeln(q.sql);
 
     parser = new QueryParser(schema, "FROM User WHERE id in (1, 2, (3 - 1 * 25) / 2, 4 + :Id, 5)");
-    writeln(parser.whereClause.dump(0));
+    //writeln(parser.whereClause.dump(0));
     q = parser.makeSQL(dialect);
-    writeln(q.hql);
-    writeln(q.sql);
+    //writeln(q.hql);
+    //writeln(q.sql);
 
 }
