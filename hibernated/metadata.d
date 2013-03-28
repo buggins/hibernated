@@ -35,62 +35,56 @@ import hibernated.session;
 import hibernated.dialect;
 import hibernated.dialects.mysqldialect;
 
-//interface ClassMetadata {
-//	immutable string getEntityName();
-//	immutable TypeInfo getMappedClass();
-//	immutable string[] getPropertyNames();
-//}
-
 
 abstract class EntityMetaData {
 
 	@property size_t length();
-	EntityInfo opIndex(int index);
-	EntityInfo opIndex(string entityName);
-	PropertyInfo opIndex(string entityName, string propertyName);
+	const(EntityInfo) opIndex(int index) const;
+    const(EntityInfo) opIndex(string entityName) const;
+    const(PropertyInfo) opIndex(string entityName, string propertyName) const;
 
-    public string getEntityName(TypeInfo_Class type) {
+    public string getEntityName(TypeInfo_Class type) const {
         return getClassMap()[type].name;
     }
     
-    public string getEntityNameForClass(T)() {
+    public string getEntityNameForClass(T)() const {
         return getClassMap()[T.classinfo].name;
     }
 
-	public EntityInfo [] getEntities();
-	public EntityInfo [string] getEntityMap();
-	public EntityInfo [TypeInfo_Class] getClassMap();
-	public EntityInfo findEntity(string entityName);
-	public EntityInfo findEntity(TypeInfo_Class entityClass);
-	public EntityInfo findEntityForObject(Object obj);
-	public EntityInfo getEntity(int entityIndex);
-	public int getEntityCount();
+    public const(EntityInfo[]) getEntities() const;
+    public const(EntityInfo[string]) getEntityMap() const;
+    public const(EntityInfo[TypeInfo_Class]) getClassMap() const;
+    public const(EntityInfo) findEntity(string entityName) const;
+    public const(EntityInfo) findEntity(TypeInfo_Class entityClass) const;
+    public const(EntityInfo) findEntityForObject(Object obj) const;
+    public const(EntityInfo) getEntity(int entityIndex) const;
+	public int getEntityCount() const;
 	/// Entity factory
-	public Object createEntity(string entityName);
+	public Object createEntity(string entityName) const;
 	/// Fills all properties of entity instance from dataset
-	public int readAllColumns(Object obj, DataSetReader r, int startColumn);
+    public int readAllColumns(Object obj, DataSetReader r, int startColumn) const;
 	/// Puts all properties of entity instance to dataset
-	public int writeAllColumns(Object obj, DataSetWriter w, int startColumn);
+    public int writeAllColumns(Object obj, DataSetWriter w, int startColumn) const;
 	/// Puts properties of entity instance to dataset skipping keys
-	public int writeAllColumnsExceptKey(Object obj, DataSetWriter w, int startColumn);
+    public int writeAllColumnsExceptKey(Object obj, DataSetWriter w, int startColumn) const;
 
-	public string generateFindAllForEntity(string entityName);
+    public string generateFindAllForEntity(string entityName) const;
 
-    public int getFieldCount(EntityInfo ei, bool exceptKey);
+    public int getFieldCount(const EntityInfo ei, bool exceptKey) const;
 
-	public string getAllFieldList(EntityInfo ei, bool exceptKey = false);
-	public string getAllFieldList(string entityName, bool exceptKey = false);
+    public string getAllFieldList(const EntityInfo ei, bool exceptKey = false) const;
+    public string getAllFieldList(string entityName, bool exceptKey = false) const;
 
-    public string generateFindByPkForEntity(EntityInfo ei);
-	public string generateFindByPkForEntity(string entityName);
+    public string generateFindByPkForEntity(const EntityInfo ei) const;
+    public string generateFindByPkForEntity(string entityName) const;
 
-	public string generateInsertAllFieldsForEntity(EntityInfo ei);
-	public string generateInsertAllFieldsForEntity(string entityName);
-	public string generateInsertNoKeyForEntity(EntityInfo ei);
-	public string generateUpdateForEntity(EntityInfo ei);
+    public string generateInsertAllFieldsForEntity(const EntityInfo ei) const;
+    public string generateInsertAllFieldsForEntity(string entityName) const;
+    public string generateInsertNoKeyForEntity(const EntityInfo ei) const;
+    public string generateUpdateForEntity(const EntityInfo ei) const;
 
-	public Variant getPropertyValue(Object obj, string propertyName);
-	public void setPropertyValue(Object obj, string propertyName, Variant value);
+    public Variant getPropertyValue(Object obj, string propertyName) const;
+    public void setPropertyValue(Object obj, string propertyName, Variant value) const;
 }
 
 enum RelationType {
@@ -116,48 +110,51 @@ public:
 	alias void function(Object, Object value) SetObjectFunc;
 
     package EntityInfo _entity;
-    @property EntityInfo entity() { return _entity; }
-    @property EntityMetaData metadata() { return _entity.metadata; }
-    @property bool lazyLoad() { return false; } // TODO: support lazy loading
+    @property const(EntityInfo) entity() const { return _entity; }
+    @property const(EntityMetaData) metadata() const { return _entity._metadata; }
+    @property bool lazyLoad() const { return false; } // TODO: support lazy loading
 
-	string propertyName;
-	string columnName;
-	Type columnType;
-	int length;
-	bool key;
-	bool generated;
-	bool nullable;
-	RelationType relation;
+	immutable string propertyName;
+    immutable string columnName;
+    immutable Type columnType;
+    immutable int length;
+    immutable bool key;
+    immutable bool generated;
+    immutable bool nullable;
+    immutable RelationType relation;
 
-	string referencedEntityName; // for @Embedded, @OneToOne, @OneToMany, @ManyToOne, @ManyToMany holds name of entity
-	EntityInfo referencedEntity; // for @Embedded, @OneToOne, @OneToMany, @ManyToOne, @ManyToMany holds entity info reference, filled in runtime
+    immutable string referencedEntityName; // for @Embedded, @OneToOne, @OneToMany, @ManyToOne, @ManyToMany holds name of entity
+	package EntityInfo _referencedEntity; // for @Embedded, @OneToOne, @OneToMany, @ManyToOne, @ManyToMany holds entity info reference, filled in runtime
+    @property const(EntityInfo) referencedEntity() const { return _referencedEntity; }
 
-	string referencedPropertyName; // for @OneToOne, @OneToMany, @ManyToOne
-	PropertyInfo referencedProperty;
+    immutable string referencedPropertyName; // for @OneToOne, @OneToMany, @ManyToOne
+	package PropertyInfo _referencedProperty;
+    @property const(PropertyInfo) referencedProperty() const { return _referencedProperty; }
 
-    int columnOffset; // offset from first column of this entity in selects
+    package int _columnOffset; // offset from first column of this entity in selects
+    @property int columnOffset() const { return _columnOffset; } // offset from first column of this entity in selects
 
-	ReaderFunc readFunc;
-	WriterFunc writeFunc;
-	GetVariantFunc getFunc;
-	SetVariantFunc setFunc;
-	KeyIsSetFunc keyIsSetFunc;
-	IsNullFunc isNullFunc;
-	GetObjectFunc getObjectFunc;
-	SetObjectFunc setObjectFunc;
-    CopyFunc copyFieldFunc;
+    immutable ReaderFunc readFunc;
+    immutable WriterFunc writeFunc;
+    immutable GetVariantFunc getFunc;
+    immutable SetVariantFunc setFunc;
+    immutable KeyIsSetFunc keyIsSetFunc;
+    immutable IsNullFunc isNullFunc;
+    immutable GetObjectFunc getObjectFunc;
+    immutable SetObjectFunc setObjectFunc;
+    immutable CopyFunc copyFieldFunc;
 
-    @property bool simple() { return relation == RelationType.None; };
-    @property bool embedded() { return relation == RelationType.Embedded; };
-	@property bool oneToOne() { return relation == RelationType.OneToOne; };
-	@property bool oneToMany() { return relation == RelationType.OneToMany; };
-	@property bool manyToOne() { return relation == RelationType.ManyToOne; };
-	@property bool manyToMany() { return relation == RelationType.ManyToMany; };
+    @property bool simple() const { return relation == RelationType.None; };
+    @property bool embedded() const { return relation == RelationType.Embedded; };
+    @property bool oneToOne() const { return relation == RelationType.OneToOne; };
+    @property bool oneToMany() const { return relation == RelationType.OneToMany; };
+    @property bool manyToOne() const { return relation == RelationType.ManyToOne; };
+    @property bool manyToMany() const { return relation == RelationType.ManyToMany; };
 
     this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, RelationType relation, string referencedEntityName, string referencedPropertyName, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, KeyIsSetFunc keyIsSetFunc, IsNullFunc isNullFunc, CopyFunc copyFieldFunc, GetObjectFunc getObjectFunc = null, SetObjectFunc setObjectFunc = null) {
 		this.propertyName = propertyName;
 		this.columnName = columnName;
-		this.columnType = columnType;
+		this.columnType = cast(immutable Type)columnType;
 		this.length = length;
 		this.key = key;
 		this.generated = generated;
@@ -183,78 +180,83 @@ public:
 class EntityInfo {
 
     package EntityMetaData _metadata;
-    @property EntityMetaData metadata() { return _metadata; }
+    @property const(EntityMetaData) metadata() const { return _metadata; }
 
-    string name;
-	string tableName;
-	PropertyInfo [] properties;
-	PropertyInfo [string] propertyMap;
-	TypeInfo_Class classInfo;
-    int keyIndex;
-    PropertyInfo keyProperty;
+    immutable string name;
+    immutable string tableName;
+    private PropertyInfo[] _properties;
+    @property const(PropertyInfo[]) properties() const { return _properties; }
+    package PropertyInfo [string] _propertyMap;
+	immutable TypeInfo_Class classInfo;
+    private int _keyIndex;
+    @property int keyIndex() const { return _keyIndex; }
+    private PropertyInfo _keyProperty;
+    @property const(PropertyInfo) keyProperty() const { return _keyProperty; }
+
 	bool embeddable;
 	public this(string name, string tableName, bool embeddable, PropertyInfo [] properties, TypeInfo_Class classInfo) {
 		this.name = name;
 		this.tableName = tableName;
 		this.embeddable = embeddable;
-		this.properties = properties;
-		this.classInfo = classInfo;
+		this._properties = properties;
+		this.classInfo = cast(immutable TypeInfo_Class)classInfo;
 		PropertyInfo[string] map;
 		foreach(i, p; properties) {
             p._entity = this;
 			map[p.propertyName] = p;
             if (p.key) {
-                keyIndex = cast(int)i;
-                keyProperty = p;
+                _keyIndex = cast(int)i;
+                _keyProperty = p;
             }
         }
-		this.propertyMap = map;
+		this._propertyMap = map;
         enforceEx!HibernatedException(keyProperty !is null || embeddable, "No key specified for non-embeddable entity " ~ name);
 	}
 	/// returns key value as Variant from entity instance
-	Variant getKey(Object obj) { return keyProperty.getFunc(obj); }
+    Variant getKey(Object obj) const { return keyProperty.getFunc(obj); }
     /// returns key value as Variant from data set
-    Variant getKey(DataSetReader r, int startColumn) { return r.getVariant(startColumn + keyProperty.columnOffset); }
+    Variant getKey(DataSetReader r, int startColumn) const { return r.getVariant(startColumn + keyProperty.columnOffset); }
     /// sets key value from Variant
-	void setKey(Object obj, Variant value) { keyProperty.setFunc(obj, value); }
+    void setKey(Object obj, Variant value) const { keyProperty.setFunc(obj, value); }
     /// returns property info for key property
-    PropertyInfo getKeyProperty() { return keyProperty; }
+    const(PropertyInfo) getKeyProperty() const { return keyProperty; }
     /// checks if primary key is set (for non-nullable member types like int or long, 0 is considered as non-set)
-	bool isKeySet(Object obj) { return keyProperty.keyIsSetFunc(obj); }
+    bool isKeySet(Object obj) const { return keyProperty.keyIsSetFunc(obj); }
     /// checks if primary key is set (for non-nullable member types like int or long, 0 is considered as non-set)
-    bool isKeyNull(DataSetReader r, int startColumn) { return r.isNull(startColumn + keyProperty.columnOffset); }
+    bool isKeyNull(DataSetReader r, int startColumn) const { return r.isNull(startColumn + keyProperty.columnOffset); }
     /// checks if property value is null
-	bool isNull(Object obj) { return keyProperty.isNullFunc(obj); }
+    bool isNull(Object obj) const { return keyProperty.isNullFunc(obj); }
 	/// returns property value as Variant
-	Variant getPropertyValue(Object obj, string propertyName) { return findProperty(propertyName).getFunc(obj); }
+    Variant getPropertyValue(Object obj, string propertyName) const { return findProperty(propertyName).getFunc(obj); }
 	/// sets property value from Variant
-	void setPropertyValue(Object obj, string propertyName, Variant value) { return findProperty(propertyName).setFunc(obj, value); }
+    void setPropertyValue(Object obj, string propertyName, Variant value) const { return findProperty(propertyName).setFunc(obj, value); }
 	/// returns all properties as array
-	PropertyInfo[] getProperties() { return properties; }
+    const (PropertyInfo[]) getProperties() const { return properties; }
 	/// returns map of property name to property metadata
-	PropertyInfo[string] getPropertyMap() { return propertyMap; }
+    const (PropertyInfo[string]) getPropertyMap() const { return _propertyMap; }
 	/// returns number of properties
-	ulong getPropertyCount() { return properties.length; }
+    ulong getPropertyCount() const { return properties.length; }
 	/// returns number of properties
-	ulong getPropertyCountExceptKey() { return properties.length - 1; }
+    ulong getPropertyCountExceptKey() const { return properties.length - 1; }
 
+    @property size_t length() const { return properties.length; }
 
-	@property size_t length() { return properties.length; }
-	PropertyInfo opIndex(int index) {
+	const(PropertyInfo) opIndex(int index) const {
 		return properties[index];
 	}
-	PropertyInfo opIndex(string propertyName) {
+
+    const(PropertyInfo) opIndex(string propertyName) const {
 		return findProperty(propertyName);
 	}
 
 	/// returns property by index
-	PropertyInfo getProperty(int propertyIndex) { return properties[propertyIndex]; }
+    const(PropertyInfo) getProperty(int propertyIndex) const { return properties[propertyIndex]; }
 	/// returns property by name, throws exception if not found
-	PropertyInfo findProperty(string propertyName) { try { return propertyMap[propertyName]; } catch (Throwable e) { throw new HibernatedException("No property " ~ propertyName ~ " found in entity " ~ name); } }
+	const(PropertyInfo) findProperty(string propertyName) const { try { return _propertyMap[propertyName]; } catch (Throwable e) { throw new HibernatedException("No property " ~ propertyName ~ " found in entity " ~ name); } }
 	/// create instance of entity object (using default constructor)
-	Object createEntity() { return Object.factory(classInfo.name); }
+	Object createEntity() const { return Object.factory(classInfo.name); }
 
-    void copyAllProperties(Object to, Object from) {
+    void copyAllProperties(Object to, Object from) const {
         for (int i=0; i<length; i++)
             getProperty(i).copyFieldFunc(to, from);
     }
@@ -1678,14 +1680,15 @@ string entityListDef(T ...)() {
 		"    classMap = typemap;\n" ~
 		"    //writeln(\"updating referenced entities\");\n" ~
 		"    foreach(e; entities) {\n" ~
-        "        foreach(p; e.getProperties()) {\n" ~
+        "        foreach(p; e._properties) {\n" ~
 		"            if (p.referencedEntityName !is null) {\n" ~
 		"                //writeln(\"embedded entity \" ~ p.referencedEntityName);\n" ~
 		"                enforceEx!HibernatedException((p.referencedEntityName in map) !is null, \"embedded entity not found in schema: \" ~ p.referencedEntityName);\n" ~
-		"                p.referencedEntity = map[p.referencedEntityName];\n" ~
+		"                p._referencedEntity = map[p.referencedEntityName];\n" ~
 		"                if (p.referencedPropertyName !is null) {\n" ~
-		"                    p.referencedProperty = p.referencedEntity[p.referencedPropertyName];\n" ~
-		"				}\n" ~
+        "                    enforceEx!HibernatedException((p.referencedPropertyName in p._referencedEntity._propertyMap) !is null, \"embedded entity property not found in schema: \" ~ p.referencedEntityName);\n" ~
+        "                    p._referencedProperty = p._referencedEntity._propertyMap[p.referencedPropertyName];\n" ~
+		"				 }\n" ~
 		"            }\n" ~
         "        }\n" ~
 		"    }\n" ~
@@ -1697,42 +1700,42 @@ string entityListDef(T ...)() {
 
 abstract class SchemaInfo : EntityMetaData {
 
-	override @property size_t length() {
+	override @property size_t length() const {
 		return getEntityCount();
 	}
-	override EntityInfo opIndex(int index) {
+    override const(EntityInfo) opIndex(int index) const {
 		return getEntity(index);
 	}
-	override EntityInfo opIndex(string entityName) {
+    override const(EntityInfo) opIndex(string entityName) const {
 		return findEntity(entityName);
 	}
 
-	override PropertyInfo opIndex(string entityName, string propertyName) {
+    override const(PropertyInfo) opIndex(string entityName, string propertyName) const {
 		return findEntity(entityName).findProperty(propertyName);
 	}
 
-    override public Variant getPropertyValue(Object obj, string propertyName) {
+    override public Variant getPropertyValue(Object obj, string propertyName) const {
         return findEntityForObject(obj).getPropertyValue(obj, propertyName);
     }
 
-    override public void setPropertyValue(Object obj, string propertyName, Variant value) {
+    override public void setPropertyValue(Object obj, string propertyName, Variant value) const {
         findEntityForObject(obj).setPropertyValue(obj, propertyName, value);
     }
 
-    private void appendCommaDelimitedList(ref string buf, string data) {
+    private void appendCommaDelimitedList(ref string buf, string data) const {
         if (buf.length != 0)
             buf ~= ", ";
         buf ~= data;
     }
 
-	public string getAllFieldListForUpdate(EntityInfo ei, bool exceptKey = false) {
+	public string getAllFieldListForUpdate(const EntityInfo ei, bool exceptKey = false) const {
 		string query;
 		for (int i = 0; i < ei.getPropertyCount(); i++) {
-			PropertyInfo pi = ei.getProperty(i);
+			auto pi = ei.getProperty(i);
 			if (pi.key && exceptKey)
 				continue;
 			if (pi.embedded) {
-				EntityInfo emei = pi.referencedEntity;
+                auto emei = pi.referencedEntity;
                 appendCommaDelimitedList(query, getAllFieldListForUpdate(emei, exceptKey));
             } else if (pi.oneToOne) {
                 if (pi.columnName != null) {
@@ -1746,14 +1749,14 @@ abstract class SchemaInfo : EntityMetaData {
 		return query;
 	}
 	
-	override public string getAllFieldList(EntityInfo ei, bool exceptKey = false) {
+    override public string getAllFieldList(const EntityInfo ei, bool exceptKey = false) const {
 		string query;
 		for (int i = 0; i < ei.getPropertyCount(); i++) {
-			PropertyInfo pi = ei.getProperty(i);
+            auto pi = ei.getProperty(i);
             if (pi.key && exceptKey)
 				continue;
 			if (pi.embedded) {
-				EntityInfo emei = pi.referencedEntity;
+                auto emei = pi.referencedEntity;
                 appendCommaDelimitedList(query, getAllFieldList(emei, exceptKey));
             } else if (pi.oneToOne) {
                 if (pi.columnName != null) {
@@ -1767,14 +1770,14 @@ abstract class SchemaInfo : EntityMetaData {
 		return query;
 	}
 	
-    override public int getFieldCount(EntityInfo ei, bool exceptKey) {
+    override public int getFieldCount(const EntityInfo ei, bool exceptKey) const {
         int count = 0;
         for (int i = 0; i < ei.getPropertyCount(); i++) {
-            PropertyInfo pi = ei.getProperty(i);
+            auto pi = ei.getProperty(i);
             if (pi.key && exceptKey)
                 continue;
             if (pi.embedded) {
-                EntityInfo emei = pi.referencedEntity;
+                auto emei = pi.referencedEntity;
                 count += getFieldCount(emei, exceptKey);
             } else if (pi.oneToOne) {
                 if (pi.columnName != null) {
@@ -1788,14 +1791,14 @@ abstract class SchemaInfo : EntityMetaData {
         return count;
     }
     
-    public string getAllFieldPlaceholderList(EntityInfo ei, bool exceptKey = false) {
+    public string getAllFieldPlaceholderList(const EntityInfo ei, bool exceptKey = false) const {
 		string query;
 		for (int i = 0; i < ei.getPropertyCount(); i++) {
-			PropertyInfo pi = ei.getProperty(i);
+            auto pi = ei.getProperty(i);
             if (pi.key && exceptKey)
                 continue;
             if (pi.embedded) {
-				EntityInfo emei = pi.referencedEntity;
+                auto emei = pi.referencedEntity;
                 appendCommaDelimitedList(query, getAllFieldPlaceholderList(emei));
             } else if (pi.oneToOne) {
                 if (pi.columnName != null) {
@@ -1809,17 +1812,17 @@ abstract class SchemaInfo : EntityMetaData {
 		return query;
 	}
 	
-	override public string getAllFieldList(string entityName, bool exceptKey) {
+    override public string getAllFieldList(string entityName, bool exceptKey) const {
         return getAllFieldList(findEntity(entityName), exceptKey);
     }
 
-    override public int readAllColumns(Object obj, DataSetReader r, int startColumn) {
-		EntityInfo ei = findEntityForObject(obj);
+    override public int readAllColumns(Object obj, DataSetReader r, int startColumn) const {
+        auto ei = findEntityForObject(obj);
 		int columnCount = 0;
 		for (int i = 0; i<ei.getPropertyCount(); i++) {
-			PropertyInfo pi = ei.getProperty(i);
+            auto pi = ei.getProperty(i);
 			if (pi.embedded) {
-				EntityInfo emei = pi.referencedEntity;
+                auto emei = pi.referencedEntity;
 				Object em = emei.createEntity();
 				int columnsRead = readAllColumns(em, r, startColumn + columnCount);
 				pi.setObjectFunc(obj, em);
@@ -1840,14 +1843,14 @@ abstract class SchemaInfo : EntityMetaData {
 		return columnCount;
 	}
 
-	override public int writeAllColumns(Object obj, DataSetWriter w, int startColumn) {
-		EntityInfo ei = findEntityForObject(obj);
+    override public int writeAllColumns(Object obj, DataSetWriter w, int startColumn) const {
+        auto ei = findEntityForObject(obj);
 		//writeln(ei.name ~ ".writeAllColumns");
 		int columnCount = 0;
 		for (int i = 0; i<ei.getPropertyCount(); i++) {
-			PropertyInfo pi = ei.getProperty(i);
+            auto pi = ei.getProperty(i);
 			if (pi.embedded) {
-				EntityInfo emei = pi.referencedEntity;
+                auto emei = pi.referencedEntity;
 				//writeln("getting embedded entity " ~ emei.name);
 				assert(pi.getObjectFunc !is null, "No getObjectFunc defined for embedded entity " ~ emei.name);
 				Object em = pi.getObjectFunc(obj);
@@ -1866,15 +1869,15 @@ abstract class SchemaInfo : EntityMetaData {
 		return columnCount;
 	}
 
-	override public int writeAllColumnsExceptKey(Object obj, DataSetWriter w, int startColumn) {
-		EntityInfo ei = findEntityForObject(obj);
+    override public int writeAllColumnsExceptKey(Object obj, DataSetWriter w, int startColumn) const {
+        auto ei = findEntityForObject(obj);
 		int columnCount = 0;
 		for (int i = 0; i<ei.getPropertyCount(); i++) {
-			PropertyInfo pi = ei.getProperty(i);
+            auto pi = ei.getProperty(i);
 			if (pi.key)
 				continue;
 			if (pi.embedded) {
-				EntityInfo emei = pi.referencedEntity;
+                auto emei = pi.referencedEntity;
 				Object em = pi.getObjectFunc(obj);
 				int columnsWritten = writeAllColumns(em, w, startColumn + columnCount);
 				columnCount += columnsWritten;
@@ -1886,32 +1889,32 @@ abstract class SchemaInfo : EntityMetaData {
 		return columnCount;
 	}
 
-    override public string generateFindAllForEntity(string entityName) {
-		EntityInfo ei = findEntity(entityName);
+    override public string generateFindAllForEntity(string entityName) const {
+        auto ei = findEntity(entityName);
         return "SELECT " ~ getAllFieldList(ei) ~ " FROM " ~ ei.tableName;
 	}
 
-    override public string generateFindByPkForEntity(EntityInfo ei) {
+    override public string generateFindByPkForEntity(const EntityInfo ei) const {
         return "SELECT " ~ getAllFieldList(ei) ~ " FROM " ~ ei.tableName ~ " WHERE " ~ ei.keyProperty.columnName ~ " = ?";
     }
 
-    override public string generateInsertAllFieldsForEntity(EntityInfo ei) {
+    override public string generateInsertAllFieldsForEntity(const EntityInfo ei) const {
 		return "INSERT INTO " ~ ei.tableName ~ "(" ~ getAllFieldList(ei) ~ ") VALUES (" ~ getAllFieldPlaceholderList(ei) ~ ")";
 	}
 
-    override public string generateInsertNoKeyForEntity(EntityInfo ei) {
+    override public string generateInsertNoKeyForEntity(const EntityInfo ei) const {
 		return "INSERT INTO " ~ ei.tableName ~ "(" ~ getAllFieldList(ei, true) ~ ") VALUES (" ~ getAllFieldPlaceholderList(ei, true) ~ ")";
 	}
 
-    override public string generateUpdateForEntity(EntityInfo ei) {
+    override public string generateUpdateForEntity(const EntityInfo ei) const {
 		return "UPDATE " ~ ei.tableName ~ " SET " ~ getAllFieldListForUpdate(ei, true) ~ " WHERE " ~ ei.getKeyProperty().columnName ~ "=?";
 	}
 
-    override public string generateFindByPkForEntity(string entityName) {
+    override public string generateFindByPkForEntity(string entityName) const {
         return generateFindByPkForEntity(findEntity(entityName));
     }
 
-    override public string generateInsertAllFieldsForEntity(string entityName){
+    override public string generateInsertAllFieldsForEntity(string entityName) const {
 		return generateInsertAllFieldsForEntity(findEntity(entityName));
 	}
 }
@@ -1923,33 +1926,33 @@ class SchemaInfoImpl(T...) : SchemaInfo {
     //pragma(msg, entityListDef!(T)());
     mixin(entityListDef!(T)());
 
-    override public int getEntityCount()  { return cast(int)entities.length; }
+    override public int getEntityCount() const { return cast(int)entities.length; }
 
-    override public EntityInfo[] getEntities()  { return entities; }
-    override public EntityInfo[string] getEntityMap()  { return entityMap; }
-    override public EntityInfo [TypeInfo_Class] getClassMap() { return classMap; }
+    override public const(EntityInfo[]) getEntities() const  { return entities; }
+    override public const(EntityInfo[string]) getEntityMap() const  { return entityMap; }
+    override public const(EntityInfo [TypeInfo_Class]) getClassMap() const  { return classMap; }
 
-    override public EntityInfo findEntity(string entityName)  { 
+    override public const(EntityInfo) findEntity(string entityName) const  { 
         enforceEx!HibernatedException((entityName in entityMap) !is null, "Cannot find entity by name " ~ entityName);
         return entityMap[entityName]; 
     }
 
-    override public EntityInfo findEntity(TypeInfo_Class entityClass) { 
+    override public const(EntityInfo) findEntity(TypeInfo_Class entityClass) const { 
         enforceEx!HibernatedException((entityClass in classMap) !is null, "Cannot find entity by class " ~ entityClass.toString());
         return classMap[entityClass]; 
     }
 
-    override public EntityInfo getEntity(int entityIndex) { 
+    override public const(EntityInfo) getEntity(int entityIndex) const { 
         enforceEx!HibernatedException(entityIndex >= 0 && entityIndex < entities.length, "Invalid entity index " ~ to!string(entityIndex));
         return entities[entityIndex]; 
     }
 
-    override public Object createEntity(string entityName) { 
+    override public Object createEntity(string entityName) const { 
         enforceEx!HibernatedException((entityName in entityMap) !is null, "Cannot find entity by name " ~ entityName);
         return entityMap[entityName].createEntity(); 
     }
 
-    override public EntityInfo findEntityForObject(Object obj) {
+    override public const(EntityInfo) findEntityForObject(Object obj) const {
         enforceEx!HibernatedException((obj.classinfo in classMap) !is null, "Cannot find entity by class " ~ obj.classinfo.toString());
         return classMap[obj.classinfo];
     }
@@ -1958,10 +1961,10 @@ class SchemaInfoImpl(T...) : SchemaInfo {
         foreach(e; entities) {
             e._metadata = this;
             int columnOffset = 0;
-            foreach(p; e.getProperties()) {
-                p.columnOffset = columnOffset;
+            foreach(p; e._properties) {
+                p._columnOffset = columnOffset;
                 if (p.embedded) {
-                    EntityInfo emei = p.referencedEntity;
+                    auto emei = p.referencedEntity;
                     columnOffset += e.metadata.getFieldCount(emei, false);
                 } else if (p.oneToOne) {
                     if (p.columnName != null) {

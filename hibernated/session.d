@@ -181,10 +181,10 @@ class Configuration {
 }
 
 class EntityCache {
-    string name;
-    EntityInfo entity;
+    const string name;
+    const EntityInfo entity;
     Object[Variant] items;
-    this(EntityInfo entity) {
+    this(const EntityInfo entity) {
         this.entity = entity;
         this.name = entity.name;
     }
@@ -309,7 +309,7 @@ class SessionImpl : Session {
     }
 
     override Object getObject(string entityName, Variant id) {
-        EntityInfo info = metaData.findEntity(entityName);
+        auto info = metaData.findEntity(entityName);
         return getObject(info, null, id);
     }
 
@@ -322,13 +322,13 @@ class SessionImpl : Session {
 
     /// Read the persistent state associated with the given identifier into the given transient instance
     override void loadObject(Object obj, Variant id) {
-        EntityInfo info = metaData.findEntityForObject(obj);
+        auto info = metaData.findEntityForObject(obj);
         Object found = getObject(info, obj, id);
         enforceEx!HibernatedException(found !is null, "Entity " ~ info.name ~ " with id " ~ to!string(id) ~ " not found");
     }
 
     /// Read the persistent state associated with the given identifier into the given transient instance
-    Object getObject(EntityInfo info, Object obj, Variant id) {
+    Object getObject(const EntityInfo info, Object obj, Variant id) {
         string hql = "FROM " ~ info.name ~ " WHERE " ~ info.getKeyProperty().propertyName ~ "=:Id";
         Query q = createQuery(hql).setParameter("Id", id);
         Object res = q.uniqueResult(obj);
@@ -357,7 +357,7 @@ class SessionImpl : Session {
     
     /// Re-read the state of the given instance from the underlying database.
     override void refresh(Object obj) {
-        EntityInfo info = metaData.findEntityForObject(obj);
+        auto info = metaData.findEntityForObject(obj);
         string query = metaData.generateFindByPkForEntity(info);
         enforceEx!HibernatedException(info.isKeySet(obj), "Cannot refresh entity " ~ info.name ~ ": no Id specified");
         Variant id = info.getKey(obj);
@@ -380,7 +380,7 @@ class SessionImpl : Session {
 
     /// Persist the given transient instance, first assigning a generated identifier if not assigned; returns generated value
     override Variant save(Object obj) {
-        EntityInfo info = metaData.findEntityForObject(obj);
+        auto info = metaData.findEntityForObject(obj);
         if (!info.isKeySet(obj)) {
             if (info.getKeyProperty().generated) {
 				string query = metaData.generateInsertNoKeyForEntity(info);
@@ -406,7 +406,7 @@ class SessionImpl : Session {
 
 	/// Persist the given transient instance.
 	override void persist(Object obj) {
-		EntityInfo info = metaData.findEntityForObject(obj);
+        auto info = metaData.findEntityForObject(obj);
 		enforceEx!HibernatedException(info.isKeySet(obj), "Cannot persist entity w/o key assigned");
 		string query = metaData.generateInsertAllFieldsForEntity(info);;
 		PreparedStatement stmt = conn.prepareStatement(query);
@@ -416,7 +416,7 @@ class SessionImpl : Session {
 	}
 
     override void update(Object obj) {
-		EntityInfo info = metaData.findEntityForObject(obj);
+        auto info = metaData.findEntityForObject(obj);
 		enforceEx!HibernatedException(info.isKeySet(obj), "Cannot persist entity w/o key assigned");
 		string query = metaData.generateUpdateForEntity(info);
 		//writeln("Query: " ~ query);
@@ -429,7 +429,7 @@ class SessionImpl : Session {
 
     // renamed from Session.delete since delete is D keyword
     override void remove(Object obj) {
-		EntityInfo info = metaData.findEntityForObject(obj);
+        auto info = metaData.findEntityForObject(obj);
 		string query = "DELETE FROM " ~ info.tableName ~ " WHERE " ~ info.getKeyProperty().columnName ~ "=?";
 		PreparedStatement stmt = conn.prepareStatement(query);
 		info.getKeyProperty().writeFunc(obj, stmt, 1);
@@ -544,7 +544,7 @@ class QueryImpl : Query
 		return rows[0];
 	}
 
-    private FromClauseItem findRelation(FromClauseItem from, PropertyInfo prop) {
+    private FromClauseItem findRelation(FromClauseItem from, const PropertyInfo prop) {
         for (int i=0; i<query.from.length; i++) {
             FromClauseItem f = query.from[i];
             if (f.base == from && f.baseProperty == prop)
@@ -580,9 +580,9 @@ class QueryImpl : Query
             if (relations[i] is null)
                 continue;
             FromClauseItem from = query.select[i].from;
-            EntityInfo ei = from.entity;
+            auto ei = from.entity;
             for (int j=0; j<ei.length; j++) {
-                PropertyInfo pi = ei[j];
+                auto pi = ei[j];
                 if (pi.oneToOne) {
                     //writeln("updating relations for " ~ from.pathString ~ "." ~ pi.propertyName);
                     if (pi.lazyLoad) {
@@ -609,7 +609,7 @@ class QueryImpl : Query
 
     /// Return the query results as a List of entity objects
     Object[] listObjects(Object placeFirstObjectHere) {
-        EntityInfo ei = query.entity;
+        auto ei = query.entity;
         enforceEx!HibernatedException(ei !is null, "No entity expected in result of query " ~ getQueryString());
         params.checkAllParametersSet();
         sess.checkClosed();

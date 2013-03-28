@@ -39,7 +39,7 @@ enum JoinType {
 
 class FromClauseItem {
 	string entityName;
-	EntityInfo entity;
+    const EntityInfo entity;
 	string entityAlias;
 	string sqlAlias;
     int startColumn;
@@ -48,7 +48,7 @@ class FromClauseItem {
     JoinType joinType = JoinType.InnerJoin;
     bool fetch;
     FromClauseItem base;
-    PropertyInfo baseProperty;
+    const PropertyInfo baseProperty;
     string pathString;
     int index;
     int selectIndex;
@@ -59,23 +59,26 @@ class FromClauseItem {
         return base.getFullPath() ~ "." ~ baseProperty.propertyName;
     }
 
+    this(const EntityInfo entity, string entityAlias, JoinType joinType, bool fetch, FromClauseItem base = null, const PropertyInfo baseProperty = null) {
+        this.entityName = entity.name;
+        this.entity = entity;
+        this.joinType = joinType;
+        this.fetch = fetch;
+        this.base = base;
+        this.baseProperty = baseProperty;
+        this.selectIndex = -1;
+    }
+
 }
 
 class FromClause {
     FromClauseItem[] items;
-    FromClauseItem add(EntityInfo entity, string entityAlias, JoinType joinType, bool fetch, FromClauseItem base = null, PropertyInfo baseProperty = null) {
-        FromClauseItem item = new FromClauseItem();
-        item.entityName = entity.name;
-        item.entity = entity;
+    FromClauseItem add(const EntityInfo entity, string entityAlias, JoinType joinType, bool fetch, FromClauseItem base = null, const PropertyInfo baseProperty = null) {
+        FromClauseItem item = new FromClauseItem(entity, entityAlias, joinType, fetch, base, baseProperty);
         item.entityAlias = entityAlias is null ? "_a" ~ to!string(items.length + 1) : entityAlias;
         item.sqlAlias = "_t" ~ to!string(items.length + 1);
-        item.joinType = joinType;
-        item.fetch = fetch;
-        item.base = base;
-        item.baseProperty = baseProperty;
-        item.pathString = item.getFullPath();
         item.index = cast(int)items.length;
-        item.selectIndex = -1;
+        item.pathString = item.getFullPath();
         items ~= item;
         return item;
     }
@@ -205,7 +208,7 @@ class QueryParser {
         processAutoFetchReferences(a);
     }
 
-    private FromClauseItem ensureItemFetched(FromClauseItem a, PropertyInfo p) {
+    private FromClauseItem ensureItemFetched(FromClauseItem a, const PropertyInfo p) {
         FromClauseItem res;
         string path = a.pathString ~ "." ~ p.propertyName;
         //writeln("ensureItemFetched " ~ path);
@@ -234,10 +237,10 @@ class QueryParser {
         return res;
     }
 
-    private bool isBackReferenceProperty(FromClauseItem a, PropertyInfo p) {
+    private bool isBackReferenceProperty(FromClauseItem a, const PropertyInfo p) {
         if (a.base is null)
             return false;
-        EntityInfo baseEntity = a.base.entity;
+        auto baseEntity = a.base.entity;
         assert(baseEntity !is null);
         if (p.referencedEntity != baseEntity)
             return false;
@@ -260,19 +263,19 @@ class QueryParser {
         }
     }
     
-    private void updateEntity(EntityInfo entity, string name) {
+    private void updateEntity(const EntityInfo entity, string name) {
 		foreach(t; tokens) {
 			if (t.type == TokenType.Ident && t.text == name) {
-				t.entity = entity;
+                t.entity = cast(EntityInfo)entity;
 				t.type = TokenType.Entity;
 			}
 		}
 	}
 	
-	private void updateAlias(EntityInfo entity, string name) {
+	private void updateAlias(const EntityInfo entity, string name) {
 		foreach(t; tokens) {
 			if (t.type == TokenType.Ident && t.text == name) {
-				t.entity = entity;
+                t.entity = cast(EntityInfo)entity;
 				t.type = TokenType.Alias;
 			}
 		}
@@ -322,7 +325,7 @@ class QueryParser {
         //    Entity AS alias
         enforceEx!SyntaxError(tokens[start].type == TokenType.Ident, "Entity name identifier expected in FROM clause" ~ errorContext(tokens[start]));
         string entityName = cast(string)tokens[start].text;
-        EntityInfo ei = metadata.findEntity(entityName);
+        auto ei = metadata.findEntity(entityName);
         updateEntity(ei, entityName);
         string aliasName = null;
         int p = start + 1;
@@ -346,11 +349,11 @@ class QueryParser {
         //string pathString = path[p];
         p++;
         while(true) {
-            EntityInfo baseEntity = baseClause.entity;
+            auto baseEntity = baseClause.entity;
             enforceEx!SyntaxError(p < path.length, "Property name expected in FROM clause" ~ errorContext(context));
             string propertyName = path[p++];
-            PropertyInfo property = baseEntity[propertyName];
-            EntityInfo referencedEntity = property.referencedEntity;
+            auto property = baseEntity[propertyName];
+            auto referencedEntity = property.referencedEntity;
             assert(referencedEntity !is null);
             enforceEx!SyntaxError(!property.simple, "Simple property " ~ propertyName ~ " cannot be used in JOIN" ~ errorContext(context));
             enforceEx!SyntaxError(!property.embedded, "Embedded property " ~ propertyName ~ " cannot be used in JOIN" ~ errorContext(context));
@@ -420,15 +423,15 @@ class QueryParser {
 		SelectClauseItem item;
 		item.from = from;
 		item.prop = null;
-		EntityInfo ei = from.entity;
+		EntityInfo ei = cast(EntityInfo)from.entity;
 		if (propertyNames.length > 0) {
-			item.prop = ei.findProperty(propertyNames[0]);
+			item.prop = cast(PropertyInfo)ei.findProperty(propertyNames[0]);
 			propertyNames.popFront();
 			while (item.prop.embedded) {
 				//writeln("Embedded property " ~ item.prop.propertyName ~ " of type " ~ item.prop.referencedEntityName);
-				ei = item.prop.referencedEntity;
+                ei = cast(EntityInfo)item.prop.referencedEntity;
 			    enforceEx!SyntaxError(propertyNames.length > 0, "@Embedded field property name should be specified when selecting " ~ aliasName ~ "." ~ item.prop.propertyName);
-				item.prop = ei.findProperty(propertyNames[0]);
+                item.prop = cast(PropertyInfo)ei.findProperty(propertyNames[0]);
 				propertyNames.popFront();
 			}
 		}
@@ -441,7 +444,7 @@ class QueryParser {
 		FromClauseItem from = aliasName == null ? fromClause.first : findFromClauseByAlias(aliasName);
 		OrderByClauseItem item;
 		item.from = from;
-		item.prop = from.entity.findProperty(propertyName);
+        item.prop = cast(PropertyInfo)from.entity.findProperty(propertyName);
 		item.asc = asc;
 		orderByClause ~= item;
 		//insertInPlace(orderByClause, 0, item);
@@ -643,7 +646,7 @@ class QueryParser {
 				a = fromClause.first;
 			}
 			string aliasName = a.entityAlias;
-			EntityInfo ei = a.entity;
+            EntityInfo ei = cast(EntityInfo)a.entity;
 			enforceEx!SyntaxError(idents.length > 0, "Syntax error in WHERE condition - alias w/o property name: " ~ aliasName ~ errorContext(items[p]));
             PropertyInfo pi;
             fullName = aliasName;
@@ -651,12 +654,12 @@ class QueryParser {
     			string propertyName = idents[0];
     			idents.popFront();
     			fullName ~= "." ~ propertyName;
-    			pi = ei.findProperty(propertyName);
+                pi = cast(PropertyInfo)ei.findProperty(propertyName);
     			while (pi.embedded) { // loop to allow nested @Embedded
     				enforceEx!SyntaxError(idents.length > 0, "Syntax error in WHERE condition - @Embedded property reference should include reference to @Embeddable property " ~ aliasName ~ errorContext(items[p]));
     				propertyName = idents[0];
     				idents.popFront();
-    				pi = pi.referencedEntity.findProperty(propertyName);
+                    pi = cast(PropertyInfo)pi.referencedEntity.findProperty(propertyName);
     				fullName = fullName ~ "." ~ propertyName;
     			}
                 if (idents.length == 0)
@@ -665,7 +668,7 @@ class QueryParser {
                     // more field names
                     string pname = idents[0];
                     enforceEx!SyntaxError(pi.referencedEntity !is null, "Unexpected extra field name " ~ pname ~ " - property " ~ propertyName ~ " doesn't content subproperties " ~ errorContext(items[p]));
-                    ei = pi.referencedEntity;
+                    ei = cast(EntityInfo)pi.referencedEntity;
                     FromClauseItem newClause = fromClause.findByPath(fullName);
                     if (newClause is null) {
                         // autogenerate FROM clause
@@ -677,8 +680,8 @@ class QueryParser {
 			enforceEx!SyntaxError(idents.length == 0, "Unexpected extra field name " ~ idents[0] ~ errorContext(items[p]));
 			//writeln("full name = " ~ fullName);
 			Token t = new Token(items[p].pos, TokenType.Field, fullName);
-			t.entity = ei;
-			t.field = pi;
+            t.entity = cast(EntityInfo)ei;
+            t.field = cast(PropertyInfo)pi;
 			t.from = a;
 			replaceInPlace(items, p, lastp + 1, [t]);
 		}
@@ -778,10 +781,10 @@ class QueryParser {
 		return -1;
 	}
 	
-    int addSelectSQL(Dialect dialect, ParsedQuery res, string tableName, bool first, EntityInfo ei) {
+    int addSelectSQL(Dialect dialect, ParsedQuery res, string tableName, bool first, const EntityInfo ei) {
         int colCount = 0;
         for(int j = 0; j < ei.getPropertyCount(); j++) {
-            PropertyInfo f = ei.getProperty(j);
+            PropertyInfo f = cast(PropertyInfo)ei.getProperty(j);
             string fieldName = f.columnName;
             if (f.embedded) {
                 // put embedded cols here
@@ -1205,7 +1208,7 @@ class Token {
 	string text;
 	string spaceAfter;
 	EntityInfo entity;
-	PropertyInfo field;
+    PropertyInfo field;
 	FromClauseItem from;
 	Token[] children;
 	this(int pos, TokenType type, string text) {
@@ -1518,12 +1521,12 @@ class ParsedQuery {
 	}
 	@property string hql() { return _hql; }
 	@property string sql() { return _sql; }
-	@property EntityInfo entity() { return _entity; }
+	@property const(EntityInfo)entity() { return _entity; }
 	@property int colCount() { return _colCount; }
     @property FromClause from() { return _from; }
     @property SelectClauseItem[] select() { return _select; }
-    void setEntity(EntityInfo entity) {
-		_entity = entity;
+    void setEntity(const EntityInfo entity) {
+        _entity = cast(EntityInfo)entity;
 	}
     void setFromClause(FromClause from) {
         _from = from;
