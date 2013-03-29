@@ -15,6 +15,7 @@
 module hibernated.type;
 
 import std.datetime;
+import std.stdio;
 
 import ddbc.core;
 
@@ -109,13 +110,18 @@ struct Lazy(T) {
 	private delegate_t _delegate;
 
 	T opCall() {
-		if (_delegate !is null)
+        writeln("Lazy! opCall()");
+		if (_delegate !is null) {
+            writeln("Lazy! opCall() Delegate is set! Calling it to get value");
 			opAssign(cast(T)_delegate());
+        } else {
+            writeln("Lazy! opCall() Returning value instantly");
+        }
 		return _value;
 	}
 
 	T opCall(T newValue) {
-		return opAssign(newValue);
+        return opAssign(newValue);
 	}
 	
 	void opCall(delegate_t lazyLoader) {
@@ -127,13 +133,15 @@ struct Lazy(T) {
 	}
 
 	T opAssign(T v) {
-		_value = v;
+        writeln("Lazy! opAssign(value)");
+        _value = v;
 		_delegate = null;
 		return _value;
 	}
 
 	void opAssign(delegate_t lazyLoader) {
-		_delegate = lazyLoader;
+        writeln("Lazy! opAssign(delegate)");
+        _delegate = lazyLoader;
 		_value = null;
 	}
 }

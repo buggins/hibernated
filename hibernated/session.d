@@ -698,12 +698,17 @@ class QueryImpl : Query
                                     // FK is not null, create lazy loader
                                     Object destinationEntity = relations[i];
                                     Variant id = r.getVariant(from.startColumn + pi.columnOffset);
-                                    auto loader = delegate() {
-                                        writeln("lazy loading of " ~ pi.referencedEntityName ~ " with id " ~ id.toString);
-                                        // TODO: handle closed session
-                                        return sess.loadObject(pi.referencedEntityName, id);
-                                    };
-                                    pi.setObjectDelegateFunc(destinationEntity, loader);
+                                    LazyObjectLoader loader = new LazyObjectLoader(sess, pi, id);
+//                                    auto loader = delegate() {
+//                                        writeln("lazy loading of " ~ pi.referencedEntityName ~ " with id " ~ id.toString);
+//                                        // TODO: handle closed session
+//                                        return sess.loadObject(pi.referencedEntityName, id);
+//                                    };
+                                    writeln("Setting lazy loader");
+                                    pi.setObjectDelegateFunc(destinationEntity, &loader.load);
+                                    // testing
+                                    writeln("Getting from lazy property instantly");
+                                    pi.getObjectFunc(destinationEntity);
                                 }
                             } else {
                             }
@@ -834,4 +839,19 @@ class QueryImpl : Query
 	}
 }
 
+class LazyObjectLoader {
+    const PropertyInfo pi;
+    Variant id;
+    SessionImpl sess;
+    this(SessionImpl sess, const PropertyInfo pi, Variant id) {
+        this.pi = pi;
+        this.id = id;
+        this.sess = sess;
+    }
+    Object load() {
+        writeln("lazy loading of " ~ pi.referencedEntityName ~ " with id " ~ id.toString);
+        // TODO: handle closed session
+        return sess.loadObject(pi.referencedEntityName, id);
+    }
+}
 

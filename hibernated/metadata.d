@@ -2000,6 +2000,9 @@ abstract class SchemaInfo : EntityMetaData {
                     if (obj is null) {
                         w.setNull(startColumn + columnCount);
                     } else {
+                        writeln("calling getFunc for property " ~ pi.entity.name ~ "." ~ pi.propertyName);
+                        if (pi.lazyLoad)
+                            writeln("property has lazy loader");
                         w.setVariant(startColumn + columnCount, pi.getFunc(obj));
                     }
                     columnCount++;
@@ -2400,9 +2403,11 @@ version(unittest) {
          "CREATE TABLE IF NOT EXISTS person (id int not null primary key AUTO_INCREMENT, first_name varchar(255) not null, last_name varchar(255) not null, more_info_fk int)",
          "CREATE TABLE IF NOT EXISTS person_info2 (id int not null primary key AUTO_INCREMENT, flags bigint, person_info_fk int)",
 
-         "INSERT INTO customers SET id=1, name='customer 1', zip='12345'",
+         "INSERT INTO account_type SET id=1, name='Type1'",
+         "INSERT INTO account_type SET id=2, name='Type2'",
+         "INSERT INTO customers SET id=1, name='customer 1', zip='12345', account_type_fk=1",
          "INSERT INTO customers SET id=2, name='customer 2', zip='54321'",
-         "INSERT INTO customers SET id=3, name='customer 3', street_address='Baker Street, 24'",
+         "INSERT INTO customers SET id=3, name='customer 3', street_address='Baker Street, 24', account_type_fk=2",
          "INSERT INTO users SET id=1, name='user 1', flags=11,   comment='comments for user 1', customer_fk=1",
          "INSERT INTO users SET id=2, name='user 2', flags=22,   comment='this user belongs to customer 1', customer_fk=1",
          "INSERT INTO users SET id=3, name='user 3', flags=NULL, comment='this user belongs to customer 2', customer_fk=2",
@@ -2501,6 +2506,9 @@ unittest {
         //writeln("Loaded value: " ~ u1.toString);
         assert(u1.id == 1);
         assert(u1.name == "user 1");
+        assert(u1.customer.name == "customer 1");
+        assert(u1.customer.accountType() !is null);
+        assert(u1.customer.accountType().name == "Type1");
 
         User u2 = sess.load!User(2);
         assert(u2.name == "user 2");
@@ -2510,6 +2518,8 @@ unittest {
         assert(u3.name == "user 3");
         assert(u3.flags == 0); // NULL is loaded as 0 if property cannot hold nulls
         assert(u3.getComment() !is null);
+        assert(u3.customer.name == "customer 2");
+        assert(u3.customer.accountType() is null);
 
         User u4 = new User();
         sess.load(u4, 4);
@@ -2527,6 +2537,8 @@ unittest {
         assert(u5.customer !is null);
         assert(u5.customer.id == 3);
         assert(u5.customer.name == "customer 3");
+        assert(u5.customer.accountType() !is null);
+        assert(u5.customer.accountType().name == "Type2");
 
         User u6 = sess.load!User(6);
 		assert(u6.name == "test user 6");
