@@ -109,8 +109,8 @@ public:
 	alias bool function(Object) IsNullFunc;
 	alias Object function(Object) GetObjectFunc;
 	alias void function(Object, Object) SetObjectFunc;
-    alias void function(Object delegate()) SetObjectDelegateFunc;
-    alias void function(Object[] delegate()) SetCollectionDelegateFunc;
+    alias void function(Object, Object delegate()) SetObjectDelegateFunc;
+    alias void function(Object, Object[] delegate()) SetCollectionDelegateFunc;
     alias Object[] function(Object) GetCollectionFunc;
     alias void function(Object, Object[]) SetCollectionFunc;
 
@@ -1204,7 +1204,7 @@ string getEmbeddedPropertyVariantWriteCode(T, string m, string className)() {
     }
 }
 
-string getEmbeddedPropertyObjectWriteCode(T, string m, string className)() {
+string getPropertyObjectWriteCode(T, string m, string className)() {
 	immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
     final switch (kind) {
 	    case PropertyMemberKind.FIELD_MEMBER:
@@ -1215,6 +1215,20 @@ string getEmbeddedPropertyObjectWriteCode(T, string m, string className)() {
     		return "entity." ~ m ~ " = cast(" ~ className ~ ")value;";
         case PropertyMemberKind.LAZY_MEMBER:
             return "entity." ~ m ~ " = cast(" ~ className ~ ")value;";
+    }
+}
+
+string getLazyPropertyObjectWriteCode(T, string m)() {
+    immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
+    final switch (kind) {
+        case PropertyMemberKind.FIELD_MEMBER:
+            return "entity." ~ m ~ " = loader;";
+        case PropertyMemberKind.GETTER_MEMBER:
+            return "entity." ~ getterNameToSetterName(m) ~ "(loader);";
+        case PropertyMemberKind.PROPERTY_MEMBER:
+            return "entity." ~ m ~ " = loader;";
+        case PropertyMemberKind.LAZY_MEMBER:
+            return "entity." ~ m ~ " = loader;";
     }
 }
 
@@ -1250,7 +1264,7 @@ string getOneToOnePropertyDef(T, immutable string m)() {
 	immutable string datasetWriteCode = null; //getColumnTypeDatasetWriteCode!(T,m)();
 	immutable string propertyVariantSetCode = getEmbeddedPropertyVariantWriteCode!(T, m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
 	immutable string propertyVariantGetCode = "Variant(" ~ propertyReadCode ~ " is null ? null : " ~ propertyReadCode ~ ")"; //getPropertyVariantReadCode!(T,m)();
-	immutable string propertyObjectSetCode = getEmbeddedPropertyObjectWriteCode!(T,m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
+	immutable string propertyObjectSetCode = getPropertyObjectWriteCode!(T,m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
 	immutable string propertyObjectGetCode = propertyReadCode; //getPropertyVariantReadCode!(T,m)();
 	immutable string keyIsSetCode = null; //getColumnTypeKeyIsSetCode!(T,m)();
 	immutable string isNullCode = propertyReadCode ~ " is null";
@@ -1313,7 +1327,12 @@ string getOneToOnePropertyDef(T, immutable string m)() {
             " }\n";
     immutable string getCollectionFuncDef = "null";
     immutable string setCollectionFuncDef = "null";
-    immutable string setObjectDelegateFuncDef = "null";
+    immutable string setObjectDelegateFuncDef = !isLazy ? "null" :
+            "\n" ~
+            "function(Object obj, Object delegate() loader) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    " ~ getLazyPropertyObjectWriteCode!(T,m) ~ "\n" ~
+            " }\n";
     immutable string setCollectionDelegateFuncDef = "null";
     //	pragma(msg, propertyReadCode);
 	//	pragma(msg, datasetReadCode);
@@ -1375,7 +1394,7 @@ string getManyToOnePropertyDef(T, immutable string m)() {
     immutable string datasetWriteCode = null; //getColumnTypeDatasetWriteCode!(T,m)();
     immutable string propertyVariantSetCode = getEmbeddedPropertyVariantWriteCode!(T, m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
     immutable string propertyVariantGetCode = "Variant(" ~ propertyReadCode ~ " is null ? null : " ~ propertyReadCode ~ ")"; //getPropertyVariantReadCode!(T,m)();
-    immutable string propertyObjectSetCode = getEmbeddedPropertyObjectWriteCode!(T,m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
+    immutable string propertyObjectSetCode = getPropertyObjectWriteCode!(T,m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
     immutable string propertyObjectGetCode = propertyReadCode; //getPropertyVariantReadCode!(T,m)();
     immutable string keyIsSetCode = null; //getColumnTypeKeyIsSetCode!(T,m)();
     immutable string isNullCode = propertyReadCode ~ " is null";
@@ -1438,7 +1457,12 @@ string getManyToOnePropertyDef(T, immutable string m)() {
             " }\n";
     immutable string getCollectionFuncDef = "null";
     immutable string setCollectionFuncDef = "null";
-    immutable string setObjectDelegateFuncDef = "null";
+    immutable string setObjectDelegateFuncDef = !isLazy ? "null" :
+        "\n" ~
+        "function(Object obj, Object delegate() loader) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    " ~ getLazyPropertyObjectWriteCode!(T,m) ~ "\n" ~
+            " }\n";
     immutable string setCollectionDelegateFuncDef = "null";
     //  pragma(msg, propertyReadCode);
     //  pragma(msg, datasetReadCode);
@@ -1496,7 +1520,7 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
 	immutable string datasetWriteCode = null; //getColumnTypeDatasetWriteCode!(T,m)();
 	immutable string propertyVariantSetCode = getEmbeddedPropertyVariantWriteCode!(T, m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
 	immutable string propertyVariantGetCode = "Variant(" ~ propertyReadCode ~ " is null ? null : " ~ propertyReadCode ~ ")"; //getPropertyVariantReadCode!(T,m)();
-	immutable string propertyObjectSetCode = getEmbeddedPropertyObjectWriteCode!(T,m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
+	immutable string propertyObjectSetCode = getPropertyObjectWriteCode!(T,m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
 	immutable string propertyObjectGetCode = propertyReadCode; //getPropertyVariantReadCode!(T,m)();
 	immutable string keyIsSetCode = null; //getColumnTypeKeyIsSetCode!(T,m)();
 	immutable string isNullCode = propertyReadCode ~ " is null";

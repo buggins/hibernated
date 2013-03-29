@@ -699,9 +699,11 @@ class QueryImpl : Query
                                     Object destinationEntity = relations[i];
                                     Variant id = r.getVariant(from.startColumn + pi.columnOffset);
                                     auto loader = delegate() {
+                                        writeln("lazy loading of " ~ pi.referencedEntityName ~ " with id " ~ id.toString);
                                         // TODO: handle closed session
                                         return sess.loadObject(pi.referencedEntityName, id);
                                     };
+                                    pi.setObjectDelegateFunc(destinationEntity, loader);
                                 }
                             } else {
                             }
