@@ -113,7 +113,6 @@ public:
     package EntityInfo _entity;
     @property const(EntityInfo) entity() const { return _entity; }
     @property const(EntityMetaData) metadata() const { return _entity._metadata; }
-    @property bool lazyLoad() const { return false; } // TODO: support lazy loading
 
 	immutable string propertyName;
     immutable string columnName;
@@ -123,6 +122,8 @@ public:
     immutable bool generated;
     immutable bool nullable;
     immutable RelationType relation;
+    immutable bool lazyLoad;
+    immutable bool collection;
 
     immutable string referencedEntityName; // for @Embedded, @OneToOne, @OneToMany, @ManyToOne, @ManyToMany holds name of entity
 	package EntityInfo _referencedEntity; // for @Embedded, @OneToOne, @OneToMany, @ManyToOne, @ManyToMany holds entity info reference, filled in runtime
@@ -152,7 +153,7 @@ public:
     @property bool manyToOne() const { return relation == RelationType.ManyToOne; };
     @property bool manyToMany() const { return relation == RelationType.ManyToMany; };
 
-    this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, RelationType relation, string referencedEntityName, string referencedPropertyName, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, KeyIsSetFunc keyIsSetFunc, IsNullFunc isNullFunc, CopyFunc copyFieldFunc, GetObjectFunc getObjectFunc = null, SetObjectFunc setObjectFunc = null) {
+    this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, RelationType relation, string referencedEntityName, string referencedPropertyName, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, KeyIsSetFunc keyIsSetFunc, IsNullFunc isNullFunc, CopyFunc copyFieldFunc, GetObjectFunc getObjectFunc = null, SetObjectFunc setObjectFunc = null, bool lazyLoad = false, bool collection = false) {
 		this.propertyName = propertyName;
 		this.columnName = columnName;
 		this.columnType = cast(immutable Type)columnType;
@@ -172,6 +173,8 @@ public:
 		this.getObjectFunc = getObjectFunc;
 		this.setObjectFunc = setObjectFunc;
         this.copyFieldFunc = copyFieldFunc;
+        this.lazyLoad = lazyLoad;
+        this.collection = collection;
 	}
 
     const hash_t opHash() const {
@@ -1214,7 +1217,8 @@ string getOneToOnePropertyDef(T, immutable string m)() {
     static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, ManyToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": OneToOne property cannot have Column, Id, Generated, ManyToOne, ManyToMany or Embedded annotation");
     immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
     immutable bool isId = hasMemberAnnotation!(T, m, Id) || isGenerated;
-	immutable string columnName = getJoinColumnName!(T, m)();
+    immutable bool isLazy = isLazyMember!(T,m);
+    immutable string columnName = getJoinColumnName!(T, m)();
 	immutable length = getColumnLength!(T, m)();
 	immutable bool hasNull = hasMemberAnnotation!(T,m, Null);
 	immutable bool hasNotNull = hasMemberAnnotation!(T,m, NotNull);
@@ -1299,7 +1303,8 @@ string getOneToOnePropertyDef(T, immutable string m)() {
             (columnName is null ? "null" : "\"" ~ columnName ~ "\"") ~ ", " ~ 
             typeName ~ ", " ~ 
 		    format("%s",length) ~ ", " ~ (isId ? "true" : "false")  ~ ", " ~ 
-		    (isGenerated ? "true" : "false")  ~ ", " ~ (nullable ? "true" : "false") ~ ", " ~ 
+		    (isGenerated ? "true" : "false")  ~ ", " ~ 
+            (nullable ? "true" : "false") ~ ", " ~ 
 		    "RelationType.OneToOne, " ~
 		    (referencedEntityName !is null ? "\"" ~ referencedEntityName ~ "\"" : "null")  ~ ", " ~ 
 		    (referencedPropertyName !is null ? "\"" ~ referencedPropertyName ~ "\"" : "null")  ~ ", " ~ 
@@ -1311,8 +1316,10 @@ string getOneToOnePropertyDef(T, immutable string m)() {
 		    isNullFuncDef ~ ", " ~
             copyFuncDef ~ ", " ~
             getObjectFuncDef ~ ", " ~
-		    setObjectFuncDef ~ 
-		    ")";
+            setObjectFuncDef ~ ", " ~
+            (isLazy ? "true" : "false") ~ ", " ~ // lazy
+            (false ? "true" : "false") ~ // collection
+            ")";
 }
 
 /// generate source code for creation of ManyToOne definition
@@ -1425,7 +1432,9 @@ string getManyToOnePropertyDef(T, immutable string m)() {
             isNullFuncDef ~ ", " ~
             copyFuncDef ~ ", " ~
             getObjectFuncDef ~ ", " ~
-            setObjectFuncDef ~ 
+            setObjectFuncDef ~ ", " ~
+            (isLazy ? "true" : "false") ~ ", " ~ // lazy
+            (false ? "true" : "false") ~ // collection
             ")";
 }
 
@@ -1806,7 +1815,7 @@ abstract class SchemaInfo : EntityMetaData {
             } else if (pi.oneToOne || pi.manyToOne) {
                 if (pi.columnName != null) {
                     // read FK column
-                    appendCommaDelimitedList(query, pi.columnName);
+                    appendCommaDelimitedList(query, pi.columnName ~ "=?");
                 }
             } else {
                 appendCommaDelimitedList(query, pi.columnName ~ "=?");
@@ -1928,7 +1937,12 @@ abstract class SchemaInfo : EntityMetaData {
 				columnCount += columnsWritten;
             } else if (pi.oneToOne || pi.manyToOne) {
                 if (pi.columnName !is null) {
-                    pi.writeFunc(obj, w, startColumn + columnCount);
+                    Object obj = pi.getObjectFunc(obj);
+                    if (obj is null) {
+                        w.setNull(startColumn + columnCount);
+                    } else {
+                        w.setVariant(startColumn + columnCount, pi.getFunc(obj));
+                    }
                     columnCount++;
                 }
                 // skip

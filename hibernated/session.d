@@ -681,15 +681,19 @@ class QueryImpl : Query
                 auto pi = ei[j];
                 if (pi.oneToOne || pi.manyToOne) {
                     writeln("updating relations for " ~ from.pathString ~ "." ~ pi.propertyName);
-                    if (pi.lazyLoad) {
-                        // TODO: support lazy loader
+                    FromClauseItem rfrom = findRelation(from, pi);
+                    if (rfrom !is null && rfrom.selectIndex >= 0) {
+                        Object rel = relations[rfrom.selectIndex];
+                        pi.setObjectFunc(relations[i], rel);
                     } else {
-                        FromClauseItem rfrom = findRelation(from, pi);
-                        if (rfrom !is null && rfrom.selectIndex >= 0) {
-                            Object rel = relations[rfrom.selectIndex];
-                            pi.setObjectFunc(relations[i], rel);
+                        if (pi.lazyLoad) {
+                            writeln("scheduling lazy load for " ~ from.pathString ~ "." ~ pi.propertyName);
+                            // TODO: support lazy loader
+                            if (pi.columnName !is null) {
+                            } else {
+                            }
                         } else {
-                            writeln("not found loaded oneToOne relation for " ~ from.pathString ~ "." ~ pi.propertyName);
+                            writeln("scheduling delayed load for " ~ from.pathString ~ "." ~ pi.propertyName);
                             if (pi.columnName !is null) {
                                 writeln("relation " ~ pi.propertyName ~ " has column name");
                                 if (r.isNull(from.startColumn + pi.columnOffset)) {

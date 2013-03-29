@@ -250,7 +250,7 @@ public:
             activeStatements ~= stmt;
             return stmt;
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw new SQLException(e.msg ~ " while execution of query " ~ sql);
         }
     }
 
