@@ -690,6 +690,19 @@ class QueryImpl : Query
                             writeln("scheduling lazy load for " ~ from.pathString ~ "." ~ pi.propertyName);
                             // TODO: support lazy loader
                             if (pi.columnName !is null) {
+                                if (r.isNull(from.startColumn + pi.columnOffset)) {
+                                    // FK is null, set NULL to field
+                                    pi.setObjectFunc(relations[i], null);
+                                    writeln("relation " ~ pi.propertyName ~ " has null FK");
+                                } else {
+                                    // FK is not null, create lazy loader
+                                    Object destinationEntity = relations[i];
+                                    Variant id = r.getVariant(from.startColumn + pi.columnOffset);
+                                    auto loader = delegate() {
+                                        // TODO: handle closed session
+                                        return sess.loadObject(pi.referencedEntityName, id);
+                                    };
+                                }
                             } else {
                             }
                         } else {

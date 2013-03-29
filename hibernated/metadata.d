@@ -108,7 +108,11 @@ public:
 	alias bool function(Object) KeyIsSetFunc;
 	alias bool function(Object) IsNullFunc;
 	alias Object function(Object) GetObjectFunc;
-	alias void function(Object, Object value) SetObjectFunc;
+	alias void function(Object, Object) SetObjectFunc;
+    alias void function(Object delegate()) SetObjectDelegateFunc;
+    alias void function(Object[] delegate()) SetCollectionDelegateFunc;
+    alias Object[] function(Object) GetCollectionFunc;
+    alias void function(Object, Object[]) SetCollectionFunc;
 
     package EntityInfo _entity;
     @property const(EntityInfo) entity() const { return _entity; }
@@ -145,6 +149,10 @@ public:
     immutable GetObjectFunc getObjectFunc;
     immutable SetObjectFunc setObjectFunc;
     immutable CopyFunc copyFieldFunc;
+    immutable GetCollectionFunc getCollectionFunc;
+    immutable SetCollectionFunc setCollectionFunc;
+    immutable SetObjectDelegateFunc setObjectDelegateFunc;
+    immutable SetCollectionDelegateFunc setCollectionDelegateFunc;
 
     @property bool simple() const { return relation == RelationType.None; };
     @property bool embedded() const { return relation == RelationType.Embedded; };
@@ -153,7 +161,14 @@ public:
     @property bool manyToOne() const { return relation == RelationType.ManyToOne; };
     @property bool manyToMany() const { return relation == RelationType.ManyToMany; };
 
-    this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, RelationType relation, string referencedEntityName, string referencedPropertyName, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, KeyIsSetFunc keyIsSetFunc, IsNullFunc isNullFunc, CopyFunc copyFieldFunc, GetObjectFunc getObjectFunc = null, SetObjectFunc setObjectFunc = null, bool lazyLoad = false, bool collection = false) {
+    this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, RelationType relation, string referencedEntityName, string referencedPropertyName, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, KeyIsSetFunc keyIsSetFunc, IsNullFunc isNullFunc, CopyFunc copyFieldFunc, 
+             GetObjectFunc getObjectFunc = null, 
+             SetObjectFunc setObjectFunc = null, 
+             GetCollectionFunc getCollectionFunc = null, 
+             SetCollectionFunc setCollectionFunc = null,
+             SetObjectDelegateFunc setObjectDelegateFunc = null, 
+             SetCollectionDelegateFunc setCollectionDelegateFunc = null, 
+             bool lazyLoad = false, bool collection = false) {
 		this.propertyName = propertyName;
 		this.columnName = columnName;
 		this.columnType = cast(immutable Type)columnType;
@@ -175,6 +190,10 @@ public:
         this.copyFieldFunc = copyFieldFunc;
         this.lazyLoad = lazyLoad;
         this.collection = collection;
+        this.setObjectDelegateFunc = setObjectDelegateFunc;
+        this.setCollectionDelegateFunc = setCollectionDelegateFunc;
+        this.getCollectionFunc = getCollectionFunc;
+        this.setCollectionFunc = setCollectionFunc;
 	}
 
     const hash_t opHash() const {
@@ -1292,6 +1311,10 @@ string getOneToOnePropertyDef(T, immutable string m)() {
             "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
             "    " ~ copyFieldCode ~ "\n" ~
             " }\n";
+    immutable string getCollectionFuncDef = "null";
+    immutable string setCollectionFuncDef = "null";
+    immutable string setObjectDelegateFuncDef = "null";
+    immutable string setCollectionDelegateFuncDef = "null";
     //	pragma(msg, propertyReadCode);
 	//	pragma(msg, datasetReadCode);
 	//	pragma(msg, propertyWriteCode);
@@ -1317,6 +1340,10 @@ string getOneToOnePropertyDef(T, immutable string m)() {
             copyFuncDef ~ ", " ~
             getObjectFuncDef ~ ", " ~
             setObjectFuncDef ~ ", " ~
+            getCollectionFuncDef ~ ", " ~
+            setCollectionFuncDef ~ ", " ~
+            setObjectDelegateFuncDef ~ ", " ~
+            setCollectionDelegateFuncDef ~ ", " ~
             (isLazy ? "true" : "false") ~ ", " ~ // lazy
             (false ? "true" : "false") ~ // collection
             ")";
@@ -1409,6 +1436,10 @@ string getManyToOnePropertyDef(T, immutable string m)() {
             "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
             "    " ~ copyFieldCode ~ "\n" ~
             " }\n";
+    immutable string getCollectionFuncDef = "null";
+    immutable string setCollectionFuncDef = "null";
+    immutable string setObjectDelegateFuncDef = "null";
+    immutable string setCollectionDelegateFuncDef = "null";
     //  pragma(msg, propertyReadCode);
     //  pragma(msg, datasetReadCode);
     //  pragma(msg, propertyWriteCode);
@@ -1433,6 +1464,10 @@ string getManyToOnePropertyDef(T, immutable string m)() {
             copyFuncDef ~ ", " ~
             getObjectFuncDef ~ ", " ~
             setObjectFuncDef ~ ", " ~
+            getCollectionFuncDef ~ ", " ~
+            setCollectionFuncDef ~ ", " ~
+            setObjectDelegateFuncDef ~ ", " ~
+            setCollectionDelegateFuncDef ~ ", " ~
             (isLazy ? "true" : "false") ~ ", " ~ // lazy
             (false ? "true" : "false") ~ // collection
             ")";

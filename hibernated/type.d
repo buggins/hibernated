@@ -104,13 +104,13 @@ public:
 
 
 struct Lazy(T) {
-	alias T delegate() delegate_t;
+	alias Object delegate() delegate_t;
 	private T _value;
 	private delegate_t _delegate;
 
 	T opCall() {
 		if (_delegate !is null)
-			opAssign(_delegate());
+			opAssign(cast(T)_delegate());
 		return _value;
 	}
 
