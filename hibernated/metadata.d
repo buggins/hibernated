@@ -570,6 +570,13 @@ template isLazyInstance(T) {
         enum bool isLazyInstance = false;
 }
 
+template isLazyCollectionInstance(T) {
+    static if (is(T x == LazyCollection!Args, Args...))
+        enum bool isLazyCollectionInstance = true;
+    else
+        enum bool isLazyCollectionInstance = false;
+}
+
 template isLazyMember(T : Object, string m) {
     static if (is(typeof(__traits(getMember, T, m)) x == Lazy!Args, Args...))
         enum bool isLazyMember = true;
@@ -577,14 +584,39 @@ template isLazyMember(T : Object, string m) {
         enum bool isLazyMember = false;
 }
 
+template isLazyCollectionMember(T : Object, string m) {
+    static if (is(typeof(__traits(getMember, T, m)) x == LazyCollection!Args, Args...))
+        enum bool isLazyCollectionMember = true;
+    else
+        enum bool isLazyCollectionMember = false;
+}
+
+template isCollectionMember(T : Object, string m) {
+    alias typeof(__traits(getMember, T, m)) ti;
+    static if (is(typeof(__traits(getMember, T, m)) x == LazyCollection!Args, Args...))
+        enum bool isCollectionMember = true;
+    else {
+        //pragma(msg, typeof(__traits(getMember, T, m).init[0]));
+        static if (isArray!(ti) && isImplicitlyConvertible!(typeof(__traits(getMember, T, m).init[0]), Object))
+            enum bool isCollectionMember = true;
+        else
+            enum bool isCollectionMember = false;
+    }
+}
+
 template getLazyInstanceType(T) {
     static if (is(T x == Lazy!Args, Args...))
         alias Args[0] getLazyInstanceType;
     else {
-        static if (isImplicitlyConvertible!(T, Object))
-            alias T getLazyInstanceType;
-        else
-            static assert(false, "Not a Lazy! instance");
+        static assert(false, "Not a Lazy! instance");
+    }
+}
+
+template getLazyCollectionInstanceType(T) {
+    static if (is(T x == LazyCollection!Args, Args...))
+        alias Args[0] getLazyInstanceType;
+    else {
+        static assert(false, "Not a LazyCollection! instance");
     }
 }
 
@@ -608,16 +640,28 @@ template getReferencedInstanceType(T) {
         }
     } else {
         //pragma(msg, "is not function");
-        static if (is(T x == Lazy!Args, Args...)) {
-            //pragma(msg, "is Lazy! template");
-            pragma(msg, Args[0]);
+        static if (is(T x == LazyCollection!Args, Args...)) {
             alias Args[0] getReferencedInstanceType;
         } else {
-            static if (isImplicitlyConvertible!(T, Object)) {
-                //pragma(msg, "isImplicitlyConvertible!(T, Object)");
-                alias T getReferencedInstanceType;
+            static if (is(T x == Lazy!Args, Args...)) {
+                alias Args[0] getReferencedInstanceType;
             } else {
-                static assert(false, "Type cannot be used as relation " ~ T.stringof);
+                static if (isArray!(T)) {
+                    static if (isImplicitlyConvertible!(typeof(T.init[0]), Object)) {
+                        //pragma(msg, "isImplicitlyConvertible!(T, Object)");
+                        alias typeof(T.init[0]) getReferencedInstanceType;
+                    } else {
+                        static assert(false, "Type cannot be used as relation " ~ T.stringof);
+                    }
+                } else static if (isImplicitlyConvertible!(T, Object)) {
+                    //pragma(msg, "isImplicitlyConvertible!(T, Object)");
+                    alias T getReferencedInstanceType;
+                } else static if (isImplicitlyConvertible!(T, Object[])) {
+                    //pragma(msg, "isImplicitlyConvertible!(T, Object)");
+                    alias T getReferencedInstanceType;
+                } else {
+                    static assert(false, "Type cannot be used as relation " ~ T.stringof);
+                }
             }
         }
     }
@@ -648,19 +692,6 @@ string getPropertyEmbeddedClassName(T : Object, string m)() {
 string getPropertyReferencedClassName(T : Object, string m)() {
 	alias typeof(__traits(getMember, T, m)) ti;
     return fullyQualifiedName!(getReferencedInstanceType!ti);
-//    static if (is(ti == function)) {
-//		static if (isImplicitlyConvertible!(ReturnType!(ti), Object)) {
-//			static assert(!hasAnnotation!(ReturnType!(ti), Embeddable), "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany referenced property class should not have @Embeddable annotation");
-//			return fullyQualifiedName!(ReturnType!(ti));
-//		} else
-//			static assert(false, "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany property can be only class");
-//	} else {
-//		static if (isImplicitlyConvertible!(ti, Object)) {
-//			static assert(!hasAnnotation!(ti, Embeddable), "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany referenced property class should not have @Embeddable annotation");
-//			return fullyQualifiedName!ti;
-//		} else 
-//			static assert(false, "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany property can be only class");
-//	}
 }
 
 
@@ -1221,6 +1252,20 @@ string getEmbeddedPropertyVariantWriteCode(T, string m, string className)() {
     }
 }
 
+string getCollectionPropertyVariantWriteCode(T, string m, string className)() {
+    immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
+    final switch (kind) {
+        case PropertyMemberKind.FIELD_MEMBER:
+            return "entity." ~ m ~ " = (value == null ? null : value.get!(" ~ className ~ "[]));";
+        case PropertyMemberKind.GETTER_MEMBER:
+            return "entity." ~ getterNameToSetterName(m) ~ "(value == null ? null : value.get!(" ~ className ~ "[]));";
+        case PropertyMemberKind.LAZY_MEMBER:
+            return "entity." ~ m ~ " = (value == null ? null : value.get!(" ~ className ~ "[]));";
+        case PropertyMemberKind.PROPERTY_MEMBER:
+            return "entity." ~ m ~ " = (value == null ? null : value.get!(" ~ className ~ "[]));";
+    }
+}
+
 string getPropertyObjectWriteCode(T, string m, string className)() {
 	immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
     final switch (kind) {
@@ -1232,6 +1277,20 @@ string getPropertyObjectWriteCode(T, string m, string className)() {
     		return "entity." ~ m ~ " = cast(" ~ className ~ ")value;";
         case PropertyMemberKind.LAZY_MEMBER:
             return "entity." ~ m ~ " = cast(" ~ className ~ ")value;";
+    }
+}
+
+string getPropertyCollectionWriteCode(T, string m, string className)() {
+    immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
+    final switch (kind) {
+        case PropertyMemberKind.FIELD_MEMBER:
+            return "entity." ~ m ~ " = cast(" ~ className ~ "[])value;";
+        case PropertyMemberKind.GETTER_MEMBER:
+            return "entity." ~ getterNameToSetterName(m) ~ "(cast(" ~ className ~ "[])value);";
+        case PropertyMemberKind.PROPERTY_MEMBER:
+            return "entity." ~ m ~ " = cast(" ~ className ~ "[])value;";
+        case PropertyMemberKind.LAZY_MEMBER:
+            return "entity." ~ m ~ " = cast(" ~ className ~ "[])value;";
     }
 }
 
@@ -1514,6 +1573,139 @@ string getManyToOnePropertyDef(T, immutable string m)() {
             ")";
 }
 
+/// generate source code for creation of OneToMany definition
+string getOneToManyPropertyDef(T, immutable string m)() {
+    immutable string referencedEntityName = getPropertyReferencedEntityName!(T,m);
+    immutable string referencedClassName = getPropertyReferencedClassName!(T,m);
+    immutable string referencedPropertyName = getOneToOneReferencedPropertyName!(T,m);
+    immutable string entityClassName = fullyQualifiedName!T;
+    immutable string propertyName = getPropertyName!(T,m)();
+    static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
+    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, OneToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": ManyToOne property cannot have Column, Id, Generated, OneToOne, ManyToMany or Embedded annotation");
+    immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
+    immutable bool isId = hasMemberAnnotation!(T, m, Id) || isGenerated;
+    immutable string columnName = getJoinColumnName!(T, m)();
+    immutable bool isCollection = isCollectionMember!(T,m);
+    static assert (isCollection, "OneToMany property " ~ m ~ " should be array of objects or LazyCollection");
+    static assert (columnName == null, "OneToMany property " ~ m ~ " should not have JoinColumn name");
+    immutable bool isLazy = isLazyMember!(T,m);
+    immutable length = getColumnLength!(T, m);
+    immutable bool hasNull = hasMemberAnnotation!(T,m, Null);
+    immutable bool hasNotNull = hasMemberAnnotation!(T,m, NotNull);
+    immutable bool nullable = hasNull ? true : (hasNotNull ? false : true); //canColumnTypeHoldNulls!(T.m)
+    immutable bool unique = hasMemberAnnotation!(T, m, UniqueKey);
+    immutable string typeName = "new EntityType(cast(immutable TypeInfo_Class)" ~ entityClassName ~ ".classinfo, \"" ~ entityClassName ~ "\")"; //getColumnTypeName!(T, m)();
+    immutable string propertyReadCode = getPropertyReadCode!(T,m)();
+    immutable string datasetReadCode = null; //getColumnTypeDatasetReadCode!(T,m)();
+    immutable string propertyWriteCode = null; //getPropertyWriteCode!(T,m)();
+    immutable string datasetWriteCode = null; //getColumnTypeDatasetWriteCode!(T,m)();
+    immutable string propertyVariantSetCode = getCollectionPropertyVariantWriteCode!(T, m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
+    immutable string propertyVariantGetCode = "Variant(" ~ propertyReadCode ~ " is null ? null : " ~ propertyReadCode ~ ")"; //getPropertyVariantReadCode!(T,m)();
+    //pragma(msg, "propertyVariantGetCode: " ~ propertyVariantGetCode);
+    //pragma(msg, "propertyVariantSetCode: " ~ propertyVariantSetCode);
+    immutable string propertyObjectSetCode = getPropertyCollectionWriteCode!(T,m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
+    immutable string propertyObjectGetCode = propertyReadCode; //getPropertyVariantReadCode!(T,m)();
+    immutable string keyIsSetCode = null; //getColumnTypeKeyIsSetCode!(T,m)();
+    immutable string isNullCode = propertyReadCode ~ " is null";
+    immutable string copyFieldCode = getPropertyCopyCode!(T,m);
+    //  pragma(msg, "property read: " ~ propertyReadCode);
+    //  pragma(msg, "property write: " ~ propertyWriteCode);
+    //  pragma(msg, "variant get: " ~ propertyVariantGetCode);
+    immutable string readerFuncDef = "null";
+    //      "\n" ~
+    //      "function(Object obj, DataSetReader r, int index) { \n" ~ 
+    //          "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+    //          "    " ~ propertyWriteCode ~ " \n" ~
+    //          " }\n";
+    immutable string writerFuncDef = "null";
+    //      "\n" ~
+    //      "function(Object obj, DataSetWriter r, int index) { \n" ~ 
+    //          "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+    //          "    " ~ datasetWriteCode ~ " \n" ~
+    //          " }\n";
+    immutable string getVariantFuncDef = 
+        "\n" ~
+            "function(Object obj) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    return " ~ propertyVariantGetCode ~ "; \n" ~
+            " }\n";
+    immutable string setVariantFuncDef = 
+        "\n" ~
+            "function(Object obj, Variant value) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    " ~ propertyVariantSetCode ~ "\n" ~
+            " }\n";
+    immutable string keyIsSetFuncDef = "\n" ~
+        "function(Object obj) { \n" ~ 
+            "    return false;\n" ~
+            " }\n";
+    immutable string isNullFuncDef = "\n" ~
+        "function(Object obj) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    return " ~ isNullCode ~ ";\n" ~
+            " }\n";
+    immutable string getObjectFuncDef = "null";
+    immutable string setObjectFuncDef = "null";
+    immutable string copyFuncDef = 
+        "\n" ~
+            "function(Object to, Object from) { \n" ~ 
+            "    " ~ entityClassName ~ " toentity = cast(" ~ entityClassName ~ ")to; \n" ~
+            "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
+            "    " ~ copyFieldCode ~ "\n" ~
+            " }\n";
+    immutable string getCollectionFuncDef = 
+        "\n" ~
+        "function(Object obj) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    assert(entity !is null);\n" ~
+            "    return cast(Object[])" ~ propertyObjectGetCode ~ "; \n" ~
+            " }\n";
+    immutable string setCollectionFuncDef = 
+        "\n" ~
+        "function(Object obj, Object[] value) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    " ~ propertyObjectSetCode ~ "\n" ~
+            " }\n";
+    immutable string setObjectDelegateFuncDef = "null";
+    immutable string setCollectionDelegateFuncDef = !isLazy ? "null" :
+    "\n" ~
+        "function(Object obj, Object[] delegate() loader) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    " ~ getLazyPropertyObjectWriteCode!(T,m) ~ "\n" ~
+            " }\n";
+    //  pragma(msg, propertyReadCode);
+    //  pragma(msg, datasetReadCode);
+    //  pragma(msg, propertyWriteCode);
+    //  pragma(msg, datasetWriteCode);
+    //  pragma(msg, readerFuncDef);
+    //  pragma(msg, writerFuncDef);
+    
+    return "    new PropertyInfo(\"" ~ propertyName ~ "\", " ~ 
+        (columnName is null ? "null" : "\"" ~ columnName ~ "\"") ~ ", " ~ 
+            typeName ~ ", " ~ 
+            format("%s",length) ~ ", " ~ (isId ? "true" : "false")  ~ ", " ~ 
+            (isGenerated ? "true" : "false")  ~ ", " ~ (nullable ? "true" : "false") ~ ", " ~ 
+            "RelationType.ManyToOne, " ~
+            (referencedEntityName !is null ? "\"" ~ referencedEntityName ~ "\"" : "null")  ~ ", " ~ 
+            (referencedPropertyName !is null ? "\"" ~ referencedPropertyName ~ "\"" : "null")  ~ ", " ~ 
+            readerFuncDef ~ ", " ~
+            writerFuncDef ~ ", " ~
+            getVariantFuncDef ~ ", " ~
+            setVariantFuncDef ~ ", " ~
+            keyIsSetFuncDef ~ ", " ~
+            isNullFuncDef ~ ", " ~
+            copyFuncDef ~ ", " ~
+            getObjectFuncDef ~ ", " ~
+            setObjectFuncDef ~ ", " ~
+            getCollectionFuncDef ~ ", " ~
+            setCollectionFuncDef ~ ", " ~
+            setObjectDelegateFuncDef ~ ", " ~
+            setCollectionDelegateFuncDef ~ ", " ~
+            (isLazy ? "true" : "false") ~ ", " ~ // lazy
+            "true" ~ // is collection
+            ")";
+}
+
 /// generate source code for creation of Embedded definition
 string getEmbeddedPropertyDef(T, immutable string m)() {
 	immutable string referencedEntityName = getPropertyEmbeddedEntityName!(T,m)();
@@ -1722,22 +1914,26 @@ string getPropertyDef(T, string m)() {
 //	pragma(msg, m ~ " isSimple=" ~ (isSimple ? "true" : "false"))
 	static if (isEmbedded) {
 		//pragma(msg, getEmbeddedPropertyDef!(T, m)());
-		return getEmbeddedPropertyDef!(T, m)();
+		return getEmbeddedPropertyDef!(T, m);
 	} 
 	static if (isSimple) {
-		return getSimplePropertyDef!(T, m)();
+		return getSimplePropertyDef!(T, m);
 	} 
 	static if (isOneToOne) {
 		//pragma(msg, getOneToOnePropertyDef!(T, m)());
-		return getOneToOnePropertyDef!(T, m)();
+		return getOneToOnePropertyDef!(T, m);
 	}
     static if (isManyToOne) {
         //pragma(msg, getOneToOnePropertyDef!(T, m)());
-        return getManyToOnePropertyDef!(T, m)();
+        return getManyToOnePropertyDef!(T, m);
     }
-    static if (isManyToMany || isOneToMany) {
+    static if (isOneToMany) {
+        //pragma(msg, getOneToManyPropertyDef!(T, m));
+        return getOneToManyPropertyDef!(T, m);
+    }
+    static if (isManyToMany) {
         //pragma(msg, getOneToOnePropertyDef!(T, m)());
-        static assert(false, "@ManyToMany and @OneToMany relations are not supported so far");
+        static assert(false, "@ManyToMany is not supported so far");
     }
 }
 
@@ -2275,7 +2471,13 @@ version(unittest) {
         @JoinColumn("account_type_fk")
         Lazy!AccountType accountType;
 
-		this() {
+        @OneToMany("customer")
+        LazyCollection!User users;
+
+        @OneToMany("customer")
+        User[] users2;
+        
+        this() {
 			address = new Address();
 		}
         override string toString() {
@@ -2735,8 +2937,8 @@ unittest {
 	static assert(hasMemberAnnotation!(Person, "moreInfo", OneToOne));
 	static assert(getPropertyReferencedEntityName!(Person, "moreInfo") == "More");
 	static assert(getPropertyReferencedClassName!(Person, "moreInfo") == "hibernated.metadata.MoreInfo");
-	pragma(msg, getOneToOnePropertyDef!(Person, "moreInfo"));
-	pragma(msg, getOneToOnePropertyDef!(MoreInfo, "person"));
+	//pragma(msg, getOneToOnePropertyDef!(Person, "moreInfo"));
+	//pragma(msg, getOneToOnePropertyDef!(MoreInfo, "person"));
 	//pragma(msg, "running getOneToOneReferencedPropertyName");
 	//pragma(msg, getOneToOneReferencedPropertyName!(MoreInfo, "person"));
     static assert(getJoinColumnName!(Person, "moreInfo") == "more_info_fk");

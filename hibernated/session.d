@@ -700,12 +700,6 @@ class QueryImpl : Query
                                     Variant id = r.getVariant(from.startColumn + pi.columnOffset);
                                     writeln("scheduling lazy load for " ~ from.pathString ~ "." ~ pi.propertyName ~ " with FK " ~ id.toString);
                                     LazyObjectLoader loader = new LazyObjectLoader(sess, pi, id);
-                                    //                                    auto loader = delegate() {
-                                    //                                        writeln("lazy loading of " ~ pi.referencedEntityName ~ " with id " ~ id.toString);
-                                    //                                        // TODO: handle closed session
-                                    //                                        return sess.loadObject(pi.referencedEntityName, id);
-                                    //                                    };
-                                    //writeln("Setting lazy loader");
                                     pi.setObjectDelegateFunc(relations[i], &loader.load);
                                 } else {
                                     // delayed load
@@ -715,7 +709,8 @@ class QueryImpl : Query
                                 }
                             }
                         } else {
-                            writeln("relation " ~ pi.propertyName ~ " has no column name");
+                            // TODO:
+                            assert(false, "relation " ~ pi.propertyName ~ " has no column name. To be implemented.");
                         }
                     }
                 }

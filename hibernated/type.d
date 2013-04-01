@@ -110,7 +110,7 @@ public:
  * 
  */
 struct Lazy(T) {
-	alias Object delegate() delegate_t;
+    alias Object delegate() delegate_t;
 	private T _value;
 	private delegate_t _delegate;
 
@@ -131,38 +131,6 @@ struct Lazy(T) {
         }
 		return _value;
 	}
-
-//	T setValue(T newValue) {
-//        return opAssign(newValue);
-//	}
-//	
-//	void setDelegate(delegate_t lazyLoader) {
-//		return opAssign(lazyLoader);
-//	}
-
-
-//    T opCall() {
-//        //writeln("Lazy! opCall()");
-//        //writeln("Lazy! opCall() delegate " ~ (_delegate !is null ? "is not null" : "is null"));
-//        if (_delegate !is null) {
-//            //writeln("Lazy! opCall() Delegate is set! Calling it to get value");
-//            T value = cast(T)_delegate();
-//            //writeln("Lazy! opCall() delegate returned value " ~ value.classinfo.toString);
-//            opAssign(value);
-//        } else {
-//            //writeln("Lazy! opCall() Returning value instantly");
-//        }
-//        return _value;
-//    }
-//    
-//    T opCall(T newValue) {
-//        return opAssign(newValue);
-//    }
-//    
-//    void opCall(delegate_t lazyLoader) {
-//        return opAssign(lazyLoader);
-//    }
-
 
 	T opCast(TT)() if (is(TT == T)) {
 		return get();
@@ -188,13 +156,60 @@ struct Lazy(T) {
 		_value = null;
 	}
 
-    //TODO: is it possible to use implicit cast of Lazy!T to T using opCall()?
     alias get this;
 }
 
-version(unittest) {
-
-
+/**
+ * Lazy collection loader. 
+ */
+struct LazyCollection(T : Object) {
+    alias Object[] delegate() delegate_t;
+    private T[] _value;
+    private delegate_t _delegate;
+    
+    T[] opCall() {
+        return get();
+    }
+    
+    T[] get() {
+        //writeln("Lazy! opCall()");
+        //writeln("Lazy! opCall() delegate " ~ (_delegate !is null ? "is not null" : "is null"));
+        if (_delegate !is null) {
+            //writeln("Lazy! opCall() Delegate is set! Calling it to get value");
+            T[] value = cast(T[])_delegate();
+            //writeln("Lazy! opCall() delegate returned value " ~ value.classinfo.toString);
+            opAssign(value);
+        } else {
+            //writeln("Lazy! opCall() Returning value instantly");
+        }
+        return _value;
+    }
+    
+    TT opCast(TT)() if (isArray!TT && isImplicitlyConvertible!(typeof(TT.init[0]), Object)) {
+        return cast(TT)get();
+    }
+    
+    T[] opAssign(T[] v) {
+        //writeln("Lazy! opAssign(value)");
+        _value = v;
+        _delegate = null;
+        return _value;
+    }
+    
+    ref LazyCollection!T opAssign(ref LazyCollection!T v) {
+        //writeln("Lazy! opAssign(value)");
+        _value = v._value;
+        _delegate = v._delegate;
+        return this;
+    }
+    
+    void opAssign(delegate_t lazyLoader) {
+        //writeln("Lazy! opAssign(delegate)");
+        _delegate = lazyLoader;
+        _value = null;
+    }
+    
+    alias get this;
 }
 
 unittest {
