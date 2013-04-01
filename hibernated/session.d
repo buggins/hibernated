@@ -827,7 +827,9 @@ class QueryImpl : Query
                     } else {
                         writeln("all objects found in cache");
                     }
+                    writeln("delayedLoadRelations: updating");
                     foreach(rel; list) {
+                        writeln("delayedLoadRelations: reading key from " ~ pi.referencedEntity.name);
                         Variant key = pi.referencedEntity.getKey(rel);
                         //writeln("map length before: " ~ to!string(map.length));
                         auto objectsToUpdate = map[key].list;
@@ -846,10 +848,15 @@ class QueryImpl : Query
                 QueryImpl q = cast(QueryImpl)sess.createQuery(hql);
                 assert(q !is null);
                 Object[] list = q.listObjects(null, loadMap);
-                writeln("delayedLoadRelations: objects loaded " ~ to!string(list.length));
+                writeln("delayedLoadRelations oneToMany: objects loaded " ~ to!string(list.length));
                 EntityCollections collections;
                 // group by referenced PK
                 foreach(rel; list) {
+                    writeln("delayedLoadRelations oneToMany: reading reference from " ~ pi.referencedEntity.name ~ "." ~ pi.referencedProperty.propertyName ~ " joinColumn=" ~ pi.referencedProperty.columnName);
+                    assert(pi.referencedProperty.manyToOne, "property referenced from OneToMany should be ManyToOne");
+                    assert(pi.referencedProperty.getObjectFunc !is null);
+                    assert(rel !is null);
+                    writeln("delayedLoadRelations oneToMany: reading object " ~ rel.classinfo.toString);
                     Object obj = pi.referencedProperty.getObjectFunc(rel);
                     if (obj !is null) {
                         Variant key = pi.entity.getKey(obj);
