@@ -355,6 +355,15 @@ class SessionImpl : Session {
 //        }
     }
     
+    /// Read entities by foreign key column value
+    Object[] loadReferencedObjects(const EntityInfo info, string referencedPropertyName, Variant fk) {
+        const PropertyInfo referencedProperty = info[referencedPropertyName];
+        string hql = "FROM " ~ info.name ~ " WHERE " ~ referencedPropertyName ~ "." ~ referencedProperty.entity.getKeyProperty().propertyName ~ "=:Fk";
+        Query q = createQuery(hql).setParameter("Fk", fk);
+        Object[] res = q.listObjects();
+        return res;
+    }
+
     /// Re-read the state of the given instance from the underlying database.
     override void refresh(Object obj) {
         auto info = metaData.findEntityForObject(obj);
@@ -686,7 +695,6 @@ class QueryImpl : Query
                         Object rel = relations[rfrom.selectIndex];
                         pi.setObjectFunc(relations[i], rel);
                     } else {
-                        writeln("scheduling delayed load for " ~ from.pathString ~ "." ~ pi.propertyName);
                         if (pi.columnName !is null) {
                             writeln("relation " ~ pi.propertyName ~ " has column name");
                             if (r.isNull(from.startColumn + pi.columnOffset)) {
@@ -712,6 +720,20 @@ class QueryImpl : Query
                             // TODO:
                             assert(false, "relation " ~ pi.propertyName ~ " has no column name. To be implemented.");
                         }
+                    }
+                } else if (pi.oneToMany) {
+                    writeln("scheduling lazy load for " ~ from.pathString ~ "." ~ pi.propertyName);
+                    writeln("relation " ~ pi.propertyName ~ " has column name");
+                    // FK is not null
+                    if (pi.lazyLoad) {
+                        // lazy load
+                        Variant id = ei.getKey(relations[i]);
+                        writeln("scheduling lazy load for " ~ from.pathString ~ "." ~ pi.propertyName ~ " by FK " ~ id.toString);
+                        LazyCollectionLoader loader = new LazyCollectionLoader(sess, pi, id);
+                        pi.setCollectionDelegateFunc(relations[i], &loader.load);
+                    } else {
+                        // delayed load
+                        assert(false, "delayed load of OneToMany is not supported yet. Use LazyCollection!" ~ pi.referencedEntityName);
                     }
                 }
             }
@@ -836,6 +858,26 @@ class LazyObjectLoader {
         writeln("lazy loading of " ~ pi.referencedEntityName ~ " with id " ~ id.toString);
         // TODO: handle closed session
         return sess.loadObject(pi.referencedEntityName, id);
+    }
+}
+
+class LazyCollectionLoader {
+    const PropertyInfo pi;
+    Variant fk;
+    SessionImpl sess;
+    this(SessionImpl sess, const PropertyInfo pi, Variant fk) {
+        assert(pi.referencedEntity !is null && pi.referencedProperty !is null, "LazyCollectionLoader: No referenced property specified for foreign key column");
+        writeln("Created lazy loader for collection " ~ pi.referencedEntityName ~ " by fk " ~ fk.toString);
+        this.pi = pi;
+        this.fk = fk;
+        this.sess = sess;
+    }
+    Object[] load() {
+        writeln("LazyObjectLoader.load()");
+        writeln("lazy loading of " ~ pi.referencedEntityName ~ " with fk " ~ pi.referencedPropertyName ~ " == " ~ fk.toString);
+        // TODO: handle closed session
+        Object[] res = sess.loadReferencedObjects(pi.referencedEntity, pi.referencedPropertyName, fk);
+        return res;
     }
 }
 

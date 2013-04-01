@@ -464,6 +464,18 @@ string getOneToOneReferencedPropertyName(T, string m)() {
 	return null;
 }
 
+string getOneToManyReferencedPropertyName(T, string m)() {
+    foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
+        static if (is(typeof(a) == OneToMany)) {
+            return emptyStringToNull(a.name);
+        }
+        static if (a.stringof == OneToOne.stringof) {
+            return null;
+        }
+    }
+    return null;
+}
+
 int getColumnLength(T, string m)() {
 	foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
 		static if (is(typeof(a) == Column)) {
@@ -1577,18 +1589,17 @@ string getManyToOnePropertyDef(T, immutable string m)() {
 string getOneToManyPropertyDef(T, immutable string m)() {
     immutable string referencedEntityName = getPropertyReferencedEntityName!(T,m);
     immutable string referencedClassName = getPropertyReferencedClassName!(T,m);
-    immutable string referencedPropertyName = getOneToOneReferencedPropertyName!(T,m);
+    immutable string referencedPropertyName = getOneToManyReferencedPropertyName!(T,m);
+    static assert (referencedPropertyName != null, "OneToMany should have referenced property name parameter");
     immutable string entityClassName = fullyQualifiedName!T;
     immutable string propertyName = getPropertyName!(T,m)();
     static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
     static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, OneToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": ManyToOne property cannot have Column, Id, Generated, OneToOne, ManyToMany or Embedded annotation");
-    immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
-    immutable bool isId = hasMemberAnnotation!(T, m, Id) || isGenerated;
     immutable string columnName = getJoinColumnName!(T, m)();
     immutable bool isCollection = isCollectionMember!(T,m);
     static assert (isCollection, "OneToMany property " ~ m ~ " should be array of objects or LazyCollection");
     static assert (columnName == null, "OneToMany property " ~ m ~ " should not have JoinColumn name");
-    immutable bool isLazy = isLazyMember!(T,m);
+    immutable bool isLazy = isLazyMember!(T,m) || isLazyCollectionMember!(T,m);
     immutable length = getColumnLength!(T, m);
     immutable bool hasNull = hasMemberAnnotation!(T,m, Null);
     immutable bool hasNotNull = hasMemberAnnotation!(T,m, NotNull);
@@ -1683,9 +1694,11 @@ string getOneToManyPropertyDef(T, immutable string m)() {
     return "    new PropertyInfo(\"" ~ propertyName ~ "\", " ~ 
         (columnName is null ? "null" : "\"" ~ columnName ~ "\"") ~ ", " ~ 
             typeName ~ ", " ~ 
-            format("%s",length) ~ ", " ~ (isId ? "true" : "false")  ~ ", " ~ 
-            (isGenerated ? "true" : "false")  ~ ", " ~ (nullable ? "true" : "false") ~ ", " ~ 
-            "RelationType.ManyToOne, " ~
+            format("%s",length) ~ ", " ~ 
+            "false"  ~ ", " ~ // id
+            "false"  ~ ", " ~ // generated
+            (nullable ? "true" : "false") ~ ", " ~ 
+            "RelationType.OneToMany, " ~
             (referencedEntityName !is null ? "\"" ~ referencedEntityName ~ "\"" : "null")  ~ ", " ~ 
             (referencedPropertyName !is null ? "\"" ~ referencedPropertyName ~ "\"" : "null")  ~ ", " ~ 
             readerFuncDef ~ ", " ~
@@ -2089,6 +2102,8 @@ abstract class SchemaInfo : EntityMetaData {
                     // read FK column
                     appendCommaDelimitedList(query, pi.columnName ~ "=?");
                 }
+            } else if (pi.oneToMany || pi.manyToMany) {
+                // skip
             } else {
                 appendCommaDelimitedList(query, pi.columnName ~ "=?");
 			}
@@ -2109,6 +2124,8 @@ abstract class SchemaInfo : EntityMetaData {
                     // read FK column
                     appendCommaDelimitedList(query, pi.columnName);
                 }
+            } else if (pi.oneToMany || pi.manyToMany) {
+                // skip
             } else {
                 appendCommaDelimitedList(query, pi.columnName);
 			}
@@ -2129,6 +2146,8 @@ abstract class SchemaInfo : EntityMetaData {
                     // read FK column
                     count++;
                 }
+            } else if (pi.oneToMany || pi.manyToMany) {
+                // skip
             } else {
                 count++;
             }
@@ -2149,6 +2168,8 @@ abstract class SchemaInfo : EntityMetaData {
                     // read FK column
                     appendCommaDelimitedList(query, "?");
                 }
+            } else if (pi.oneToMany || pi.manyToMany) {
+                // skip
             } else {
                 appendCommaDelimitedList(query, "?");
 			}
@@ -2474,8 +2495,8 @@ version(unittest) {
         @OneToMany("customer")
         LazyCollection!User users;
 
-        @OneToMany("customer")
-        User[] users2;
+//        @OneToMany("customer")
+//        User[] users2;
         
         this() {
 			address = new Address();
