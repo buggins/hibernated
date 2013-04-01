@@ -203,6 +203,20 @@ class EntityCache {
     void put(Variant key, Object obj) {
         items[key] = obj;
     }
+    Object[] lookup(Variant[] keys, out Variant[] unknownKeys) {
+        Variant[] unknown;
+        Object[] res;
+        foreach(key; keys) {
+            Object obj = peek(normalize(key));
+            if (obj !is null) {
+                res ~= obj;
+            } else {
+                unknown ~= normalize(key);
+            }
+        }
+        unknownKeys = unknown;
+        return res;
+    }
 }
 
 /// Implementation of HibernateD session
@@ -229,19 +243,23 @@ class SessionImpl : Session {
     }
 
     package bool keyInCache(string entityName, Variant key) {
-        return getCache(entityName).hasKey(key);
+        return getCache(entityName).hasKey(normalize(key));
     }
     
     package Object peekFromCache(string entityName, Variant key) {
-        return getCache(entityName).peek(key);
+        return getCache(entityName).peek(normalize(key));
     }
 
     package Object getFromCache(string entityName, Variant key) {
-        return getCache(entityName).get(key);
+        return getCache(entityName).get(normalize(key));
     }
 
     package void putToCache(string entityName, Variant key, Object value) {
-        return getCache(entityName).put(key, value);
+        return getCache(entityName).put(normalize(key), value);
+    }
+
+    package Object[] lookupCache(string entityName, Variant[] keys, out Variant[] unknownKeys) {
+        return getCache(entityName).lookup(keys, unknownKeys);
     }
     
     override EntityMetaData getMetaData() {
@@ -528,6 +546,15 @@ struct ObjectList {
     }
 }
 
+Variant normalize(Variant v) {
+    // variants of different type are not equal, normalize to make sure that keys Variant(1) and Variant(1L) are the same
+    if (v.convertsTo!long)
+        return Variant(v.get!long);
+    else if (v.convertsTo!ulong)
+        return Variant(v.get!ulong);
+    return Variant(v.toString);
+}
+
 /// task to load reference entity
 class PropertyLoadItem {
     const PropertyInfo property;
@@ -538,14 +565,6 @@ class PropertyLoadItem {
     @property ref ObjectList[Variant] map() { return _map; }
     @property Variant[] keys() { return _map.keys; }
     @property int length() { return cast(int)_map.length; }
-    static Variant normalize(Variant v) {
-        // variants of different type are not equal, normalize to make sure that keys Variant(1) and Variant(1L) are the same
-        if (v.convertsTo!long)
-            return Variant(v.get!long);
-        else if (v.convertsTo!ulong)
-            return Variant(v.get!ulong);
-        return Variant(v.toString);
-    }
     ObjectList * opIndex(Variant key) {
         Variant id = normalize(key);
         if ((id in _map) is null) {
@@ -561,8 +580,12 @@ class PropertyLoadItem {
     }
     string createCommaSeparatedKeyList() {
         assert(map.length > 0);
+        return createCommaSeparatedKeyList(map.keys);
+    }
+    string createCommaSeparatedKeyList(Variant[] list) {
+        assert(map.length > 0);
         string res;
-        foreach(v; map.keys) {
+        foreach(v; list) {
             if (res.length > 0)
                 res ~= ", ";
             if (v.convertsTo!long || v.convertsTo!ulong) {
@@ -586,14 +609,6 @@ class EntityCollections {
     @property ref ObjectList[Variant] map() { return _map; }
     @property Variant[] keys() { return _map.keys; }
     @property int length() { return cast(int)_map.length; }
-    static Variant normalize(Variant v) {
-        // variants of different type are not equal, normalize to make sure that keys Variant(1) and Variant(1L) are the same
-        if (v.convertsTo!long)
-            return Variant(v.get!long);
-        else if (v.convertsTo!ulong)
-            return Variant(v.get!ulong);
-        return Variant(v.toString);
-    }
     ref Object[] opIndex(Variant key) {
         Variant id = normalize(key);
         if ((id in _map) is null) {
@@ -738,18 +753,23 @@ class QueryImpl : Query
                                 pi.setObjectFunc(relations[i], null);
                                 writeln("relation " ~ pi.propertyName ~ " has null FK");
                             } else {
-                                // FK is not null
-                                if (pi.lazyLoad) {
-                                    // lazy load
-                                    Variant id = r.getVariant(from.startColumn + pi.columnOffset);
-                                    writeln("scheduling lazy load for " ~ from.pathString ~ "." ~ pi.propertyName ~ " with FK " ~ id.toString);
-                                    LazyObjectLoader loader = new LazyObjectLoader(sess, pi, id);
-                                    pi.setObjectDelegateFunc(relations[i], &loader.load);
+                                Variant id = r.getVariant(from.startColumn + pi.columnOffset);
+                                Object existing = sess.peekFromCache(pi.referencedEntity.name, id);
+                                if (existing !is null) {
+                                    writeln("existing relation found in cache");
+                                    pi.setObjectFunc(relations[i], existing);
                                 } else {
-                                    // delayed load
-                                    Variant id = r.getVariant(from.startColumn + pi.columnOffset);
-                                    writeln("relation " ~ pi.propertyName ~ " with FK " ~ id.toString() ~ " will be loaded later");
-                                    loadMap.add(pi, id, relations[i]); // to load later
+                                    // FK is not null
+                                    if (pi.lazyLoad) {
+                                        // lazy load
+                                        writeln("scheduling lazy load for " ~ from.pathString ~ "." ~ pi.propertyName ~ " with FK " ~ id.toString);
+                                        LazyObjectLoader loader = new LazyObjectLoader(sess, pi, id);
+                                        pi.setObjectDelegateFunc(relations[i], &loader.load);
+                                    } else {
+                                        // delayed load
+                                        writeln("relation " ~ pi.propertyName ~ " with FK " ~ id.toString() ~ " will be loaded later");
+                                        loadMap.add(pi, id, relations[i]); // to load later
+                                    }
                                 }
                             }
                         } else {
@@ -784,20 +804,29 @@ class QueryImpl : Query
 
     private void delayedLoadRelations(PropertyLoadMap loadMap) {
         auto types = loadMap.keys;
+        writeln("delayedLoadRelations " ~ to!string(loadMap.length));
         foreach(pi; types) {
+            writeln("delayedLoadRelations " ~ pi.entity.name ~ "." ~ pi.propertyName);
             assert(pi.referencedEntity !is null);
             auto map = loadMap.remove(pi);
             if (map.length == 0)
                 continue;
+            //writeln("delayedLoadRelations " ~ pi.entity.name ~ "." ~ pi.propertyName);
             string keys = map.createCommaSeparatedKeyList();
             if (pi.oneToOne || pi.manyToOne) {
                 if (pi.columnName !is null) {
-                    string hql = "FROM " ~ pi.referencedEntity.name ~ " WHERE " ~ pi.referencedEntity.keyProperty.propertyName ~ " IN (" ~ keys ~ ")";
-                    writeln("delayedLoadRelations: loading " ~ pi.propertyName ~ " HQL: " ~ hql);
-                    QueryImpl q = cast(QueryImpl)sess.createQuery(hql);
-
-                    Object[] list = q.listObjects(null, loadMap);
-                    writeln("delayedLoadRelations: objects loaded " ~ to!string(list.length));
+                    Variant[] unknownKeys;
+                    Object[] list = sess.lookupCache(pi.referencedEntity.name, map.keys, unknownKeys);
+                    if (unknownKeys.length > 0) {
+                        string hql = "FROM " ~ pi.referencedEntity.name ~ " WHERE " ~ pi.referencedEntity.keyProperty.propertyName ~ " IN (" ~ map.createCommaSeparatedKeyList(unknownKeys) ~ ")";
+                        writeln("delayedLoadRelations: loading " ~ pi.propertyName ~ " HQL: " ~ hql);
+                        QueryImpl q = cast(QueryImpl)sess.createQuery(hql);
+                        Object[] fromDB = q.listObjects(null, loadMap);
+                        list ~= fromDB;
+                        writeln("delayedLoadRelations: objects loaded " ~ to!string(fromDB.length));
+                    } else {
+                        writeln("all objects found in cache");
+                    }
                     foreach(rel; list) {
                         Variant key = pi.referencedEntity.getKey(rel);
                         //writeln("map length before: " ~ to!string(map.length));
@@ -846,7 +875,7 @@ class QueryImpl : Query
 
     /// Return the query results as a List of entity objects
     Object[] listObjects(Object placeFirstObjectHere, PropertyLoadMap loadMap) {
-        //writeln("Entering loadObjects");
+        writeln("Entering listObjects " ~ query.hql);
         auto ei = query.entity;
         enforceEx!HibernatedException(ei !is null, "No entity expected in result of query " ~ getQueryString());
         params.checkAllParametersSet();
@@ -875,7 +904,7 @@ class QueryImpl : Query
             writeln("relation properties scheduled for load: loadMap.length == " ~ to!string(loadMap.length));
             delayedLoadRelations(loadMap);
         }
-        //writeln("Exiting loadObjects");
+        writeln("Exiting listObjects " ~ query.hql);
         return res.length > 0 ? res : null;
     }
     
