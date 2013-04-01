@@ -146,10 +146,12 @@ class QueryParser {
 		this.metadata = metadata;
 		this.query = query;
         fromClause = new FromClause();
-		//writeln("query: " ~ query);
+		writeln("tokenizing query: " ~ query);
 		tokens = tokenize(query);
-		parse();
-	}
+        writeln("parsing query: " ~ query);
+        parse();
+        writeln("parsing done");
+    }
 	
 	void parse() {
 		processParameterNames(0, cast(int)tokens.length); // replace pairs {: Ident} with single Parameter token
@@ -1720,5 +1722,10 @@ unittest {
     q = parser.makeSQL(dialect);
     //writeln(q.hql);
     //writeln(q.sql);
+
+    parser = new QueryParser(schema, "FROM Customer WHERE id IN (1)");
+    q = parser.makeSQL(dialect);
+    writeln(q.hql);
+    writeln(q.sql);
 
 }
