@@ -103,19 +103,29 @@ public:
 	//override immutable TypeInfo getReturnedClass() { return null; }
 }
 
-
+/**
+ * Lazy loader. 
+ * 
+ * 
+ */
 struct Lazy(T) {
 	alias Object delegate() delegate_t;
 	private T _value;
 	private delegate_t _delegate;
 
+    //TODO: is it possible to use implicit cast of Lazy!T to T using opCall()?
+    //alias opCall this;
+
 	T opCall() {
-        writeln("Lazy! opCall()");
-		if (_delegate !is null) {
-            writeln("Lazy! opCall() Delegate is set! Calling it to get value");
-			opAssign(cast(T)_delegate());
+        //writeln("Lazy! opCall()");
+        //writeln("Lazy! opCall() delegate " ~ (_delegate !is null ? "is not null" : "is null"));
+        if (_delegate !is null) {
+            //writeln("Lazy! opCall() Delegate is set! Calling it to get value");
+            T value = cast(T)_delegate();
+            //writeln("Lazy! opCall() delegate returned value " ~ value.classinfo.toString);
+            opAssign(value);
         } else {
-            writeln("Lazy! opCall() Returning value instantly");
+            //writeln("Lazy! opCall() Returning value instantly");
         }
 		return _value;
 	}
@@ -133,14 +143,21 @@ struct Lazy(T) {
 	}
 
 	T opAssign(T v) {
-        writeln("Lazy! opAssign(value)");
+        //writeln("Lazy! opAssign(value)");
         _value = v;
 		_delegate = null;
 		return _value;
 	}
 
-	void opAssign(delegate_t lazyLoader) {
-        writeln("Lazy! opAssign(delegate)");
+    ref Lazy!T opAssign(ref Lazy!T v) {
+        //writeln("Lazy! opAssign(value)");
+        _value = v._value;
+        _delegate = v._delegate;
+        return this;
+    }
+    
+    void opAssign(delegate_t lazyLoader) {
+        //writeln("Lazy! opAssign(delegate)");
         _delegate = lazyLoader;
 		_value = null;
 	}

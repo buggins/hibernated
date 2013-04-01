@@ -686,49 +686,36 @@ class QueryImpl : Query
                         Object rel = relations[rfrom.selectIndex];
                         pi.setObjectFunc(relations[i], rel);
                     } else {
-                        if (pi.lazyLoad) {
-                            writeln("scheduling lazy load for " ~ from.pathString ~ "." ~ pi.propertyName);
-                            // TODO: support lazy loader
-                            if (pi.columnName !is null) {
-                                if (r.isNull(from.startColumn + pi.columnOffset)) {
-                                    // FK is null, set NULL to field
-                                    pi.setObjectFunc(relations[i], null);
-                                    writeln("relation " ~ pi.propertyName ~ " has null FK");
-                                } else {
-                                    // FK is not null, create lazy loader
-                                    Object destinationEntity = relations[i];
-                                    Variant id = r.getVariant(from.startColumn + pi.columnOffset);
-                                    LazyObjectLoader loader = new LazyObjectLoader(sess, pi, id);
-//                                    auto loader = delegate() {
-//                                        writeln("lazy loading of " ~ pi.referencedEntityName ~ " with id " ~ id.toString);
-//                                        // TODO: handle closed session
-//                                        return sess.loadObject(pi.referencedEntityName, id);
-//                                    };
-                                    writeln("Setting lazy loader");
-                                    pi.setObjectDelegateFunc(destinationEntity, &loader.load);
-                                    // testing
-                                    writeln("Getting from lazy property instantly");
-                                    pi.getObjectFunc(destinationEntity);
-                                }
+                        writeln("scheduling delayed load for " ~ from.pathString ~ "." ~ pi.propertyName);
+                        if (pi.columnName !is null) {
+                            writeln("relation " ~ pi.propertyName ~ " has column name");
+                            if (r.isNull(from.startColumn + pi.columnOffset)) {
+                                // FK is null, set NULL to field
+                                pi.setObjectFunc(relations[i], null);
+                                writeln("relation " ~ pi.propertyName ~ " has null FK");
                             } else {
-                            }
-                        } else {
-                            writeln("scheduling delayed load for " ~ from.pathString ~ "." ~ pi.propertyName);
-                            if (pi.columnName !is null) {
-                                writeln("relation " ~ pi.propertyName ~ " has column name");
-                                if (r.isNull(from.startColumn + pi.columnOffset)) {
-                                    // FK is null, set NULL to field
-                                    pi.setObjectFunc(relations[i], null);
-                                    writeln("relation " ~ pi.propertyName ~ " has null FK");
+                                // FK is not null
+                                if (pi.lazyLoad) {
+                                    // lazy load
+                                    Variant id = r.getVariant(from.startColumn + pi.columnOffset);
+                                    writeln("scheduling lazy load for " ~ from.pathString ~ "." ~ pi.propertyName ~ " with FK " ~ id.toString);
+                                    LazyObjectLoader loader = new LazyObjectLoader(sess, pi, id);
+                                    //                                    auto loader = delegate() {
+                                    //                                        writeln("lazy loading of " ~ pi.referencedEntityName ~ " with id " ~ id.toString);
+                                    //                                        // TODO: handle closed session
+                                    //                                        return sess.loadObject(pi.referencedEntityName, id);
+                                    //                                    };
+                                    //writeln("Setting lazy loader");
+                                    pi.setObjectDelegateFunc(relations[i], &loader.load);
                                 } else {
-                                    // FK is not null
+                                    // delayed load
                                     Variant id = r.getVariant(from.startColumn + pi.columnOffset);
                                     writeln("relation " ~ pi.propertyName ~ " with FK " ~ id.toString() ~ " will be loaded later");
                                     loadMap.add(pi, id, relations[i]); // to load later
                                 }
-                            } else {
-                                writeln("relation " ~ pi.propertyName ~ " has no column name");
                             }
+                        } else {
+                            writeln("relation " ~ pi.propertyName ~ " has no column name");
                         }
                     }
                 }
@@ -844,11 +831,13 @@ class LazyObjectLoader {
     Variant id;
     SessionImpl sess;
     this(SessionImpl sess, const PropertyInfo pi, Variant id) {
+        writeln("Created lazy loader for " ~ pi.referencedEntityName ~ " with id " ~ id.toString);
         this.pi = pi;
         this.id = id;
         this.sess = sess;
     }
     Object load() {
+        writeln("LazyObjectLoader.load()");
         writeln("lazy loading of " ~ pi.referencedEntityName ~ " with id " ~ id.toString);
         // TODO: handle closed session
         return sess.loadObject(pi.referencedEntityName, id);

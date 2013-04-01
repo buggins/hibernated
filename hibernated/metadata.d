@@ -2000,10 +2000,13 @@ abstract class SchemaInfo : EntityMetaData {
                     if (obj is null) {
                         w.setNull(startColumn + columnCount);
                     } else {
-                        writeln("calling getFunc for property " ~ pi.entity.name ~ "." ~ pi.propertyName);
+                        writeln("setting ID column for property " ~ pi.entity.name ~ "." ~ pi.propertyName);
                         if (pi.lazyLoad)
                             writeln("property has lazy loader");
-                        w.setVariant(startColumn + columnCount, pi.getFunc(obj));
+                        writeln("reading ID variant " ~ pi.propertyName ~ " from object");
+                        Variant id = pi.referencedEntity.getKey(obj);
+                        writeln("setting parameter " ~ to!string(startColumn + columnCount));
+                        w.setVariant(startColumn + columnCount, id);
                     }
                     columnCount++;
                 }
