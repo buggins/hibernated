@@ -589,19 +589,36 @@ template getLazyInstanceType(T) {
 }
 
 template getReferencedInstanceType(T) {
-    static if (is(ti == function)) {
-        static if (isImplicitlyConvertible!(ReturnType!(ti), Object)) {
-            alias ReturnType!(ti) getReferencedInstanceType;
+    //pragma(msg, T.stringof);
+    static if (is(T == delegate)) {
+        //pragma(msg, "is delegate");
+        static if (isImplicitlyConvertible!(ReturnType!(T), Object)) {
+            alias ReturnType!(T) getReferencedInstanceType;
         } else
             static assert(false, "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany property can be only class or Lazy!class");
-    } else {
-        static if (isImplicitlyConvertible!(T, Object))
-            alias T getReferencedInstanceType;
-        else {
-            static if (is(T x == Lazy!Args, Args...))
+    } else static if (is(T == function)) {
+        //pragma(msg, "is function");
+        static if (isImplicitlyConvertible!(ReturnType!(T), Object)) {
+            alias ReturnType!(T) getReferencedInstanceType;
+        } else {
+            static if (is(ReturnType!(T) x == Lazy!Args, Args...))
                 alias Args[0] getReferencedInstanceType;
             else
                 static assert(false, "Type cannot be used as relation " ~ T.stringof);
+        }
+    } else {
+        //pragma(msg, "is not function");
+        static if (is(T x == Lazy!Args, Args...)) {
+            //pragma(msg, "is Lazy! template");
+            pragma(msg, Args[0]);
+            alias Args[0] getReferencedInstanceType;
+        } else {
+            static if (isImplicitlyConvertible!(T, Object)) {
+                //pragma(msg, "isImplicitlyConvertible!(T, Object)");
+                alias T getReferencedInstanceType;
+            } else {
+                static assert(false, "Type cannot be used as relation " ~ T.stringof);
+            }
         }
     }
 }

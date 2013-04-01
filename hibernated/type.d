@@ -16,6 +16,7 @@ module hibernated.type;
 
 import std.datetime;
 import std.stdio;
+import std.traits;
 
 import ddbc.core;
 
@@ -113,10 +114,11 @@ struct Lazy(T) {
 	private T _value;
 	private delegate_t _delegate;
 
-    //TODO: is it possible to use implicit cast of Lazy!T to T using opCall()?
-    //alias opCall this;
+    T opCall() {
+        return get();
+    }
 
-	T opCall() {
+	T get() {
         //writeln("Lazy! opCall()");
         //writeln("Lazy! opCall() delegate " ~ (_delegate !is null ? "is not null" : "is null"));
         if (_delegate !is null) {
@@ -130,16 +132,40 @@ struct Lazy(T) {
 		return _value;
 	}
 
-	T opCall(T newValue) {
-        return opAssign(newValue);
-	}
-	
-	void opCall(delegate_t lazyLoader) {
-		return opAssign(lazyLoader);
-	}
-	
+//	T setValue(T newValue) {
+//        return opAssign(newValue);
+//	}
+//	
+//	void setDelegate(delegate_t lazyLoader) {
+//		return opAssign(lazyLoader);
+//	}
+
+
+//    T opCall() {
+//        //writeln("Lazy! opCall()");
+//        //writeln("Lazy! opCall() delegate " ~ (_delegate !is null ? "is not null" : "is null"));
+//        if (_delegate !is null) {
+//            //writeln("Lazy! opCall() Delegate is set! Calling it to get value");
+//            T value = cast(T)_delegate();
+//            //writeln("Lazy! opCall() delegate returned value " ~ value.classinfo.toString);
+//            opAssign(value);
+//        } else {
+//            //writeln("Lazy! opCall() Returning value instantly");
+//        }
+//        return _value;
+//    }
+//    
+//    T opCall(T newValue) {
+//        return opAssign(newValue);
+//    }
+//    
+//    void opCall(delegate_t lazyLoader) {
+//        return opAssign(lazyLoader);
+//    }
+
+
 	T opCast(TT)() if (is(TT == T)) {
-		return opCall();
+		return get();
 	}
 
 	T opAssign(T v) {
@@ -161,17 +187,38 @@ struct Lazy(T) {
         _delegate = lazyLoader;
 		_value = null;
 	}
+
+    //TODO: is it possible to use implicit cast of Lazy!T to T using opCall()?
+    alias get this;
+}
+
+version(unittest) {
+
+
 }
 
 unittest {
-	static class Foo {
-		string name;
-		this(string v) {
-			name = v;
-		}
-	}
 
-	auto loader = delegate() {
+    class Foo {
+        string name;
+        this(string v) {
+            name = v;
+        }
+    }
+    struct LazyVar(T) {
+        T a;
+        int b;
+        T opCall() {
+            b++;
+            return a;
+        }
+        alias opCall this;
+    }
+    class TestLazy {
+        LazyVar!Foo l;
+    }
+
+    auto loader = delegate() {
 		return new Foo("lazy loaded");
 	};
 
@@ -192,4 +239,15 @@ unittest {
 	Bar bar = new Bar();
 	bar.field = new Foo("name1");
 	res = bar.field();
+
+    LazyVar!string s;
+    s.a = "10";
+    assert(s() == "10");
+    assert(s.b == 1);
+    s.a = "15";
+    assert(s == "15");
+    assert(s.b == 2);
+
+    import hibernated.metadata;
+    TestLazy tl = new TestLazy();
 }
