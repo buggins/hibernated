@@ -1526,9 +1526,12 @@ string getManyToOnePropertyDef(T, immutable string m)() {
     immutable string getObjectFuncDef = 
         "\n" ~
             "function(Object obj) { \n" ~ 
+            "    writeln(\"Inside getObjectFunc\"); \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    assert(entity !is null);\n" ~
-            "    return " ~ propertyObjectGetCode ~ "; \n" ~
+            "    Object res = " ~ propertyObjectGetCode ~ "; \n" ~
+            "    writeln(res is null ? \"obj is null\" : \"obj is not null\"); \n" ~
+            "    return res; \n" ~
             " }\n";
     immutable string setObjectFuncDef = 
         "\n" ~

@@ -146,11 +146,11 @@ class QueryParser {
 		this.metadata = metadata;
 		this.query = query;
         fromClause = new FromClause();
-		writeln("tokenizing query: " ~ query);
+		//writeln("tokenizing query: " ~ query);
 		tokens = tokenize(query);
-        writeln("parsing query: " ~ query);
+        //writeln("parsing query: " ~ query);
         parse();
-        writeln("parsing done");
+        //writeln("parsing done");
     }
 	
 	void parse() {
@@ -846,7 +846,7 @@ class QueryParser {
 		assert(selectClause.length > 0);
 		int colCount = 0;
         foreach(i, s; selectClause) {
-            s.from.selectIndex = i;
+            s.from.selectIndex = cast(int)i;
         }
 		if (selectClause[0].prop is null) {
 			// object alias is specified: add all properties of object

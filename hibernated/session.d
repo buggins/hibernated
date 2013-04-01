@@ -601,24 +601,24 @@ class PropertyLoadItem {
 
 /// task to load reference entity
 class EntityCollections {
-    const PropertyInfo property;
     private ObjectList[Variant] _map; // ID to object list
-    this(const PropertyInfo property) {
-        this.property = property;
-    }
     @property ref ObjectList[Variant] map() { return _map; }
     @property Variant[] keys() { return _map.keys; }
     @property int length() { return cast(int)_map.length; }
     ref Object[] opIndex(Variant key) {
+        //writeln("searching for key " ~ key.toString);
         Variant id = normalize(key);
         if ((id in _map) is null) {
+            //writeln("creating new item");
             _map[id] = ObjectList();
         }
         //assert(length > 0);
+        //writeln("returning item");
         return _map[id].list;
     }
     void add(ref Variant id, Object obj) {
         auto item = opIndex(id);
+        //writeln("item count = " ~ to!string(item.length));
         item ~= obj;
     }
 }
@@ -656,13 +656,13 @@ class QueryImpl : Query
 	ParameterValues params;
 	this(SessionImpl sess, string queryString) {
 		this.sess = sess;
-        writeln("QueryImpl(): HQL: " ~ queryString);
+        //writeln("QueryImpl(): HQL: " ~ queryString);
         QueryParser parser = new QueryParser(sess.metaData, queryString);
-        writeln("parsing");
+        //writeln("parsing");
 		this.query = parser.makeSQL(sess.dialect);
-        writeln("SQL: " ~ this.query.sql);
+        //writeln("SQL: " ~ this.query.sql);
         params = query.createParams();
-        writeln("exiting QueryImpl()");
+        //writeln("exiting QueryImpl()");
     }
 
 	///Get the query string.
@@ -849,18 +849,27 @@ class QueryImpl : Query
                 assert(q !is null);
                 Object[] list = q.listObjects(null, loadMap);
                 writeln("delayedLoadRelations oneToMany: objects loaded " ~ to!string(list.length));
-                EntityCollections collections;
+                EntityCollections collections = new EntityCollections();
                 // group by referenced PK
                 foreach(rel; list) {
                     writeln("delayedLoadRelations oneToMany: reading reference from " ~ pi.referencedEntity.name ~ "." ~ pi.referencedProperty.propertyName ~ " joinColumn=" ~ pi.referencedProperty.columnName);
                     assert(pi.referencedProperty.manyToOne, "property referenced from OneToMany should be ManyToOne");
                     assert(pi.referencedProperty.getObjectFunc !is null);
                     assert(rel !is null);
-                    writeln("delayedLoadRelations oneToMany: reading object " ~ rel.classinfo.toString);
+                    //writeln("delayedLoadRelations oneToMany: reading object " ~ rel.classinfo.toString);
                     Object obj = pi.referencedProperty.getObjectFunc(rel);
+                    //writeln("delayedLoadRelations oneToMany: object is read");
                     if (obj !is null) {
+                        //writeln("delayedLoadRelations oneToMany: object is not null");
+                        //writeln("pi.entity.name=" ~ pi.entity.name ~ ", obj is " ~ obj.classinfo.toString);
+                        //writeln("obj = " ~ obj.toString);
+                        //writeln("pi.entity.keyProperty=" ~ pi.entity.keyProperty.propertyName);
+                        //assert(pi.entity.keyProperty.getFunc !is null);
+                        //Variant k = pi.entity.keyProperty.getFunc(obj);
+                        //writeln("key=" ~ k.toString);
                         Variant key = pi.entity.getKey(obj);
                         collections[key] ~= rel;
+                        //collections.add(k, rel);
                     }
                 }
                 // update objects
