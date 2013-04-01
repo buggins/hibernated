@@ -2492,11 +2492,11 @@ version(unittest) {
         @JoinColumn("account_type_fk")
         Lazy!AccountType accountType;
 
-        @OneToMany("customer")
-        LazyCollection!User users;
-
 //        @OneToMany("customer")
-//        User[] users2;
+//        LazyCollection!User users;
+
+        @OneToMany("customer")
+        User[] users;
         
         this() {
 			address = new Address();
@@ -2795,6 +2795,13 @@ unittest {
 		assert(c3.address.streetAddress == "Baker Street, 24");
 		c3.address.streetAddress = "Baker Street, 24/2";
 		c3.address.zip = "55555";
+
+        User[] c3users = c3.users;
+        writeln("        ***      customer has " ~ to!string(c3users.length) ~ " users");
+        assert(c3users.length == 2);
+        assert(c3users[0].customer == c3);
+        assert(c3users[1].customer == c3);
+
 		//writeln("updating customer 3");
 		sess.update(c3);
         Customer c3_reloaded = sess.load!Customer(3);

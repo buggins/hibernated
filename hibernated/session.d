@@ -679,7 +679,7 @@ class QueryImpl : Query
             }
             relations[i] = row;
         }
-        writeln("fill relations...");
+        //writeln("fill relations...");
         // fill relations
         for (int i = 0; i < query.select.length; i++) {
             if (relations[i] is null)
@@ -724,16 +724,18 @@ class QueryImpl : Query
                 } else if (pi.oneToMany) {
                     writeln("scheduling lazy load for " ~ from.pathString ~ "." ~ pi.propertyName);
                     writeln("relation " ~ pi.propertyName ~ " has column name");
-                    // FK is not null
+                    Variant id = ei.getKey(relations[i]);
                     if (pi.lazyLoad) {
                         // lazy load
-                        Variant id = ei.getKey(relations[i]);
-                        writeln("scheduling lazy load for " ~ from.pathString ~ "." ~ pi.propertyName ~ " by FK " ~ id.toString);
+                        writeln("creating lazy loader for " ~ from.pathString ~ "." ~ pi.propertyName ~ " by FK " ~ id.toString);
                         LazyCollectionLoader loader = new LazyCollectionLoader(sess, pi, id);
                         pi.setCollectionDelegateFunc(relations[i], &loader.load);
                     } else {
                         // delayed load
-                        assert(false, "delayed load of OneToMany is not supported yet. Use LazyCollection!" ~ pi.referencedEntityName);
+                        writeln("Instantly calling loader for " ~ from.pathString ~ "." ~ pi.propertyName ~ " by FK " ~ id.toString);
+                        LazyCollectionLoader loader = new LazyCollectionLoader(sess, pi, id);
+                        Object[] res = loader.load();
+                        pi.setCollectionFunc(relations[i], res);
                     }
                 }
             }
@@ -781,7 +783,7 @@ class QueryImpl : Query
 
     /// Return the query results as a List of entity objects
     Object[] listObjects(Object placeFirstObjectHere, PropertyLoadMap loadMap) {
-        writeln("Entering loadObjects");
+        //writeln("Entering loadObjects");
         auto ei = query.entity;
         enforceEx!HibernatedException(ei !is null, "No entity expected in result of query " ~ getQueryString());
         params.checkAllParametersSet();
@@ -800,7 +802,7 @@ class QueryImpl : Query
         {
             scope(exit) rs.close();
             while(rs.next()) {
-                writeln("read relations...");
+                //writeln("read relations...");
                 Object row = readRelations(res.length > 0 ? null : placeFirstObjectHere, rs, loadMap);
                 if (row !is null)
                     res ~= row;
@@ -810,7 +812,7 @@ class QueryImpl : Query
             writeln("relation properties scheduled for load: loadMap.length == " ~ to!string(loadMap.length));
             delayedLoadRelations(loadMap);
         }
-        writeln("Exiting loadObjects");
+        //writeln("Exiting loadObjects");
         return res.length > 0 ? res : null;
     }
     
