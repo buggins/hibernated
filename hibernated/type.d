@@ -162,7 +162,7 @@ struct Lazy(T) {
 /**
  * Lazy collection loader. 
  */
-struct LazyCollection(T : Object) {
+struct LazyCollection(T) {
     alias Object[] delegate() delegate_t;
     private T[] _value;
     private delegate_t _delegate;

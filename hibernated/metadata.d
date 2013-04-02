@@ -141,7 +141,7 @@ public:
     @property int columnOffset() const { return _columnOffset; } // offset from first column of this entity in selects
 
     package JoinTableInfo _joinTable;
-    @property JoinTableInfo joinTable() { return _joinTable; }
+    @property const (JoinTableInfo) joinTable() const { return _joinTable; }
 
     immutable ReaderFunc readFunc;
     immutable WriterFunc writeFunc;
@@ -319,11 +319,11 @@ class EntityInfo {
 
 class JoinTableInfo {
     package string _tableName;
-    @property string tableName() { return _tableName; }
+    @property string tableName() const { return _tableName; }
     package string _column1;
-    @property string column1() { return _column1; }
+    @property string column1() const { return _column1; }
     package string _column2;
-    @property string column2() { return _column2; }
+    @property string column2() const { return _column2; }
     package EntityInfo _thisEntity;
     @property const (EntityInfo) thisEntity() { return _thisEntity; }
     package EntityInfo _otherEntity;
@@ -333,16 +333,20 @@ class JoinTableInfo {
         this._column1 = column1;
         this._column2 = column2;
     }
+    /// set entities, and replace missing parameters with default generated values
     package void setEntities(const EntityInfo thisEntity, const EntityInfo otherEntity) {
         assert(thisEntity !is null);
         assert(otherEntity !is null);
         this._thisEntity = cast(EntityInfo)thisEntity;
         this._otherEntity = cast(EntityInfo)otherEntity;
+        // table name is constructed from names of two entities delimited with underscore, sorted in alphabetical order, with appended suffix 's': entity1_entity2s
+        // (to get same table name on two sides)
         string entity1 = camelCaseToUnderscoreDelimited(thisEntity.name < otherEntity.name ? thisEntity.name : otherEntity.name);
         string entity2 = camelCaseToUnderscoreDelimited(thisEntity.name < otherEntity.name ? otherEntity.name : thisEntity.name);
-        string _tableName = _tableName !is null ? _tableName : entity1 ~ "_" ~ entity2 ~ "s";
-        string _column1 = _column1 !is null ? _column1 : entity1 ~ "_fk";
-        string _column2 = _column2 !is null ? _column2 : entity2 ~ "_fk";
+        _tableName = _tableName !is null ? _tableName : entity1 ~ "_" ~ entity2 ~ "s";
+        // columns are entity name (CamelCase to camel_case
+        _column1 = _column1 !is null ? _column1 : camelCaseToUnderscoreDelimited(thisEntity.name) ~ "_fk";
+        _column2 = _column2 !is null ? _column2 : camelCaseToUnderscoreDelimited(otherEntity.name) ~ "_fk";
     }
     static string generateJoinTableCode(string table, string column1, string column2) {
         return "new JoinTableInfo(" ~ quoteString(table) ~ ", " ~ quoteString(column1) ~ ", " ~ quoteString(column2) ~ ")";
@@ -1755,16 +1759,14 @@ string getOneToManyPropertyDef(T, immutable string m)() {
 string getManyToManyPropertyDef(T, immutable string m)() {
     immutable string referencedEntityName = getPropertyReferencedEntityName!(T,m);
     immutable string referencedClassName = getPropertyReferencedClassName!(T,m);
-    immutable string referencedPropertyName = getOneToManyReferencedPropertyName!(T,m);
-    static assert (referencedPropertyName != null, "OneToMany should have referenced property name parameter");
     immutable string entityClassName = fullyQualifiedName!T;
     immutable string propertyName = getPropertyName!(T,m);
     static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
     static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, OneToOne, OneToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": ManyToMany property cannot have Column, Id, Generated, OneToOne, OneToMany or Embedded annotation");
     immutable string columnName = getJoinColumnName!(T, m);
     immutable string joinTableName = getJoinTableName!(T, m);
-    immutable string joinColumn1 = getJoinColumn1Name!(T, m);
-    immutable string joinColumn2 = getJoinColumn2Name!(T, m);
+    immutable string joinColumn1 = getJoinTableColumn1!(T, m);
+    immutable string joinColumn2 = getJoinTableColumn2!(T, m);
     immutable string joinTableCode = JoinTableInfo.generateJoinTableCode(joinTableName, joinColumn1, joinColumn2);
     immutable bool isCollection = isCollectionMember!(T,m);
     static assert (isCollection, "ManyToMany property " ~ m ~ " should be array of objects or LazyCollection");
@@ -1852,7 +1854,7 @@ string getManyToManyPropertyDef(T, immutable string m)() {
             quoteBool(nullable) ~ ", " ~ 
             "RelationType.ManyToMany, " ~
             quoteString(referencedEntityName)  ~ ", " ~ 
-            quoteString(referencedPropertyName)  ~ ", " ~ 
+            "null, " ~ //referencedPropertyName
             readerFuncDef ~ ", " ~
             writerFuncDef ~ ", " ~
             getVariantFuncDef ~ ", " ~
@@ -2053,7 +2055,7 @@ string getSimplePropertyDef(T, immutable string m)() {
 			")";
 }
 
-
+/// creates "new PropertyInfo(...)" code to create property metadata for member m of class T
 string getPropertyDef(T, string m)() {
 	immutable bool isEmbedded = hasMemberAnnotation!(T, m, Embedded);
 	immutable bool isOneToOne = hasMemberAnnotation!(T, m, OneToOne);
@@ -2581,6 +2583,7 @@ unittest {
 
 
 version(unittest) {
+
     @Entity
     @Table("users")
     class User {
@@ -2608,6 +2611,9 @@ version(unittest) {
         @ManyToOne
         @JoinColumn("customer_fk")
         Customer customer;
+
+        @ManyToMany
+        LazyCollection!Role roles;
 
         override string toString() {
             return "id=" ~ to!string(id) ~ ", name=" ~ name ~ ", flags=" ~ to!string(flags) ~ ", comment=" ~ comment ~ ", customerId=" ~ (customer is null ? "NULL" : customer.toString());
@@ -2664,6 +2670,16 @@ version(unittest) {
         int id;
         @Column
         string name;
+    }
+
+    @Entity 
+    class Role {
+        @Generated
+        int id;
+        @Column
+        string name;
+        @ManyToMany
+        LazyCollection!User users;
     }
 
     @Entity
@@ -2769,22 +2785,29 @@ version(unittest) {
 
     string[] UNIT_TEST_DROP_TABLES_SCRIPT = 
         [
+         "DROP TABLE IF EXISTS role_users",
          "DROP TABLE IF EXISTS account_type",
          "DROP TABLE IF EXISTS users",
          "DROP TABLE IF EXISTS customers",
          "DROP TABLE IF EXISTS person",
          "DROP TABLE IF EXISTS person_info",
          "DROP TABLE IF EXISTS person_info2",
+         "DROP TABLE IF EXISTS role",
          ];
     string[] UNIT_TEST_CREATE_TABLES_SCRIPT = 
 	[
+         "CREATE TABLE IF NOT EXISTS role (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)",
          "CREATE TABLE IF NOT EXISTS account_type (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)",
          "CREATE TABLE IF NOT EXISTS users (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags INT, comment TEXT, customer_fk BIGINT NULL)",
          "CREATE TABLE IF NOT EXISTS customers (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, zip varchar(20), city varchar(100), street_address varchar(255), account_type_fk int)",
          "CREATE TABLE IF NOT EXISTS person_info (id int not null primary key AUTO_INCREMENT, flags bigint)",
          "CREATE TABLE IF NOT EXISTS person (id int not null primary key AUTO_INCREMENT, first_name varchar(255) not null, last_name varchar(255) not null, more_info_fk int)",
          "CREATE TABLE IF NOT EXISTS person_info2 (id int not null primary key AUTO_INCREMENT, flags bigint, person_info_fk int)",
+         "CREATE TABLE IF NOT EXISTS role_users (role_fk int not null, user_fk int not null, primary key (role_fk, user_fk), unique index(user_fk, role_fk))",
 
+         "INSERT INTO role SET id=1, name='admin'",
+         "INSERT INTO role SET id=2, name='viewer'",
+         "INSERT INTO role SET id=3, name='editor'",
          "INSERT INTO account_type SET id=1, name='Type1'",
          "INSERT INTO account_type SET id=2, name='Type2'",
          "INSERT INTO customers SET id=1, name='customer 1', zip='12345', account_type_fk=1",
@@ -2804,7 +2827,14 @@ version(unittest) {
          "INSERT INTO person SET id=1, first_name='Andrei', last_name='Alexandrescu', more_info_fk=3",
          "INSERT INTO person SET id=2, first_name='Walter', last_name='Bright', more_info_fk=4",
          "INSERT INTO person SET id=3, first_name='John', last_name='Smith', more_info_fk=5",
-    ];
+         "INSERT INTO role_users SET role_fk=1, user_fk=1",
+         "INSERT INTO role_users SET role_fk=2, user_fk=1",
+         "INSERT INTO role_users SET role_fk=2, user_fk=2",
+         "INSERT INTO role_users SET role_fk=2, user_fk=3",
+         "INSERT INTO role_users SET role_fk=3, user_fk=2",
+         "INSERT INTO role_users SET role_fk=3, user_fk=3",
+         "INSERT INTO role_users SET role_fk=3, user_fk=5",
+         ];
 
     void recreateTestSchema() {
         DataSource connectionPool = createUnitTestMySQLDataSource();
@@ -2820,11 +2850,11 @@ version(unittest) {
 unittest {
 
 	// Checking generated metadata
-	EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, T1, TypeTest, Address);
+	EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, T1, TypeTest, Address, Role);
 
 	writeln("metadata test 1");
 
-	assert(schema.getEntityCount() == 6);
+	assert(schema.getEntityCount() == 7);
 	assert(schema["User"]["name"].columnName == "name");
 	assert(schema["User"][0].columnName == "id");
 	assert(schema["User"][2].propertyName == "flags");
@@ -2837,6 +2867,17 @@ unittest {
 	assert(schema["Customer"]["address"].referencedEntity !is null);
 	assert(schema["Customer"]["address"].referencedEntity["streetAddress"].columnName == "street_address");
     assert(schema["User"]["customer"].columnName !is null);
+
+    assert(schema["Customer"]["users"].relation == RelationType.OneToMany);
+    assert(schema["User"]["customer"].relation == RelationType.ManyToOne);
+    assert(schema["User"]["roles"].relation == RelationType.ManyToMany);
+    assert(schema["User"]["roles"].joinTable !is null);
+    assert(schema["User"]["roles"].joinTable.tableName == "role_users");
+    assert(schema["User"]["roles"].joinTable.column1 == "user_fk");
+    assert(schema["User"]["roles"].joinTable.column2 == "role_fk");
+    assert(schema["Role"]["users"].joinTable.tableName == "role_users");
+    assert(schema["Role"]["users"].joinTable.column1 == "role_fk");
+    assert(schema["Role"]["users"].joinTable.column2 == "user_fk");
 
 	assert(schema["User"]["id"].readFunc !is null);
 
@@ -2877,7 +2918,7 @@ unittest {
 		writeln("metadata test 2");
 
         // Checking generated metadata
-		EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, T1, TypeTest, Address);
+		EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, T1, TypeTest, Address, Role);
         Dialect dialect = new MySQLDialect();
         DataSource ds = createUnitTestMySQLDataSource();
         SessionFactory factory = new SessionFactoryImpl(schema, dialect, ds);
