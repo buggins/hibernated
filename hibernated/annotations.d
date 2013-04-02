@@ -174,13 +174,13 @@ struct OneToMany {
 }
 
 /**
- * @ManyToMany(joinColumn1, joinColumn2, joinTableName) - referenced objects use many-to-many relation via additional join table, requires additional parameters to specify join table to implement relation, and fk columns to referene this and related entities.
+ * @ManyToMany(joinTableName, joinColumn1, joinColumn2) - referenced objects use many-to-many relation via additional join table, requires additional parameters to specify join table to implement relation, and fk columns to referene this and related entities.
  * @ManyToMany or @ManyToMany() - referenced objects use many-to-many relation via additional join table, will autogenerate join table name to implement relation, and fk column names to referene this and related entities.
  */
 struct ManyToMany {
+    immutable string joinTableName;
     immutable string joinColumn1;
     immutable string joinColumn2;
-    immutable string joinTableName;
 }
 
 /*

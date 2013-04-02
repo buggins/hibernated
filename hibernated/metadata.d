@@ -140,6 +140,9 @@ public:
     package int _columnOffset; // offset from first column of this entity in selects
     @property int columnOffset() const { return _columnOffset; } // offset from first column of this entity in selects
 
+    package JoinTableInfo _joinTable;
+    @property JoinTableInfo joinTable() { return _joinTable; }
+
     immutable ReaderFunc readFunc;
     immutable WriterFunc writeFunc;
     immutable GetVariantFunc getFunc;
@@ -168,7 +171,8 @@ public:
              SetCollectionFunc setCollectionFunc = null,
              SetObjectDelegateFunc setObjectDelegateFunc = null, 
              SetCollectionDelegateFunc setCollectionDelegateFunc = null, 
-             bool lazyLoad = false, bool collection = false) {
+             bool lazyLoad = false, bool collection = false,
+            JoinTableInfo joinTable = null) {
 		this.propertyName = propertyName;
 		this.columnName = columnName;
 		this.columnType = cast(immutable Type)columnType;
@@ -194,7 +198,14 @@ public:
         this.setCollectionDelegateFunc = setCollectionDelegateFunc;
         this.getCollectionFunc = getCollectionFunc;
         this.setCollectionFunc = setCollectionFunc;
+        this._joinTable = joinTable;
 	}
+
+    package void updateJoinTable() {
+        assert(relation == RelationType.ManyToMany);
+        assert(_joinTable !is null);
+        _joinTable.setEntities(entity, referencedEntity);
+    }
 
     const hash_t opHash() const {
         return (cast(hash_t)(cast(void*)this)) * 31;
@@ -304,6 +315,43 @@ class EntityInfo {
         foreach(pi; this)
             pi.copyFieldFunc(to, from);
     }
+}
+
+class JoinTableInfo {
+    package string _tableName;
+    @property string tableName() { return _tableName; }
+    package string _column1;
+    @property string column1() { return _column1; }
+    package string _column2;
+    @property string column2() { return _column2; }
+    package EntityInfo _thisEntity;
+    @property const (EntityInfo) thisEntity() { return _thisEntity; }
+    package EntityInfo _otherEntity;
+    @property const (EntityInfo) otherEntity() { return _otherEntity; }
+    this(string tableName, string column1, string column2) {
+        this._tableName = tableName;
+        this._column1 = column1;
+        this._column2 = column2;
+    }
+    package void setEntities(const EntityInfo thisEntity, const EntityInfo otherEntity) {
+        assert(thisEntity !is null);
+        assert(otherEntity !is null);
+        this._thisEntity = cast(EntityInfo)thisEntity;
+        this._otherEntity = cast(EntityInfo)otherEntity;
+        string entity1 = camelCaseToUnderscoreDelimited(thisEntity.name < otherEntity.name ? thisEntity.name : otherEntity.name);
+        string entity2 = camelCaseToUnderscoreDelimited(thisEntity.name < otherEntity.name ? otherEntity.name : thisEntity.name);
+        string _tableName = _tableName !is null ? _tableName : entity1 ~ "_" ~ entity2 ~ "s";
+        string _column1 = _column1 !is null ? _column1 : entity1 ~ "_fk";
+        string _column2 = _column2 !is null ? _column2 : entity2 ~ "_fk";
+    }
+    static string generateJoinTableCode(string table, string column1, string column2) {
+        return "new JoinTableInfo(" ~ quoteString(table) ~ ", " ~ quoteString(column1) ~ ", " ~ quoteString(column2) ~ ")";
+    }
+    
+}
+
+string quoteString(string s) {
+    return s is null ? "null" : "\"" ~ s ~ "\"";
 }
 
 string capitalizeFieldName(immutable string name) {
@@ -446,6 +494,33 @@ string getJoinColumnName(T, string m)() {
 		}
 	}
 	return null;
+}
+
+string getJoinTableName(T, string m)() {
+    foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
+        static if (is(typeof(a) == JoinTable)) {
+            return emptyStringToNull(a.joinTableName);
+        }
+    }
+    return null;
+}
+
+string getJoinTableColumn1(T, string m)() {
+    foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
+        static if (is(typeof(a) == JoinTable)) {
+            return emptyStringToNull(a.joinColumn1);
+        }
+    }
+    return null;
+}
+
+string getJoinTableColumn2(T, string m)() {
+    foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
+        static if (is(typeof(a) == JoinTable)) {
+            return emptyStringToNull(a.joinColumn2);
+        }
+    }
+    return null;
 }
 
 string emptyStringToNull(string s) {
@@ -1333,20 +1408,18 @@ string getOneToOnePropertyDef(T, immutable string m)() {
 	immutable string referencedClassName = getPropertyReferencedClassName!(T,m);
 	immutable string referencedPropertyName = getOneToOneReferencedPropertyName!(T,m);
 	immutable string entityClassName = fullyQualifiedName!T;
-    immutable string propertyName = getPropertyName!(T,m)();
+    immutable string propertyName = getPropertyName!(T,m);
     static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
     static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, ManyToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": OneToOne property cannot have Column, Id, Generated, ManyToOne, ManyToMany or Embedded annotation");
-    immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
-    immutable bool isId = hasMemberAnnotation!(T, m, Id) || isGenerated;
     immutable bool isLazy = isLazyMember!(T,m);
-    immutable string columnName = getJoinColumnName!(T, m)();
+    immutable string columnName = getJoinColumnName!(T, m);
 	immutable length = getColumnLength!(T, m)();
 	immutable bool hasNull = hasMemberAnnotation!(T,m, Null);
 	immutable bool hasNotNull = hasMemberAnnotation!(T,m, NotNull);
 	immutable bool nullable = hasNull ? true : (hasNotNull ? false : true); //canColumnTypeHoldNulls!(T.m)
 	immutable bool unique = hasMemberAnnotation!(T, m, UniqueKey);
 	immutable string typeName = "new EntityType(cast(immutable TypeInfo_Class)" ~ entityClassName ~ ".classinfo, \"" ~ entityClassName ~ "\")"; //getColumnTypeName!(T, m)();
-	immutable string propertyReadCode = getPropertyReadCode!(T,m)();
+	immutable string propertyReadCode = getPropertyReadCode!(T,m);
 	immutable string datasetReadCode = null; //getColumnTypeDatasetReadCode!(T,m)();
 	immutable string propertyWriteCode = null; //getPropertyWriteCode!(T,m)();
 	immutable string datasetWriteCode = null; //getColumnTypeDatasetWriteCode!(T,m)();
@@ -1430,14 +1503,15 @@ string getOneToOnePropertyDef(T, immutable string m)() {
 	//	pragma(msg, writerFuncDef);
 	
 	return "    new PropertyInfo(\"" ~ propertyName ~ "\", " ~ 
-            (columnName is null ? "null" : "\"" ~ columnName ~ "\"") ~ ", " ~ 
+            quoteString(columnName) ~ ", " ~ 
             typeName ~ ", " ~ 
-		    format("%s",length) ~ ", " ~ (isId ? "true" : "false")  ~ ", " ~ 
-		    (isGenerated ? "true" : "false")  ~ ", " ~ 
+		    format("%s",length) ~ ", " ~ 
+            "false, " ~ // id
+		    "false, " ~ // generated
             (nullable ? "true" : "false") ~ ", " ~ 
 		    "RelationType.OneToOne, " ~
-		    (referencedEntityName !is null ? "\"" ~ referencedEntityName ~ "\"" : "null")  ~ ", " ~ 
-		    (referencedPropertyName !is null ? "\"" ~ referencedPropertyName ~ "\"" : "null")  ~ ", " ~ 
+            quoteString(referencedEntityName)  ~ ", " ~ 
+            quoteString(referencedPropertyName)  ~ ", " ~ 
 		    readerFuncDef ~ ", " ~
 		    writerFuncDef ~ ", " ~
 		    getVariantFuncDef ~ ", " ~
@@ -1465,8 +1539,6 @@ string getManyToOnePropertyDef(T, immutable string m)() {
     immutable string propertyName = getPropertyName!(T,m)();
     static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
     static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, OneToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": ManyToOne property cannot have Column, Id, Generated, OneToOne, ManyToMany or Embedded annotation");
-    immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
-    immutable bool isId = hasMemberAnnotation!(T, m, Id) || isGenerated;
     immutable string columnName = getJoinColumnName!(T, m)();
     static assert (columnName != null, "ManyToOne property " ~ m ~ " has no JoinColumn name");
     immutable bool isLazy = isLazyMember!(T,m);
@@ -1563,13 +1635,15 @@ string getManyToOnePropertyDef(T, immutable string m)() {
     //  pragma(msg, writerFuncDef);
     
     return "    new PropertyInfo(\"" ~ propertyName ~ "\", " ~ 
-        (columnName is null ? "null" : "\"" ~ columnName ~ "\"") ~ ", " ~ 
+            quoteString(columnName) ~ ", " ~ 
             typeName ~ ", " ~ 
-            format("%s",length) ~ ", " ~ (isId ? "true" : "false")  ~ ", " ~ 
-            (isGenerated ? "true" : "false")  ~ ", " ~ (nullable ? "true" : "false") ~ ", " ~ 
+            format("%s",length) ~ ", " ~ 
+            "false, " ~ // id
+            "false, " ~ // generated
+            (nullable ? "true" : "false") ~ ", " ~ 
             "RelationType.ManyToOne, " ~
-            (referencedEntityName !is null ? "\"" ~ referencedEntityName ~ "\"" : "null")  ~ ", " ~ 
-            (referencedPropertyName !is null ? "\"" ~ referencedPropertyName ~ "\"" : "null")  ~ ", " ~ 
+            quoteString(referencedEntityName)  ~ ", " ~ 
+            quoteString(referencedPropertyName)  ~ ", " ~ 
             readerFuncDef ~ ", " ~
             writerFuncDef ~ ", " ~
             getVariantFuncDef ~ ", " ~
@@ -1597,7 +1671,7 @@ string getOneToManyPropertyDef(T, immutable string m)() {
     immutable string entityClassName = fullyQualifiedName!T;
     immutable string propertyName = getPropertyName!(T,m)();
     static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
-    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, OneToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": ManyToOne property cannot have Column, Id, Generated, OneToOne, ManyToMany or Embedded annotation");
+    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, OneToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": OneToMany property cannot have Column, Id, Generated, OneToOne, ManyToMany or Embedded annotation");
     immutable string columnName = getJoinColumnName!(T, m)();
     immutable bool isCollection = isCollectionMember!(T,m);
     static assert (isCollection, "OneToMany property " ~ m ~ " should be array of objects or LazyCollection");
@@ -1626,17 +1700,7 @@ string getOneToManyPropertyDef(T, immutable string m)() {
     //  pragma(msg, "property write: " ~ propertyWriteCode);
     //  pragma(msg, "variant get: " ~ propertyVariantGetCode);
     immutable string readerFuncDef = "null";
-    //      "\n" ~
-    //      "function(Object obj, DataSetReader r, int index) { \n" ~ 
-    //          "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
-    //          "    " ~ propertyWriteCode ~ " \n" ~
-    //          " }\n";
     immutable string writerFuncDef = "null";
-    //      "\n" ~
-    //      "function(Object obj, DataSetWriter r, int index) { \n" ~ 
-    //          "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
-    //          "    " ~ datasetWriteCode ~ " \n" ~
-    //          " }\n";
     immutable string getVariantFuncDef = 
         "\n" ~
             "function(Object obj) { \n" ~ 
@@ -1695,15 +1759,15 @@ string getOneToManyPropertyDef(T, immutable string m)() {
     //  pragma(msg, writerFuncDef);
     
     return "    new PropertyInfo(\"" ~ propertyName ~ "\", " ~ 
-        (columnName is null ? "null" : "\"" ~ columnName ~ "\"") ~ ", " ~ 
+            quoteString(columnName) ~ ", " ~ 
             typeName ~ ", " ~ 
             format("%s",length) ~ ", " ~ 
             "false"  ~ ", " ~ // id
             "false"  ~ ", " ~ // generated
             (nullable ? "true" : "false") ~ ", " ~ 
             "RelationType.OneToMany, " ~
-            (referencedEntityName !is null ? "\"" ~ referencedEntityName ~ "\"" : "null")  ~ ", " ~ 
-            (referencedPropertyName !is null ? "\"" ~ referencedPropertyName ~ "\"" : "null")  ~ ", " ~ 
+            quoteString(referencedEntityName)  ~ ", " ~ 
+            quoteString(referencedPropertyName)  ~ ", " ~ 
             readerFuncDef ~ ", " ~
             writerFuncDef ~ ", " ~
             getVariantFuncDef ~ ", " ~
@@ -1719,6 +1783,135 @@ string getOneToManyPropertyDef(T, immutable string m)() {
             setCollectionDelegateFuncDef ~ ", " ~
             (isLazy ? "true" : "false") ~ ", " ~ // lazy
             "true" ~ // is collection
+            ")";
+}
+
+/// generate source code for creation of ManyToMany definition
+string getManyToManyPropertyDef(T, immutable string m)() {
+    immutable string referencedEntityName = getPropertyReferencedEntityName!(T,m);
+    immutable string referencedClassName = getPropertyReferencedClassName!(T,m);
+    immutable string referencedPropertyName = getOneToManyReferencedPropertyName!(T,m);
+    static assert (referencedPropertyName != null, "OneToMany should have referenced property name parameter");
+    immutable string entityClassName = fullyQualifiedName!T;
+    immutable string propertyName = getPropertyName!(T,m);
+    static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
+    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, OneToOne, OneToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": ManyToMany property cannot have Column, Id, Generated, OneToOne, OneToMany or Embedded annotation");
+    immutable string columnName = getJoinColumnName!(T, m);
+    immutable string joinTableName = getJoinTableName!(T, m);
+    immutable string joinColumn1 = getJoinColumn1Name!(T, m);
+    immutable string joinColumn2 = getJoinColumn2Name!(T, m);
+    immutable string joinTableCode = JoinTableInfo.generateJoinTableCode(joinTableName, joinColumn1, joinColumn2);
+    immutable bool isCollection = isCollectionMember!(T,m);
+    static assert (isCollection, "ManyToMany property " ~ m ~ " should be array of objects or LazyCollection");
+    static assert (columnName == null, "ManyToMany property " ~ m ~ " should not have JoinColumn name");
+    immutable bool isLazy = isLazyMember!(T,m) || isLazyCollectionMember!(T,m);
+    immutable length = getColumnLength!(T, m);
+    immutable bool hasNull = hasMemberAnnotation!(T,m, Null);
+    immutable bool hasNotNull = hasMemberAnnotation!(T,m, NotNull);
+    immutable bool nullable = hasNull ? true : (hasNotNull ? false : true); //canColumnTypeHoldNulls!(T.m)
+    immutable bool unique = hasMemberAnnotation!(T, m, UniqueKey);
+    immutable string typeName = "new EntityType(cast(immutable TypeInfo_Class)" ~ entityClassName ~ ".classinfo, \"" ~ entityClassName ~ "\")"; //getColumnTypeName!(T, m)();
+    immutable string propertyReadCode = getPropertyReadCode!(T,m)();
+    immutable string datasetReadCode = null; //getColumnTypeDatasetReadCode!(T,m)();
+    immutable string propertyWriteCode = null; //getPropertyWriteCode!(T,m)();
+    immutable string datasetWriteCode = null; //getColumnTypeDatasetWriteCode!(T,m)();
+    immutable string propertyVariantSetCode = getCollectionPropertyVariantWriteCode!(T, m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
+    immutable string propertyVariantGetCode = "Variant(" ~ propertyReadCode ~ " is null ? null : " ~ propertyReadCode ~ ")"; //getPropertyVariantReadCode!(T,m)();
+    //pragma(msg, "propertyVariantGetCode: " ~ propertyVariantGetCode);
+    //pragma(msg, "propertyVariantSetCode: " ~ propertyVariantSetCode);
+    immutable string propertyObjectSetCode = getPropertyCollectionWriteCode!(T,m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
+    immutable string propertyObjectGetCode = propertyReadCode; //getPropertyVariantReadCode!(T,m)();
+    immutable string keyIsSetCode = null; //getColumnTypeKeyIsSetCode!(T,m)();
+    immutable string isNullCode = propertyReadCode ~ " is null";
+    immutable string copyFieldCode = getPropertyCopyCode!(T,m);
+    //  pragma(msg, "property read: " ~ propertyReadCode);
+    //  pragma(msg, "property write: " ~ propertyWriteCode);
+    //  pragma(msg, "variant get: " ~ propertyVariantGetCode);
+    immutable string readerFuncDef = "null";
+    immutable string writerFuncDef = "null";
+    immutable string getVariantFuncDef = 
+        "\n" ~
+            "function(Object obj) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    return " ~ propertyVariantGetCode ~ "; \n" ~
+            " }\n";
+    immutable string setVariantFuncDef = 
+        "\n" ~
+            "function(Object obj, Variant value) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    " ~ propertyVariantSetCode ~ "\n" ~
+            " }\n";
+    immutable string keyIsSetFuncDef = "\n" ~
+        "function(Object obj) { \n" ~ 
+            "    return false;\n" ~
+            " }\n";
+    immutable string isNullFuncDef = "\n" ~
+        "function(Object obj) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    return " ~ isNullCode ~ ";\n" ~
+            " }\n";
+    immutable string getObjectFuncDef = "null";
+    immutable string setObjectFuncDef = "null";
+    immutable string copyFuncDef = 
+        "\n" ~
+            "function(Object to, Object from) { \n" ~ 
+            "    " ~ entityClassName ~ " toentity = cast(" ~ entityClassName ~ ")to; \n" ~
+            "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
+            "    " ~ copyFieldCode ~ "\n" ~
+            " }\n";
+    immutable string getCollectionFuncDef = 
+        "\n" ~
+            "function(Object obj) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    assert(entity !is null);\n" ~
+            "    return cast(Object[])" ~ propertyObjectGetCode ~ "; \n" ~
+            " }\n";
+    immutable string setCollectionFuncDef = 
+        "\n" ~
+            "function(Object obj, Object[] value) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    " ~ propertyObjectSetCode ~ "\n" ~
+            " }\n";
+    immutable string setObjectDelegateFuncDef = "null";
+    immutable string setCollectionDelegateFuncDef = !isLazy ? "null" :
+    "\n" ~
+        "function(Object obj, Object[] delegate() loader) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    " ~ getLazyPropertyObjectWriteCode!(T,m) ~ "\n" ~
+            " }\n";
+    //  pragma(msg, propertyReadCode);
+    //  pragma(msg, datasetReadCode);
+    //  pragma(msg, propertyWriteCode);
+    //  pragma(msg, datasetWriteCode);
+    //  pragma(msg, readerFuncDef);
+    //  pragma(msg, writerFuncDef);
+    
+    return "    new PropertyInfo(\"" ~ propertyName ~ "\", " ~ 
+            quoteString(columnName) ~ ", " ~ 
+            typeName ~ ", " ~ 
+            format("%s",length) ~ ", " ~ 
+            "false"  ~ ", " ~ // id
+            "false"  ~ ", " ~ // generated
+            (nullable ? "true" : "false") ~ ", " ~ 
+            "RelationType.ManyToMany, " ~
+            quoteString(referencedEntityName)  ~ ", " ~ 
+            quoteString(referencedPropertyName)  ~ ", " ~ 
+            readerFuncDef ~ ", " ~
+            writerFuncDef ~ ", " ~
+            getVariantFuncDef ~ ", " ~
+            setVariantFuncDef ~ ", " ~
+            keyIsSetFuncDef ~ ", " ~
+            isNullFuncDef ~ ", " ~
+            copyFuncDef ~ ", " ~
+            getObjectFuncDef ~ ", " ~
+            setObjectFuncDef ~ ", " ~
+            getCollectionFuncDef ~ ", " ~
+            setCollectionFuncDef ~ ", " ~
+            setObjectDelegateFuncDef ~ ", " ~
+            setCollectionDelegateFuncDef ~ ", " ~
+            (isLazy ? "true" : "false") ~ ", " ~ // lazy
+            "true" ~ ", " ~ // is collection
+            joinTableCode ~
             ")";
 }
 
@@ -1949,7 +2142,7 @@ string getPropertyDef(T, string m)() {
     }
     static if (isManyToMany) {
         //pragma(msg, getOneToOnePropertyDef!(T, m)());
-        static assert(false, "@ManyToMany is not supported so far");
+        return getManyToManyPropertyDef!(T, m);
     }
 }
 
@@ -2340,6 +2533,9 @@ class SchemaInfoImpl(T...) : SchemaInfo {
             e._metadata = this;
             int columnOffset = 0;
             foreach(p; e._properties) {
+                if (p.manyToMany) {
+                    p.updateJoinTable();
+                }
                 p._columnOffset = columnOffset;
                 if (p.embedded) {
                     auto emei = p.referencedEntity;
