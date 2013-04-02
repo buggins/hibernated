@@ -889,14 +889,62 @@ class QueryParser {
             FromClauseItem base = join.base;
             assert(join !is null && base !is null);
             res.appendSpace();
-            res.appendSQL(join.joinType == JoinType.LeftJoin ? "LEFT JOIN " : "INNER JOIN ");
-            res.appendSQL(dialect.quoteIfNeeded(join.entity.tableName) ~ " AS " ~ join.sqlAlias);
-            res.appendSQL(" ON ");
-            //writeln("adding ON");
+
             assert(join.baseProperty !is null);
-            if (join.baseProperty.oneToOne) {
-                assert(join.baseProperty.columnName !is null || join.baseProperty.referencedProperty !is null);
-                if (join.baseProperty.columnName !is null) {
+            if (join.baseProperty.manyToMany) {
+                string joinTableAlias = base.sqlAlias ~ join.sqlAlias;
+                res.appendSQL(join.joinType == JoinType.LeftJoin ? "LEFT JOIN " : "INNER JOIN ");
+
+                res.appendSQL(dialect.quoteIfNeeded(join.baseProperty.joinTable.tableName) ~ " AS " ~ joinTableAlias);
+                res.appendSQL(" ON ");
+                res.appendSQL(base.sqlAlias);
+                res.appendSQL(".");
+                res.appendSQL(dialect.quoteIfNeeded(base.entity.getKeyProperty().columnName));
+                res.appendSQL("=");
+                res.appendSQL(joinTableAlias);
+                res.appendSQL(".");
+                res.appendSQL(dialect.quoteIfNeeded(join.baseProperty.joinTable.column1));
+
+                res.appendSpace();
+
+                res.appendSQL(join.joinType == JoinType.LeftJoin ? "LEFT JOIN " : "INNER JOIN ");
+                res.appendSQL(dialect.quoteIfNeeded(join.entity.tableName) ~ " AS " ~ join.sqlAlias);
+                res.appendSQL(" ON ");
+                res.appendSQL(joinTableAlias);
+                res.appendSQL(".");
+                res.appendSQL(dialect.quoteIfNeeded(join.baseProperty.joinTable.column2));
+                res.appendSQL("=");
+                res.appendSQL(join.sqlAlias);
+                res.appendSQL(".");
+                res.appendSQL(dialect.quoteIfNeeded(join.entity.getKeyProperty().columnName));
+            } else {
+                res.appendSQL(join.joinType == JoinType.LeftJoin ? "LEFT JOIN " : "INNER JOIN ");
+                res.appendSQL(dialect.quoteIfNeeded(join.entity.tableName) ~ " AS " ~ join.sqlAlias);
+                res.appendSQL(" ON ");
+                //writeln("adding ON");
+                if (join.baseProperty.oneToOne) {
+                    assert(join.baseProperty.columnName !is null || join.baseProperty.referencedProperty !is null);
+                    if (join.baseProperty.columnName !is null) {
+                        //writeln("fk is in base");
+                        res.appendSQL(base.sqlAlias);
+                        res.appendSQL(".");
+                        res.appendSQL(dialect.quoteIfNeeded(join.baseProperty.columnName));
+                        res.appendSQL("=");
+                        res.appendSQL(join.sqlAlias);
+                        res.appendSQL(".");
+                        res.appendSQL(dialect.quoteIfNeeded(join.entity.getKeyProperty().columnName));
+                    } else {
+                        //writeln("fk is in join");
+                        res.appendSQL(base.sqlAlias);
+                        res.appendSQL(".");
+                        res.appendSQL(dialect.quoteIfNeeded(base.entity.getKeyProperty().columnName));
+                        res.appendSQL("=");
+                        res.appendSQL(join.sqlAlias);
+                        res.appendSQL(".");
+                        res.appendSQL(dialect.quoteIfNeeded(join.baseProperty.referencedProperty.columnName));
+                    }
+                } else if (join.baseProperty.manyToOne) {
+                    assert(join.baseProperty.columnName !is null, "ManyToOne should have JoinColumn as well");
                     //writeln("fk is in base");
                     res.appendSQL(base.sqlAlias);
                     res.appendSQL(".");
@@ -905,8 +953,7 @@ class QueryParser {
                     res.appendSQL(join.sqlAlias);
                     res.appendSQL(".");
                     res.appendSQL(dialect.quoteIfNeeded(join.entity.getKeyProperty().columnName));
-                } else {
-                    //writeln("fk is in join");
+                } else if (join.baseProperty.oneToMany) {
                     res.appendSQL(base.sqlAlias);
                     res.appendSQL(".");
                     res.appendSQL(dialect.quoteIfNeeded(base.entity.getKeyProperty().columnName));
@@ -914,20 +961,10 @@ class QueryParser {
                     res.appendSQL(join.sqlAlias);
                     res.appendSQL(".");
                     res.appendSQL(dialect.quoteIfNeeded(join.baseProperty.referencedProperty.columnName));
+                } else {
+                    // TODO: support other relations
+                    throw new SyntaxError("Invalid relation type in join");
                 }
-            } else if (join.baseProperty.manyToOne) {
-                assert(join.baseProperty.columnName !is null, "ManyToOne should have JoinColumn as well");
-                //writeln("fk is in base");
-                res.appendSQL(base.sqlAlias);
-                res.appendSQL(".");
-                res.appendSQL(dialect.quoteIfNeeded(join.baseProperty.columnName));
-                res.appendSQL("=");
-                res.appendSQL(join.sqlAlias);
-                res.appendSQL(".");
-                res.appendSQL(dialect.quoteIfNeeded(join.entity.getKeyProperty().columnName));
-            } else {
-                // TODO: support other relations
-                throw new SyntaxError("Only OneToOne relation is supported so far");
             }
         }
 	}
@@ -1723,9 +1760,34 @@ unittest {
     //writeln(q.hql);
     //writeln(q.sql);
 
-    parser = new QueryParser(schema, "FROM Customer WHERE id IN (1)");
+    parser = new QueryParser(schema, "FROM Customer WHERE users.id = 1");
     q = parser.makeSQL(dialect);
-    writeln(q.hql);
-    writeln(q.sql);
+//    writeln(q.hql);
+//    writeln(q.sql);
+    assert(q.sql == "SELECT _t1.id, _t1.name, _t1.zip, _t1.city, _t1.street_address, _t1.account_type_fk FROM customers AS _t1 LEFT JOIN users AS _t2 ON _t1.id=_t2.customer_fk WHERE _t2.id = 1");
+
+    parser = new QueryParser(schema, "FROM Customer WHERE id = 1");
+    q = parser.makeSQL(dialect);
+//    writeln(q.hql);
+//    writeln(q.sql);
+    assert(q.sql == "SELECT _t1.id, _t1.name, _t1.zip, _t1.city, _t1.street_address, _t1.account_type_fk FROM customers AS _t1 WHERE _t1.id = 1");
+
+    parser = new QueryParser(schema, "FROM User WHERE roles.id = 1");
+    q = parser.makeSQL(dialect);
+//    writeln(q.hql);
+//    writeln(q.sql);
+    assert(q.sql == "SELECT _t1.id, _t1.name, _t1.flags, _t1.comment, _t1.customer_fk FROM users AS _t1 LEFT JOIN role_users AS _t1_t2 ON _t1.id=_t1_t2.user_fk LEFT JOIN role AS _t2 ON _t1_t2.role_fk=_t2.id WHERE _t2.id = 1");
+
+    parser = new QueryParser(schema, "FROM Role WHERE users.id = 1");
+    q = parser.makeSQL(dialect);
+//    writeln(q.hql);
+//    writeln(q.sql);
+    assert(q.sql == "SELECT _t1.id, _t1.name FROM role AS _t1 LEFT JOIN role_users AS _t1_t2 ON _t1.id=_t1_t2.role_fk LEFT JOIN users AS _t2 ON _t1_t2.user_fk=_t2.id WHERE _t2.id = 1");
+    
+    parser = new QueryParser(schema, "FROM User WHERE customer.id = 1");
+    q = parser.makeSQL(dialect);
+//    writeln(q.hql);
+//    writeln(q.sql);
+    assert(q.sql == "SELECT _t1.id, _t1.name, _t1.flags, _t1.comment, _t1.customer_fk FROM users AS _t1 LEFT JOIN customers AS _t2 ON _t1.customer_fk=_t2.id WHERE _t2.id = 1");
 
 }
