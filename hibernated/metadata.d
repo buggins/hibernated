@@ -354,6 +354,10 @@ string quoteString(string s) {
     return s is null ? "null" : "\"" ~ s ~ "\"";
 }
 
+string quoteBool(bool b) {
+    return b ? "true" : "false";
+}
+
 string capitalizeFieldName(immutable string name) {
 	return toUpper(name[0..1]) ~ name[1..$];
 }
@@ -1489,7 +1493,7 @@ string getOneToOnePropertyDef(T, immutable string m)() {
 		    format("%s",length) ~ ", " ~ 
             "false, " ~ // id
 		    "false, " ~ // generated
-            (nullable ? "true" : "false") ~ ", " ~ 
+            quoteBool(nullable) ~ ", " ~ 
 		    "RelationType.OneToOne, " ~
             quoteString(referencedEntityName)  ~ ", " ~ 
             quoteString(referencedPropertyName)  ~ ", " ~ 
@@ -1506,8 +1510,8 @@ string getOneToOnePropertyDef(T, immutable string m)() {
             setCollectionFuncDef ~ ", " ~
             setObjectDelegateFuncDef ~ ", " ~
             setCollectionDelegateFuncDef ~ ", " ~
-            (isLazy ? "true" : "false") ~ ", " ~ // lazy
-            (false ? "true" : "false") ~ // collection
+            quoteBool(isLazy) ~ ", " ~ // lazy
+            "false" ~ // collection
             ")";
 }
 
@@ -1606,7 +1610,7 @@ string getManyToOnePropertyDef(T, immutable string m)() {
             format("%s",length) ~ ", " ~ 
             "false, " ~ // id
             "false, " ~ // generated
-            (nullable ? "true" : "false") ~ ", " ~ 
+            quoteBool(nullable) ~ ", " ~ 
             "RelationType.ManyToOne, " ~
             quoteString(referencedEntityName)  ~ ", " ~ 
             quoteString(referencedPropertyName)  ~ ", " ~ 
@@ -1623,8 +1627,8 @@ string getManyToOnePropertyDef(T, immutable string m)() {
             setCollectionFuncDef ~ ", " ~
             setObjectDelegateFuncDef ~ ", " ~
             setCollectionDelegateFuncDef ~ ", " ~
-            (isLazy ? "true" : "false") ~ ", " ~ // lazy
-            (false ? "true" : "false") ~ // collection
+            quoteBool(isLazy) ~ ", " ~ // lazy
+            "false" ~ // collection
             ")";
 }
 
@@ -1725,7 +1729,7 @@ string getOneToManyPropertyDef(T, immutable string m)() {
             format("%s",length) ~ ", " ~ 
             "false"  ~ ", " ~ // id
             "false"  ~ ", " ~ // generated
-            (nullable ? "true" : "false") ~ ", " ~ 
+            quoteBool(nullable) ~ ", " ~ 
             "RelationType.OneToMany, " ~
             quoteString(referencedEntityName)  ~ ", " ~ 
             quoteString(referencedPropertyName)  ~ ", " ~ 
@@ -1742,7 +1746,7 @@ string getOneToManyPropertyDef(T, immutable string m)() {
             setCollectionFuncDef ~ ", " ~
             setObjectDelegateFuncDef ~ ", " ~
             setCollectionDelegateFuncDef ~ ", " ~
-            (isLazy ? "true" : "false") ~ ", " ~ // lazy
+            quoteBool(isLazy) ~ ", " ~ // lazy
             "true" ~ // is collection
             ")";
 }
@@ -1845,7 +1849,7 @@ string getManyToManyPropertyDef(T, immutable string m)() {
             format("%s",length) ~ ", " ~ 
             "false"  ~ ", " ~ // id
             "false"  ~ ", " ~ // generated
-            (nullable ? "true" : "false") ~ ", " ~ 
+            quoteBool(nullable) ~ ", " ~ 
             "RelationType.ManyToMany, " ~
             quoteString(referencedEntityName)  ~ ", " ~ 
             quoteString(referencedPropertyName)  ~ ", " ~ 
@@ -1862,7 +1866,7 @@ string getManyToManyPropertyDef(T, immutable string m)() {
             setCollectionFuncDef ~ ", " ~
             setObjectDelegateFuncDef ~ ", " ~
             setCollectionDelegateFuncDef ~ ", " ~
-            (isLazy ? "true" : "false") ~ ", " ~ // lazy
+            quoteBool(isLazy) ~ ", " ~ // lazy
             "true" ~ ", " ~ // is collection
             joinTableCode ~
             ")";
@@ -1948,9 +1952,9 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
 		    format("%s",length) ~ ", " ~ 
             "false, " ~ // id
 			"false, " ~ // generated
-            (nullable ? "true" : "false") ~ ", " ~ 
+            quoteBool(nullable) ~ ", " ~ 
 			"RelationType.Embedded, " ~
-			(referencedEntityName !is null ? "\"" ~ referencedEntityName ~ "\"" : "null")  ~ ", " ~ 
+			quoteString(referencedEntityName)  ~ ", " ~ 
 		    "null, \n" ~
 			readerFuncDef ~ ", " ~
 			writerFuncDef ~ ", " ~
@@ -2026,12 +2030,6 @@ string getSimplePropertyDef(T, immutable string m)() {
             "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
             "    " ~ copyFieldCode ~ "\n" ~
             " }\n";
-    //	pragma(msg, propertyReadCode);
-	//	pragma(msg, datasetReadCode);
-	//	pragma(msg, propertyWriteCode);
-	//	pragma(msg, datasetWriteCode);
-	//	pragma(msg, readerFuncDef);
-	//	pragma(msg, writerFuncDef);
 	
 	static assert (typeName != null, "Cannot determine column type for member " ~ m ~ " of type " ~ T.stringof);
 	return "    new PropertyInfo(" ~ 
@@ -2039,9 +2037,9 @@ string getSimplePropertyDef(T, immutable string m)() {
             quoteString(columnName) ~ ", " ~ 
             typeName ~ ", " ~ 
 		    format("%s",length) ~ ", " ~ 
-            (isId ? "true" : "false")  ~ ", " ~ 
-			(isGenerated ? "true" : "false")  ~ ", " ~ 
-            (nullable ? "true" : "false") ~ ", " ~ 
+            quoteBool(isId)  ~ ", " ~ 
+            quoteBool(isGenerated)  ~ ", " ~ 
+            quoteBool(nullable) ~ ", " ~ 
 			"RelationType.None, " ~ 
 			"null, " ~ 
 			"null, \n" ~
@@ -2063,9 +2061,6 @@ string getPropertyDef(T, string m)() {
     immutable bool isManyToMany = hasMemberAnnotation!(T, m, ManyToMany);
     immutable bool isOneToMany = hasMemberAnnotation!(T, m, OneToMany);
     immutable bool isSimple = !isEmbedded && !isOneToOne && !isManyToOne && !isManyToMany && !isOneToMany;
-//	pragma(msg, m ~ " isEmbedded=" ~ (isEmbedded ? "true" : "false"))
-//	pragma(msg, m ~ " isOneToOne=" ~ (isOneToOne ? "true" : "false"))
-//	pragma(msg, m ~ " isSimple=" ~ (isSimple ? "true" : "false"))
 	static if (isEmbedded) {
 		//pragma(msg, getEmbeddedPropertyDef!(T, m)());
 		return getEmbeddedPropertyDef!(T, m);
