@@ -2932,6 +2932,8 @@ unittest {
         assert(u1.customer.name == "customer 1");
         assert(u1.customer.accountType() !is null);
         assert(u1.customer.accountType().name == "Type1");
+        Role[] u1roles = u1.roles;
+        assert(u1roles.length == 2);
 
         User u2 = sess.load!User(2);
         assert(u2.name == "user 2");

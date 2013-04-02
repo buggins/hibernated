@@ -777,9 +777,7 @@ class QueryImpl : Query
                             assert(false, "relation " ~ pi.propertyName ~ " has no column name. To be implemented.");
                         }
                     }
-                } else if (pi.oneToMany) {
-                    writeln("scheduling lazy load for " ~ from.pathString ~ "." ~ pi.propertyName);
-                    writeln("relation " ~ pi.propertyName ~ " has column name");
+                } else if (pi.oneToMany || pi.manyToMany) {
                     Variant id = ei.getKey(relations[i]);
                     if (pi.lazyLoad) {
                         // lazy load
@@ -842,17 +840,17 @@ class QueryImpl : Query
                 } else {
                     assert(false, "Delayed loader for non-join column is not yet implemented for OneToOne and ManyToOne");
                 }
-            } else if (pi.oneToMany) {
+            } else if (pi.oneToMany || pi.manyToMany) {
                 string hql = "FROM " ~ pi.referencedEntity.name ~ " WHERE " ~ pi.referencedPropertyName ~ "." ~ pi.referencedEntity.keyProperty.propertyName ~ " IN (" ~ keys ~ ")";
                 writeln("delayedLoadRelations: loading " ~ pi.propertyName ~ " HQL: " ~ hql);
                 QueryImpl q = cast(QueryImpl)sess.createQuery(hql);
                 assert(q !is null);
                 Object[] list = q.listObjects(null, loadMap);
-                writeln("delayedLoadRelations oneToMany: objects loaded " ~ to!string(list.length));
+                writeln("delayedLoadRelations oneToMany/manyToMany: objects loaded " ~ to!string(list.length));
                 EntityCollections collections = new EntityCollections();
                 // group by referenced PK
                 foreach(rel; list) {
-                    writeln("delayedLoadRelations oneToMany: reading reference from " ~ pi.referencedEntity.name ~ "." ~ pi.referencedProperty.propertyName ~ " joinColumn=" ~ pi.referencedProperty.columnName);
+                    writeln("delayedLoadRelations oneToMany/manyToMany: reading reference from " ~ pi.referencedEntity.name ~ "." ~ pi.referencedProperty.propertyName ~ " joinColumn=" ~ pi.referencedProperty.columnName);
                     assert(pi.referencedProperty.manyToOne, "property referenced from OneToMany should be ManyToOne");
                     assert(pi.referencedProperty.getObjectFunc !is null);
                     assert(rel !is null);
@@ -976,7 +974,7 @@ class LazyCollectionLoader {
     Variant fk;
     SessionImpl sess;
     this(SessionImpl sess, const PropertyInfo pi, Variant fk) {
-        assert(pi.referencedEntity !is null && pi.referencedProperty !is null, "LazyCollectionLoader: No referenced property specified for foreign key column");
+        assert(!pi.oneToMany || (pi.referencedEntity !is null && pi.referencedProperty !is null), "LazyCollectionLoader: No referenced property specified for OneToMany foreign key column");
         writeln("Created lazy loader for collection " ~ pi.referencedEntityName ~ " by fk " ~ fk.toString);
         this.pi = pi;
         this.fk = fk;
@@ -985,8 +983,13 @@ class LazyCollectionLoader {
     Object[] load() {
         writeln("LazyObjectLoader.load()");
         writeln("lazy loading of " ~ pi.referencedEntityName ~ " with fk " ~ pi.referencedPropertyName ~ " == " ~ fk.toString);
+        string propertyName;
+        if (pi.oneToMany)
+            propertyName = pi.referencedPropertyName;
+        else
+            propertyName = pi.referencedEntity.getKeyProperty().propertyName;
         // TODO: handle closed session
-        Object[] res = sess.loadReferencedObjects(pi.referencedEntity, pi.referencedPropertyName, fk);
+        Object[] res = sess.loadReferencedObjects(pi.referencedEntity, propertyName, fk);
         return res;
     }
 }
