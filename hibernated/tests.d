@@ -303,7 +303,7 @@ unittest {
     // Checking generated metadata
     EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, T1, TypeTest, Address, Role);
     
-    writeln("metadata test 1");
+    //writeln("metadata test 1");
     
     assert(schema.getEntityCount() == 7);
     assert(schema["User"]["name"].columnName == "name");
@@ -368,7 +368,7 @@ unittest {
 
         import hibernated.dialects.mysqldialect;
 
-        writeln("metadata test 2");
+        //writeln("metadata test 2");
         
         // Checking generated metadata
         EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, T1, TypeTest, Address, Role, GeneratorTest);
@@ -433,7 +433,7 @@ unittest {
         c3.address.zip = "55555";
         
         User[] c3users = c3.users;
-        writeln("        ***      customer has " ~ to!string(c3users.length) ~ " users");
+        //writeln("        ***      customer has " ~ to!string(c3users.length) ~ " users");
         assert(c3users.length == 2);
         assert(c3users[0].customer == c3);
         assert(c3users[1].customer == c3);
@@ -523,8 +523,6 @@ unittest {
         assert(row !is null);
         assert(row[0] == "customer 1"); // name
         assert(row[1] == "12345"); // address.zip
-        
-        writeln("Unit tests");
     }
 }
 

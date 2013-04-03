@@ -29,6 +29,8 @@ import hibernated.core;
 import hibernated.metadata;
 import hibernated.query;
 
+const TRACE_REFS = false;
+
 /// Factory to create HibernateD Sessions - similar to org.hibernate.SessionFactory
 interface SessionFactory {
 	void close();
@@ -755,34 +757,34 @@ class QueryImpl : Query
             for (int j=0; j<ei.length; j++) {
                 auto pi = ei[j];
                 if (pi.oneToOne || pi.manyToOne) {
-                    writeln("updating relations for " ~ from.pathString ~ "." ~ pi.propertyName);
+                    static if (TRACE_REFS) writeln("updating relations for " ~ from.pathString ~ "." ~ pi.propertyName);
                     FromClauseItem rfrom = findRelation(from, pi);
                     if (rfrom !is null && rfrom.selectIndex >= 0) {
                         Object rel = relations[rfrom.selectIndex];
                         pi.setObjectFunc(relations[i], rel);
                     } else {
                         if (pi.columnName !is null) {
-                            writeln("relation " ~ pi.propertyName ~ " has column name");
+                            static if (TRACE_REFS) writeln("relation " ~ pi.propertyName ~ " has column name");
                             if (r.isNull(from.startColumn + pi.columnOffset)) {
                                 // FK is null, set NULL to field
                                 pi.setObjectFunc(relations[i], null);
-                                writeln("relation " ~ pi.propertyName ~ " has null FK");
+                                static if (TRACE_REFS) writeln("relation " ~ pi.propertyName ~ " has null FK");
                             } else {
                                 Variant id = r.getVariant(from.startColumn + pi.columnOffset);
                                 Object existing = sess.peekFromCache(pi.referencedEntity.name, id);
                                 if (existing !is null) {
-                                    writeln("existing relation found in cache");
+                                    static if (TRACE_REFS) writeln("existing relation found in cache");
                                     pi.setObjectFunc(relations[i], existing);
                                 } else {
                                     // FK is not null
                                     if (pi.lazyLoad) {
                                         // lazy load
-                                        writeln("scheduling lazy load for " ~ from.pathString ~ "." ~ pi.propertyName ~ " with FK " ~ id.toString);
+                                        static if (TRACE_REFS) writeln("scheduling lazy load for " ~ from.pathString ~ "." ~ pi.propertyName ~ " with FK " ~ id.toString);
                                         LazyObjectLoader loader = new LazyObjectLoader(sess.accessor, pi, id);
                                         pi.setObjectDelegateFunc(relations[i], &loader.load);
                                     } else {
                                         // delayed load
-                                        writeln("relation " ~ pi.propertyName ~ " with FK " ~ id.toString() ~ " will be loaded later");
+                                        static if (TRACE_REFS) writeln("relation " ~ pi.propertyName ~ " with FK " ~ id.toString() ~ " will be loaded later");
                                         loadMap.add(pi, id, relations[i]); // to load later
                                     }
                                 }
@@ -796,12 +798,12 @@ class QueryImpl : Query
                     Variant id = ei.getKey(relations[i]);
                     if (pi.lazyLoad) {
                         // lazy load
-                        writeln("creating lazy loader for " ~ from.pathString ~ "." ~ pi.propertyName ~ " by FK " ~ id.toString);
+                        static if (TRACE_REFS) writeln("creating lazy loader for " ~ from.pathString ~ "." ~ pi.propertyName ~ " by FK " ~ id.toString);
                         LazyCollectionLoader loader = new LazyCollectionLoader(sess.accessor, pi, id);
                         pi.setCollectionDelegateFunc(relations[i], &loader.load);
                     } else {
                         // delayed load
-                        writeln("Relation " ~ from.pathString ~ "." ~ pi.propertyName ~ " will be loaded later by FK " ~ id.toString);
+                        static if (TRACE_REFS) writeln("Relation " ~ from.pathString ~ "." ~ pi.propertyName ~ " will be loaded later by FK " ~ id.toString);
                         loadMap.add(pi, id, relations[i]); // to load later
                     }
                 }
@@ -817,9 +819,9 @@ class QueryImpl : Query
 
     private void delayedLoadRelations(PropertyLoadMap loadMap) {
         auto types = loadMap.keys;
-        writeln("delayedLoadRelations " ~ to!string(loadMap.length));
+        static if (TRACE_REFS) writeln("delayedLoadRelations " ~ to!string(loadMap.length));
         foreach(pi; types) {
-            writeln("delayedLoadRelations " ~ pi.entity.name ~ "." ~ pi.propertyName);
+            static if (TRACE_REFS) writeln("delayedLoadRelations " ~ pi.entity.name ~ "." ~ pi.propertyName);
             assert(pi.referencedEntity !is null);
             auto map = loadMap.remove(pi);
             if (map.length == 0)
@@ -832,17 +834,17 @@ class QueryImpl : Query
                     Object[] list = sess.lookupCache(pi.referencedEntity.name, map.keys, unknownKeys);
                     if (unknownKeys.length > 0) {
                         string hql = "FROM " ~ pi.referencedEntity.name ~ " WHERE " ~ pi.referencedEntity.keyProperty.propertyName ~ " IN (" ~ map.createCommaSeparatedKeyList(unknownKeys) ~ ")";
-                        writeln("delayedLoadRelations: loading " ~ pi.propertyName ~ " HQL: " ~ hql);
+                        static if (TRACE_REFS) writeln("delayedLoadRelations: loading " ~ pi.propertyName ~ " HQL: " ~ hql);
                         QueryImpl q = cast(QueryImpl)sess.createQuery(hql);
                         Object[] fromDB = q.listObjects(null, loadMap);
                         list ~= fromDB;
-                        writeln("delayedLoadRelations: objects loaded " ~ to!string(fromDB.length));
+                        static if (TRACE_REFS) writeln("delayedLoadRelations: objects loaded " ~ to!string(fromDB.length));
                     } else {
-                        writeln("all objects found in cache");
+                        static if (TRACE_REFS) writeln("all objects found in cache");
                     }
-                    writeln("delayedLoadRelations: updating");
+                    static if (TRACE_REFS) writeln("delayedLoadRelations: updating");
                     foreach(rel; list) {
-                        writeln("delayedLoadRelations: reading key from " ~ pi.referencedEntity.name);
+                        static if (TRACE_REFS) writeln("delayedLoadRelations: reading key from " ~ pi.referencedEntity.name);
                         Variant key = pi.referencedEntity.getKey(rel);
                         //writeln("map length before: " ~ to!string(map.length));
                         auto objectsToUpdate = map[key].list;
@@ -857,15 +859,15 @@ class QueryImpl : Query
                 }
             } else if (pi.oneToMany || pi.manyToMany) {
                 string hql = "FROM " ~ pi.referencedEntity.name ~ " WHERE " ~ pi.referencedPropertyName ~ "." ~ pi.referencedEntity.keyProperty.propertyName ~ " IN (" ~ keys ~ ")";
-                writeln("delayedLoadRelations: loading " ~ pi.propertyName ~ " HQL: " ~ hql);
+                static if (TRACE_REFS) writeln("delayedLoadRelations: loading " ~ pi.propertyName ~ " HQL: " ~ hql);
                 QueryImpl q = cast(QueryImpl)sess.createQuery(hql);
                 assert(q !is null);
                 Object[] list = q.listObjects(null, loadMap);
-                writeln("delayedLoadRelations oneToMany/manyToMany: objects loaded " ~ to!string(list.length));
+                static if (TRACE_REFS) writeln("delayedLoadRelations oneToMany/manyToMany: objects loaded " ~ to!string(list.length));
                 EntityCollections collections = new EntityCollections();
                 // group by referenced PK
                 foreach(rel; list) {
-                    writeln("delayedLoadRelations oneToMany/manyToMany: reading reference from " ~ pi.referencedEntity.name ~ "." ~ pi.referencedProperty.propertyName ~ " joinColumn=" ~ pi.referencedProperty.columnName);
+                    static if (TRACE_REFS) writeln("delayedLoadRelations oneToMany/manyToMany: reading reference from " ~ pi.referencedEntity.name ~ "." ~ pi.referencedProperty.propertyName ~ " joinColumn=" ~ pi.referencedProperty.columnName);
                     assert(pi.referencedProperty.manyToOne, "property referenced from OneToMany should be ManyToOne");
                     assert(pi.referencedProperty.getObjectFunc !is null);
                     assert(rel !is null);
@@ -904,7 +906,7 @@ class QueryImpl : Query
 
     /// Return the query results as a List of entity objects
     Object[] listObjects(Object placeFirstObjectHere, PropertyLoadMap loadMap) {
-        writeln("Entering listObjects " ~ query.hql);
+        static if (TRACE_REFS) writeln("Entering listObjects " ~ query.hql);
         auto ei = query.entity;
         enforceEx!SessionException(ei !is null, "No entity expected in result of query " ~ getQueryString());
         params.checkAllParametersSet();
@@ -930,10 +932,10 @@ class QueryImpl : Query
             }
         }
         if (loadMap.length > 0) {
-            writeln("relation properties scheduled for load: loadMap.length == " ~ to!string(loadMap.length));
+            static if (TRACE_REFS) writeln("relation properties scheduled for load: loadMap.length == " ~ to!string(loadMap.length));
             delayedLoadRelations(loadMap);
         }
-        writeln("Exiting listObjects " ~ query.hql);
+        static if (TRACE_REFS) writeln("Exiting listObjects " ~ query.hql);
         return res.length > 0 ? res : null;
     }
     
@@ -971,15 +973,14 @@ class LazyObjectLoader {
     Variant id;
     SessionAccessor sess;
     this(SessionAccessor sess, const PropertyInfo pi, Variant id) {
-        writeln("Created lazy loader for " ~ pi.referencedEntityName ~ " with id " ~ id.toString);
+        static if (TRACE_REFS) writeln("Created lazy loader for " ~ pi.referencedEntityName ~ " with id " ~ id.toString);
         this.pi = pi;
         this.id = id;
         this.sess = sess;
     }
     Object load() {
-        writeln("LazyObjectLoader.load()");
-        writeln("lazy loading of " ~ pi.referencedEntityName ~ " with id " ~ id.toString);
-        // TODO: handle closed session
+        static if (TRACE_REFS) writeln("LazyObjectLoader.load()");
+        static if (TRACE_REFS) writeln("lazy loading of " ~ pi.referencedEntityName ~ " with id " ~ id.toString);
         return sess.get().loadObject(pi.referencedEntityName, id);
     }
 }
@@ -990,14 +991,14 @@ class LazyCollectionLoader {
     SessionAccessor sess;
     this(SessionAccessor sess, const PropertyInfo pi, Variant fk) {
         assert(!pi.oneToMany || (pi.referencedEntity !is null && pi.referencedProperty !is null), "LazyCollectionLoader: No referenced property specified for OneToMany foreign key column");
-        writeln("Created lazy loader for collection for references " ~ pi.entity.name ~ "." ~ pi.propertyName ~ " by id " ~ fk.toString);
+        static if (TRACE_REFS) writeln("Created lazy loader for collection for references " ~ pi.entity.name ~ "." ~ pi.propertyName ~ " by id " ~ fk.toString);
         this.pi = pi;
         this.fk = fk;
         this.sess = sess;
     }
     Object[] load() {
-        writeln("LazyObjectLoader.load()");
-        writeln("lazy loading of references " ~ pi.entity.name ~ "." ~ pi.propertyName ~ " by id " ~ fk.toString);
+        static if (TRACE_REFS) writeln("LazyObjectLoader.load()");
+        static if (TRACE_REFS) writeln("lazy loading of references " ~ pi.entity.name ~ "." ~ pi.propertyName ~ " by id " ~ fk.toString);
         Object[] res = sess.get().loadReferencedObjects(pi.entity, pi.propertyName, fk);
         return res;
     }

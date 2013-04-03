@@ -1637,11 +1637,11 @@ string getManyToOnePropertyDef(T, immutable string m)() {
     immutable string getObjectFuncDef = 
         "\n" ~
             "function(Object obj) { \n" ~ 
-            "    writeln(\"Inside getObjectFunc\"); \n" ~
+            "    //writeln(\"Inside getObjectFunc\"); \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    assert(entity !is null);\n" ~
             "    Object res = " ~ propertyObjectGetCode ~ "; \n" ~
-            "    writeln(res is null ? \"obj is null\" : \"obj is not null\"); \n" ~
+            "    //writeln(res is null ? \"obj is null\" : \"obj is not null\"); \n" ~
             "    return res; \n" ~
             " }\n";
     immutable string setObjectFuncDef = 
@@ -2465,12 +2465,12 @@ abstract class SchemaInfo : EntityMetaData {
                     if (obj is null) {
                         w.setNull(startColumn + columnCount);
                     } else {
-                        writeln("setting ID column for property " ~ pi.entity.name ~ "." ~ pi.propertyName);
-                        if (pi.lazyLoad)
-                            writeln("property has lazy loader");
-                        writeln("reading ID variant " ~ pi.propertyName ~ " from object");
+                        //writeln("setting ID column for property " ~ pi.entity.name ~ "." ~ pi.propertyName);
+                        //if (pi.lazyLoad)
+                        //    writeln("property has lazy loader");
+                        //writeln("reading ID variant " ~ pi.propertyName ~ " from object");
                         Variant id = pi.referencedEntity.getKey(obj);
-                        writeln("setting parameter " ~ to!string(startColumn + columnCount));
+                        //writeln("setting parameter " ~ to!string(startColumn + columnCount));
                         w.setVariant(startColumn + columnCount, id);
                     }
                     columnCount++;
