@@ -219,6 +219,24 @@ class EntityCache {
     }
 }
 
+/// helper class to disconnect Lazy loaders from closed session.
+class SessionAccessor {
+    private SessionImpl _session;
+
+    this(SessionImpl session) {
+        _session = session;
+    }
+    /// returns session, with session state check
+    SessionImpl get() {
+        enforceEx!HibernatedException(_session !is null, "Cannot read from closed session");
+        return _session;
+    }
+    /// nulls session reference
+    void onSessionClosed() {
+        _session = null;
+    }
+}
+
 /// Implementation of HibernateD session
 class SessionImpl : Session {
 
@@ -230,6 +248,11 @@ class SessionImpl : Session {
     Connection conn;
 
     EntityCache[string] cache;
+
+    private SessionAccessor _accessor;
+    @property SessionAccessor accessor() {
+        return _accessor;
+    }
 
     package EntityCache getCache(string entityName) {
         EntityCache res;
@@ -276,6 +299,7 @@ class SessionImpl : Session {
         this.dialect = dialect;
         this.connectionPool = connectionPool;
         this.conn = connectionPool.getConnection();
+        this._accessor = new SessionAccessor(this);
     }
 
     override Transaction beginTransaction() {
@@ -302,6 +326,7 @@ class SessionImpl : Session {
     /// End the session by releasing the JDBC connection and cleaning up.
     override Connection close() {
         checkClosed();
+        _accessor.onSessionClosed();
         closed = true;
         sessionFactory.sessionClosed(this);
         conn.close();
@@ -762,7 +787,7 @@ class QueryImpl : Query
                                     if (pi.lazyLoad) {
                                         // lazy load
                                         writeln("scheduling lazy load for " ~ from.pathString ~ "." ~ pi.propertyName ~ " with FK " ~ id.toString);
-                                        LazyObjectLoader loader = new LazyObjectLoader(sess, pi, id);
+                                        LazyObjectLoader loader = new LazyObjectLoader(sess.accessor, pi, id);
                                         pi.setObjectDelegateFunc(relations[i], &loader.load);
                                     } else {
                                         // delayed load
@@ -781,7 +806,7 @@ class QueryImpl : Query
                     if (pi.lazyLoad) {
                         // lazy load
                         writeln("creating lazy loader for " ~ from.pathString ~ "." ~ pi.propertyName ~ " by FK " ~ id.toString);
-                        LazyCollectionLoader loader = new LazyCollectionLoader(sess, pi, id);
+                        LazyCollectionLoader loader = new LazyCollectionLoader(sess.accessor, pi, id);
                         pi.setCollectionDelegateFunc(relations[i], &loader.load);
                     } else {
                         // delayed load
@@ -953,8 +978,8 @@ class QueryImpl : Query
 class LazyObjectLoader {
     const PropertyInfo pi;
     Variant id;
-    SessionImpl sess;
-    this(SessionImpl sess, const PropertyInfo pi, Variant id) {
+    SessionAccessor sess;
+    this(SessionAccessor sess, const PropertyInfo pi, Variant id) {
         writeln("Created lazy loader for " ~ pi.referencedEntityName ~ " with id " ~ id.toString);
         this.pi = pi;
         this.id = id;
@@ -964,15 +989,15 @@ class LazyObjectLoader {
         writeln("LazyObjectLoader.load()");
         writeln("lazy loading of " ~ pi.referencedEntityName ~ " with id " ~ id.toString);
         // TODO: handle closed session
-        return sess.loadObject(pi.referencedEntityName, id);
+        return sess.get().loadObject(pi.referencedEntityName, id);
     }
 }
 
 class LazyCollectionLoader {
     const PropertyInfo pi;
     Variant fk;
-    SessionImpl sess;
-    this(SessionImpl sess, const PropertyInfo pi, Variant fk) {
+    SessionAccessor sess;
+    this(SessionAccessor sess, const PropertyInfo pi, Variant fk) {
         assert(!pi.oneToMany || (pi.referencedEntity !is null && pi.referencedProperty !is null), "LazyCollectionLoader: No referenced property specified for OneToMany foreign key column");
         writeln("Created lazy loader for collection for references " ~ pi.entity.name ~ "." ~ pi.propertyName ~ " by id " ~ fk.toString);
         this.pi = pi;
@@ -982,7 +1007,7 @@ class LazyCollectionLoader {
     Object[] load() {
         writeln("LazyObjectLoader.load()");
         writeln("lazy loading of references " ~ pi.entity.name ~ "." ~ pi.propertyName ~ " by id " ~ fk.toString);
-        Object[] res = sess.loadReferencedObjects(pi.entity, pi.propertyName, fk);
+        Object[] res = sess.get().loadReferencedObjects(pi.entity, pi.propertyName, fk);
         return res;
     }
 }
