@@ -24,6 +24,7 @@ import std.traits;
 import std.typecons;
 import std.typetuple;
 import std.variant;
+import std.uuid;
 
 import ddbc.core;
 import ddbc.common;
@@ -128,6 +129,8 @@ public:
     alias void function(Object, Object[]) SetCollectionFunc;
     /// returns true if Lazy! or LazyCollection! property is loaded (no loader delegate set).
     alias bool function(Object) IsLoadedFunc;
+    /// returns new generated primary key for property
+    alias Variant function(Connection conn, const PropertyInfo prop) GeneratorFunc;
 
     package EntityInfo _entity;
     @property const(EntityInfo) entity() const { return _entity; }
@@ -172,6 +175,7 @@ public:
     immutable SetObjectDelegateFunc setObjectDelegateFunc;
     immutable SetCollectionDelegateFunc setCollectionDelegateFunc;
     immutable IsLoadedFunc isLoadedFunc;
+    immutable GeneratorFunc generatorFunc;
 
     @property bool simple() const { return relation == RelationType.None; };
     @property bool embedded() const { return relation == RelationType.Embedded; };
@@ -180,15 +184,17 @@ public:
     @property bool manyToOne() const { return relation == RelationType.ManyToOne; };
     @property bool manyToMany() const { return relation == RelationType.ManyToMany; };
 
-    this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, RelationType relation, string referencedEntityName, string referencedPropertyName, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, KeyIsSetFunc keyIsSetFunc, IsNullFunc isNullFunc, CopyFunc copyFieldFunc, 
-             GetObjectFunc getObjectFunc = null, 
-             SetObjectFunc setObjectFunc = null, 
-             GetCollectionFunc getCollectionFunc = null, 
-             SetCollectionFunc setCollectionFunc = null,
-             SetObjectDelegateFunc setObjectDelegateFunc = null, 
-             SetCollectionDelegateFunc setCollectionDelegateFunc = null, 
-             IsLoadedFunc isLoadedFunc = null,
-             bool lazyLoad = false, bool collection = false,
+    this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, RelationType relation, string referencedEntityName, string referencedPropertyName, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, KeyIsSetFunc keyIsSetFunc, IsNullFunc isNullFunc, 
+            CopyFunc copyFieldFunc, 
+            GeneratorFunc generatorFunc = null,
+            GetObjectFunc getObjectFunc = null, 
+            SetObjectFunc setObjectFunc = null, 
+            GetCollectionFunc getCollectionFunc = null, 
+            SetCollectionFunc setCollectionFunc = null,
+            SetObjectDelegateFunc setObjectDelegateFunc = null, 
+            SetCollectionDelegateFunc setCollectionDelegateFunc = null, 
+            IsLoadedFunc isLoadedFunc = null,
+            bool lazyLoad = false, bool collection = false,
             JoinTableInfo joinTable = null) {
 		this.propertyName = propertyName;
 		this.columnName = columnName;
@@ -209,6 +215,7 @@ public:
 		this.getObjectFunc = getObjectFunc;
 		this.setObjectFunc = setObjectFunc;
         this.copyFieldFunc = copyFieldFunc;
+        this.generatorFunc = generatorFunc;
         this.lazyLoad = lazyLoad;
         this.collection = collection;
         this.setObjectDelegateFunc = setObjectDelegateFunc;
@@ -428,7 +435,7 @@ unittest {
 
 /// returns true if class member has at least one known property level annotation (@Column, @Id, @Generated)
 bool hasHibernatedPropertyAnnotation(T, string m)() {
-    return hasOneOfMemberAnnotations!(T, m, Id, Embedded, Column, OneToOne, ManyToOne, ManyToMany, OneToMany, Generated);
+    return hasOneOfMemberAnnotations!(T, m, Id, Embedded, Column, OneToOne, ManyToOne, ManyToMany, OneToMany, Generated, Generator);
 }
 
 /// returns true if class has one of specified anotations
@@ -508,6 +515,19 @@ string getColumnName(T, string m)() {
 		}
 	}
 	return camelCaseToUnderscoreDelimited(m);
+}
+
+string getGeneratorCode(T, string m)() {
+    foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
+        static if (is(typeof(a) == Generator)) {
+            static assert(a.code != null && a.code != "", "@Generator doesn't have code specified");
+            return a.code;
+        }
+        static if (a.stringof == Generator.stringof) {
+            static assert(false, "@Generator doesn't have code specified");
+        }
+    }
+    return null;
 }
 
 string getJoinColumnName(T, string m)() {
@@ -1446,7 +1466,7 @@ string getOneToOnePropertyDef(T, immutable string m)() {
 	immutable string entityClassName = fullyQualifiedName!T;
     immutable string propertyName = getPropertyName!(T,m);
     static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
-    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, ManyToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": OneToOne property cannot have Column, Id, Generated, ManyToOne, ManyToMany or Embedded annotation");
+    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, Generator, ManyToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": OneToOne property cannot have Column, Id, Generated, Generator, ManyToOne, ManyToMany or Embedded annotation");
     immutable bool isLazy = isLazyMember!(T,m);
     immutable string columnName = getJoinColumnName!(T, m);
 	immutable length = getColumnLength!(T, m)();
@@ -1546,6 +1566,7 @@ string getOneToOnePropertyDef(T, immutable string m)() {
 		    keyIsSetFuncDef ~ ", " ~
 		    isNullFuncDef ~ ", " ~
             copyFuncDef ~ ", " ~
+            "null, " ~ // generatorFunc
             getObjectFuncDef ~ ", " ~
             setObjectFuncDef ~ ", " ~
             getCollectionFuncDef ~ ", " ~
@@ -1566,7 +1587,7 @@ string getManyToOnePropertyDef(T, immutable string m)() {
     immutable string entityClassName = fullyQualifiedName!T;
     immutable string propertyName = getPropertyName!(T,m);
     static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
-    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, OneToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": ManyToOne property cannot have Column, Id, Generated, OneToOne, ManyToMany or Embedded annotation");
+    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, Generator, OneToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": ManyToOne property cannot have Column, Id, Generated, Generator, OneToOne, ManyToMany or Embedded annotation");
     immutable string columnName = getJoinColumnName!(T, m);
     static assert (columnName != null, "ManyToOne property " ~ m ~ " has no JoinColumn name");
     immutable bool isLazy = isLazyMember!(T,m);
@@ -1670,6 +1691,7 @@ string getManyToOnePropertyDef(T, immutable string m)() {
             keyIsSetFuncDef ~ ", " ~
             isNullFuncDef ~ ", " ~
             copyFuncDef ~ ", " ~
+            "null, " ~ // generatorFunc
             getObjectFuncDef ~ ", " ~
             setObjectFuncDef ~ ", " ~
             getCollectionFuncDef ~ ", " ~
@@ -1691,7 +1713,7 @@ string getOneToManyPropertyDef(T, immutable string m)() {
     immutable string entityClassName = fullyQualifiedName!T;
     immutable string propertyName = getPropertyName!(T,m)();
     static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
-    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, OneToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": OneToMany property cannot have Column, Id, Generated, OneToOne, ManyToMany or Embedded annotation");
+    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, Generator, OneToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": OneToMany property cannot have Column, Id, Generated, Generator, OneToOne, ManyToMany or Embedded annotation");
     immutable string columnName = getJoinColumnName!(T, m)();
     immutable bool isCollection = isCollectionMember!(T,m);
     static assert (isCollection, "OneToMany property " ~ m ~ " should be array of objects or LazyCollection");
@@ -1796,6 +1818,7 @@ string getOneToManyPropertyDef(T, immutable string m)() {
             keyIsSetFuncDef ~ ", " ~
             isNullFuncDef ~ ", " ~
             copyFuncDef ~ ", " ~
+            "null, " ~ // generatorFunc
             getObjectFuncDef ~ ", " ~
             setObjectFuncDef ~ ", " ~
             getCollectionFuncDef ~ ", " ~
@@ -1815,7 +1838,7 @@ string getManyToManyPropertyDef(T, immutable string m)() {
     immutable string entityClassName = fullyQualifiedName!T;
     immutable string propertyName = getPropertyName!(T,m);
     static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
-    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, OneToOne, OneToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": ManyToMany property cannot have Column, Id, Generated, OneToOne, OneToMany or Embedded annotation");
+    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, Generator, OneToOne, OneToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": ManyToMany property cannot have Column, Id, Generated, Generator, OneToOne, OneToMany or Embedded annotation");
     immutable string columnName = getJoinColumnName!(T, m);
     immutable string joinTableName = getJoinTableName!(T, m);
     immutable string joinColumn1 = getJoinTableColumn1!(T, m);
@@ -1921,6 +1944,7 @@ string getManyToManyPropertyDef(T, immutable string m)() {
             keyIsSetFuncDef ~ ", " ~
             isNullFuncDef ~ ", " ~
             copyFuncDef ~ ", " ~
+            "null, " ~ // generatorFunc
             getObjectFuncDef ~ ", " ~
             setObjectFuncDef ~ ", " ~
             getCollectionFuncDef ~ ", " ~
@@ -1941,7 +1965,7 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
 	immutable string entityClassName = fullyQualifiedName!T;
 	immutable string propertyName = getPropertyName!(T,m);
 	static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
-    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, ManyToOne, ManyToMany, OneToOne), entityClassName ~ "." ~ propertyName ~ ": Embedded property cannot have Column, Id, Generated, OneToOne, ManyToOne, ManyToMany annotation");
+    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, Generator, ManyToOne, ManyToMany, OneToOne), entityClassName ~ "." ~ propertyName ~ ": Embedded property cannot have Column, Id, Generated, OneToOne, ManyToOne, ManyToMany annotation");
     immutable string columnName = getColumnName!(T, m);
 	immutable length = getColumnLength!(T, m);
 	immutable bool hasNull = hasMemberAnnotation!(T, m, Null);
@@ -2025,6 +2049,7 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
 			keyIsSetFuncDef ~ ", " ~
 			isNullFuncDef ~ ", " ~
             copyFuncDef ~ ", " ~
+            "null, " ~ // generatorFunc
             getObjectFuncDef ~ ", " ~
 			setObjectFuncDef ~ 
 			")";
@@ -2038,8 +2063,10 @@ string getSimplePropertyDef(T, immutable string m)() {
 	static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
     static assert (!hasOneOfMemberAnnotations!(T, m, ManyToOne, OneToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": simple property cannot have OneToOne, ManyToOne, ManyToMany or Embedded annotation");
     immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
-    immutable bool isId = hasMemberAnnotation!(T, m, Id) || isGenerated;
+    immutable string generatorCode = getGeneratorCode!(T, m);
+    immutable bool isId = hasMemberAnnotation!(T, m, Id) || isGenerated || generatorCode != null;
 	immutable string columnName = getColumnName!(T, m);
+    static assert(!isGenerated || generatorCode == null, T.stringof ~ "." ~ m ~ ": You cannot mix @Generated and @Generator for the same property");
 	immutable length = getColumnLength!(T, m)();
 	immutable bool hasNull = hasMemberAnnotation!(T,m,Null);
 	immutable bool hasNotNull = hasMemberAnnotation!(T,m,NotNull);
@@ -2076,23 +2103,28 @@ string getSimplePropertyDef(T, immutable string m)() {
 			"    " ~ propertyVariantSetCode ~ "\n" ~
 			" }\n";
 	immutable string keyIsSetFuncDef = "\n" ~
-		"function(Object obj) { \n" ~ 
+		    "function(Object obj) { \n" ~ 
 			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
 			"    return " ~ keyIsSetCode ~ ";\n" ~
 			" }\n";
 	immutable string isNullFuncDef = "\n" ~
-		"function(Object obj) { \n" ~ 
+		    "function(Object obj) { \n" ~ 
 			"    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
 			"    return " ~ isNullCode ~ ";\n" ~
 			" }\n";
     immutable string copyFuncDef = 
-        "\n" ~
+            "\n" ~
             "function(Object to, Object from) { \n" ~ 
             "    " ~ entityClassName ~ " toentity = cast(" ~ entityClassName ~ ")to; \n" ~
             "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
             "    " ~ copyFieldCode ~ "\n" ~
             " }\n";
-	
+    immutable string generatorFuncDef = generatorCode is null ? "null" :
+            "\n" ~
+            "function(Connection conn, const PropertyInfo property) { \n" ~ 
+            "    return Variant(" ~ generatorCode ~ ");\n" ~
+            "}\n";
+
 	static assert (typeName != null, "Cannot determine column type for member " ~ m ~ " of type " ~ T.stringof);
 	return "    new PropertyInfo(" ~ 
             quoteString(propertyName) ~ ", " ~
@@ -2111,7 +2143,8 @@ string getSimplePropertyDef(T, immutable string m)() {
 			setVariantFuncDef ~ ", " ~
 			keyIsSetFuncDef ~ ", " ~
             isNullFuncDef ~ ", " ~
-            copyFuncDef ~
+            copyFuncDef ~ ", " ~
+            generatorFuncDef ~
 			")";
 }
 
@@ -2773,10 +2806,18 @@ version(unittest) {
         }
     }
 
+    @Entity
+    static class GeneratorTest {
+        //@Generator("std.uuid.randomUUID().toString()")
+        @Generator(UUID_GENERATOR)
+        string id;
+        @Column
+        string name;
+    }
+
 	@Entity
 	static class TypeTest {
-		@Id @Generated
-		@Column
+		@Generated
 		int id;
 		
 		@Column
@@ -2853,6 +2894,7 @@ version(unittest) {
          "DROP TABLE IF EXISTS person_info",
          "DROP TABLE IF EXISTS person_info2",
          "DROP TABLE IF EXISTS role",
+         "DROP TABLE IF EXISTS generator_test",
          ];
     string[] UNIT_TEST_CREATE_TABLES_SCRIPT = 
 	[
@@ -2864,6 +2906,7 @@ version(unittest) {
          "CREATE TABLE IF NOT EXISTS person (id int not null primary key AUTO_INCREMENT, first_name varchar(255) not null, last_name varchar(255) not null, more_info_fk int)",
          "CREATE TABLE IF NOT EXISTS person_info2 (id int not null primary key AUTO_INCREMENT, flags bigint, person_info_fk int)",
          "CREATE TABLE IF NOT EXISTS role_users (role_fk int not null, user_fk int not null, primary key (role_fk, user_fk), unique index(user_fk, role_fk))",
+         "CREATE TABLE IF NOT EXISTS generator_test (id varchar(64) not null primary key, name varchar(255) not null)",
 
          "INSERT INTO role SET id=1, name='admin'",
          "INSERT INTO role SET id=2, name='viewer'",
@@ -2978,7 +3021,7 @@ unittest {
 		writeln("metadata test 2");
 
         // Checking generated metadata
-		EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, T1, TypeTest, Address, Role);
+		EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, T1, TypeTest, Address, Role, GeneratorTest);
         Dialect dialect = new MySQLDialect();
         DataSource ds = createUnitTestMySQLDataSource();
         SessionFactory factory = new SessionFactoryImpl(schema, dialect, ds);
@@ -3069,6 +3112,14 @@ unittest {
 		Customer c5 = new Customer();
 		c5.name = "Customer_5";
 		sess.save(c5);
+
+        // Testing generator function (uuid)
+        GeneratorTest g1 = new GeneratorTest();
+        g1.name = "row 1";
+        assert(g1.id is null);
+        sess.save(g1);
+        assert(g1.id !is null);
+
 
 		assertThrown!HibernatedException(sess.createQuery("SELECT id, name, blabla FROM User ORDER BY name"));
 		assertThrown!SyntaxError(sess.createQuery("SELECT id: name FROM User ORDER BY name"));

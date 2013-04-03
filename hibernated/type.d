@@ -274,3 +274,4 @@ unittest {
     import hibernated.metadata;
     TestLazy tl = new TestLazy();
 }
+

@@ -108,6 +108,16 @@ struct Generated {
 }
 
 /**
+ * @Generator(code) - specify code to call for generation of simple property key value (will be inserted into definition Variant function(Connection conn, PropertyInfo prop) { return Variant($code); }
+ */
+struct Generator {
+    string code;
+}
+
+/// standard generator - generates random UUID - for use as @Generator() annotation parameter. Don't forget to import std.uuid
+const string UUID_GENERATOR = "std.uuid.randomUUID().toString()";
+
+/**
  * @Embedded or @Embedded() - embed @Embeddable entity's properties to owner entity (add columns to the same table)
  * Columns for each of Embeddable entity properties will be placed into parent entity's table, where this embeddable entity is @Embedded
  */
