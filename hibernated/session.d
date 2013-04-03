@@ -376,26 +376,6 @@ class SessionImpl : Session {
         Query q = createQuery(hql).setParameter("Id", id);
         Object res = q.uniqueResult(obj);
         return res;
-
-//        string query = metaData.generateFindByPkForEntity(info);
-//        //writeln("Finder query: " ~ query);
-//        PreparedStatement stmt = conn.prepareStatement(query);
-//        scope(exit) stmt.close();
-//        stmt.setVariant(1, id);
-//        ResultSet rs = stmt.executeQuery();
-//        //writeln("returned rows: " ~ to!string(rs.getFetchSize()));
-//        scope(exit) rs.close();
-//        if (rs.next()) {
-//            if (obj is null)
-//                obj = info.createEntity();
-//            //writeln("reading columns");
-//            metaData.readAllColumns(obj, rs, 1);
-//            //writeln("value: " ~ obj.toString);
-//            return obj;
-//        } else {
-//            // not found!
-//            return null;
-//        }
     }
     
     /// Read entities referenced by property 

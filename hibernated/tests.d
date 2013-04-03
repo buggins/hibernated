@@ -375,6 +375,7 @@ unittest {
         Dialect dialect = new MySQLDialect();
         DataSource ds = createUnitTestMySQLDataSource();
         SessionFactory factory = new SessionFactoryImpl(schema, dialect, ds);
+        scope(exit) factory.close();
         Session sess = factory.openSession();
         scope(exit) sess.close();
         
@@ -679,6 +680,7 @@ unittest {
         Dialect dialect = new MySQLDialect();
         DataSource ds = createUnitTestMySQLDataSource();
         SessionFactory factory = new SessionFactoryImpl(schema, dialect, ds);
+        scope(exit) factory.close();
         Session sess = factory.openSession();
         scope(exit) sess.close();
         
