@@ -118,6 +118,10 @@ struct Lazy(T) {
         return get();
     }
 
+    @property bool loaded() {
+        return _delegate is null;
+    }
+
 	T get() {
         //writeln("Lazy! opCall()");
         //writeln("Lazy! opCall() delegate " ~ (_delegate !is null ? "is not null" : "is null"));
@@ -171,7 +175,11 @@ struct LazyCollection(T) {
         return get();
     }
     
-    T[] get() {
+    @property bool loaded() {
+        return _delegate is null;
+    }
+    
+    ref T[] get() {
         //writeln("Lazy! opCall()");
         //writeln("Lazy! opCall() delegate " ~ (_delegate !is null ? "is not null" : "is null"));
         if (_delegate !is null) {

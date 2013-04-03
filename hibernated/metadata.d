@@ -100,19 +100,34 @@ enum RelationType {
 /// Metadata of entity property
 class PropertyInfo {
 public:
+    /// reads simple property value from data set to object
 	alias void function(Object, DataSetReader, int index) ReaderFunc;
-	alias void function(Object, DataSetWriter, int index) WriterFunc;
-	alias Variant function(Object) GetVariantFunc;
+    /// writes simple property value to data set from object
+    alias void function(Object, DataSetWriter, int index) WriterFunc;
+    /// copy property from second passed object to first
     alias void function(Object, Object) CopyFunc;
+    /// returns simple property as Variant
+    alias Variant function(Object) GetVariantFunc;
+    /// sets simple property from Variant
     alias void function(Object, Variant value) SetVariantFunc;
-	alias bool function(Object) KeyIsSetFunc;
-	alias bool function(Object) IsNullFunc;
-	alias Object function(Object) GetObjectFunc;
-	alias void function(Object, Object) SetObjectFunc;
+    /// returns true if property value of object is not null
+    alias bool function(Object) IsNullFunc;
+    /// returns true if key property of object is set (similar to IsNullFunc but returns true if non-nullable number is 0.
+    alias bool function(Object) KeyIsSetFunc;
+    /// returns OneToOne, ManyToOne or Embedded property as Object
+    alias Object function(Object) GetObjectFunc;
+    /// sets OneToOne, ManyToOne or Embedded property as Object
+    alias void function(Object, Object) SetObjectFunc;
+    /// sets lazy loader delegate for OneToOne, or ManyToOne property if it's Lazy! template instance
     alias void function(Object, Object delegate()) SetObjectDelegateFunc;
+    /// sets lazy loader delegate for OneToMany, or ManyToMany property if it's LazyCollection! template instance
     alias void function(Object, Object[] delegate()) SetCollectionDelegateFunc;
+    /// returns OneToMany or ManyToMany property value as object array
     alias Object[] function(Object) GetCollectionFunc;
+    /// sets OneToMany or ManyToMany property value from object array
     alias void function(Object, Object[]) SetCollectionFunc;
+    /// returns true if Lazy! or LazyCollection! property is loaded (no loader delegate set).
+    alias bool function(Object) IsLoadedFunc;
 
     package EntityInfo _entity;
     @property const(EntityInfo) entity() const { return _entity; }
@@ -156,6 +171,7 @@ public:
     immutable SetCollectionFunc setCollectionFunc;
     immutable SetObjectDelegateFunc setObjectDelegateFunc;
     immutable SetCollectionDelegateFunc setCollectionDelegateFunc;
+    immutable IsLoadedFunc isLoadedFunc;
 
     @property bool simple() const { return relation == RelationType.None; };
     @property bool embedded() const { return relation == RelationType.Embedded; };
@@ -171,6 +187,7 @@ public:
              SetCollectionFunc setCollectionFunc = null,
              SetObjectDelegateFunc setObjectDelegateFunc = null, 
              SetCollectionDelegateFunc setCollectionDelegateFunc = null, 
+             IsLoadedFunc isLoadedFunc = null,
              bool lazyLoad = false, bool collection = false,
             JoinTableInfo joinTable = null) {
 		this.propertyName = propertyName;
@@ -198,6 +215,7 @@ public:
         this.setCollectionDelegateFunc = setCollectionDelegateFunc;
         this.getCollectionFunc = getCollectionFunc;
         this.setCollectionFunc = setCollectionFunc;
+        this.isLoadedFunc = isLoadedFunc;
         this._joinTable = joinTable;
 	}
 
@@ -1403,6 +1421,20 @@ string getLazyPropertyObjectWriteCode(T, string m)() {
     }
 }
 
+string getLazyPropertyLoadedCode(T, string m)() {
+    immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
+    final switch (kind) {
+        case PropertyMemberKind.FIELD_MEMBER:
+            return "entity." ~ m ~ ".loaded";
+        case PropertyMemberKind.GETTER_MEMBER:
+            return "entity." ~ m ~ "().loaded";
+        case PropertyMemberKind.PROPERTY_MEMBER:
+            return "entity." ~ m ~ ".loaded";
+        case PropertyMemberKind.LAZY_MEMBER:
+            return "entity." ~ m ~ ".loaded";
+    }
+}
+
 
 // TODO: minimize duplication of code in getXXXtoXXXPropertyDef
 
@@ -1489,6 +1521,12 @@ string getOneToOnePropertyDef(T, immutable string m)() {
             "    " ~ getLazyPropertyObjectWriteCode!(T,m) ~ "\n" ~
             " }\n";
     immutable string setCollectionDelegateFuncDef = "null";
+    immutable string isLoadedFuncDef = !isLazy ? "null" : 
+            "\n" ~
+            "function(Object obj) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    return " ~ getLazyPropertyLoadedCode!(T,m) ~ ";\n" ~
+            " }\n";
 	
     return "    new PropertyInfo(" ~
             quoteString(propertyName) ~ ", " ~ 
@@ -1514,6 +1552,7 @@ string getOneToOnePropertyDef(T, immutable string m)() {
             setCollectionFuncDef ~ ", " ~
             setObjectDelegateFuncDef ~ ", " ~
             setCollectionDelegateFuncDef ~ ", " ~
+            isLoadedFuncDef ~ ", " ~
             quoteBool(isLazy) ~ ", " ~ // lazy
             "false" ~ // collection
             ")";
@@ -1606,6 +1645,12 @@ string getManyToOnePropertyDef(T, immutable string m)() {
             "    " ~ getLazyPropertyObjectWriteCode!(T,m) ~ "\n" ~
             " }\n";
     immutable string setCollectionDelegateFuncDef = "null";
+    immutable string isLoadedFuncDef = !isLazy ? "null" : 
+    "\n" ~
+        "function(Object obj) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    return " ~ getLazyPropertyLoadedCode!(T,m) ~ ";\n" ~
+            " }\n";
 
     return "    new PropertyInfo(" ~
             quoteString(propertyName) ~ ", " ~ 
@@ -1631,6 +1676,7 @@ string getManyToOnePropertyDef(T, immutable string m)() {
             setCollectionFuncDef ~ ", " ~
             setObjectDelegateFuncDef ~ ", " ~
             setCollectionDelegateFuncDef ~ ", " ~
+            isLoadedFuncDef ~ ", " ~
             quoteBool(isLazy) ~ ", " ~ // lazy
             "false" ~ // collection
             ")";
@@ -1725,6 +1771,12 @@ string getOneToManyPropertyDef(T, immutable string m)() {
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ getLazyPropertyObjectWriteCode!(T,m) ~ "\n" ~
             " }\n";
+    immutable string isLoadedFuncDef = !isLazy ? "null" : 
+    "\n" ~
+        "function(Object obj) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    return " ~ getLazyPropertyLoadedCode!(T,m) ~ ";\n" ~
+            " }\n";
 
     return "    new PropertyInfo(" ~
             quoteString(propertyName) ~ ", " ~ 
@@ -1750,6 +1802,7 @@ string getOneToManyPropertyDef(T, immutable string m)() {
             setCollectionFuncDef ~ ", " ~
             setObjectDelegateFuncDef ~ ", " ~
             setCollectionDelegateFuncDef ~ ", " ~
+            isLoadedFuncDef ~ ", " ~
             quoteBool(isLazy) ~ ", " ~ // lazy
             "true" ~ // is collection
             ")";
@@ -1843,6 +1896,12 @@ string getManyToManyPropertyDef(T, immutable string m)() {
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ getLazyPropertyObjectWriteCode!(T,m) ~ "\n" ~
             " }\n";
+    immutable string isLoadedFuncDef = !isLazy ? "null" : 
+    "\n" ~
+        "function(Object obj) { \n" ~ 
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    return " ~ getLazyPropertyLoadedCode!(T,m) ~ ";\n" ~
+            " }\n";
 
     return "    new PropertyInfo(" ~
             quoteString(propertyName) ~ ", " ~ 
@@ -1868,6 +1927,7 @@ string getManyToManyPropertyDef(T, immutable string m)() {
             setCollectionFuncDef ~ ", " ~
             setObjectDelegateFuncDef ~ ", " ~
             setCollectionDelegateFuncDef ~ ", " ~
+            isLoadedFuncDef ~ ", " ~
             quoteBool(isLazy) ~ ", " ~ // lazy
             "true" ~ ", " ~ // is collection
             joinTableCode ~
