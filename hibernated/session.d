@@ -147,7 +147,16 @@ abstract class Query
 	Variant[][] listRows();
 	
 	/// Bind a value to a named query parameter (all :parameters used in query should be bound before executing query).
-	Query setParameter(string name, Variant val);
+	protected Query setParameterVariant(string name, Variant val);
+
+    /// Bind a value to a named query parameter (all :parameters used in query should be bound before executing query).
+    Query setParameter(T)(string name, T val) {
+        static if (is(T == Variant)) {
+            return setParameterVariant(name, val);
+        } else {
+            return setParameterVariant(name, Variant(val));
+        }
+    }
 }
 
 
@@ -1002,7 +1011,7 @@ class QueryImpl : Query
 	}
 	
 	/// Bind a value to a named query parameter.
-	override Query setParameter(string name, Variant val) {
+	override protected Query setParameterVariant(string name, Variant val) {
 		params.setParameter(name, val);
 		return this;
 	}
