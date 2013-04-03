@@ -6,7 +6,7 @@
  * 
  * Source file hibernated/core.d.
  *
- * This module contains all imports to use HibernateD.
+ * This module is convinient way to import all declarations to use HibernateD.
  * 
  * Copyright: Copyright 2013
  * License:   $(LINK www.boost.org/LICENSE_1_0.txt, Boost License 1.0).

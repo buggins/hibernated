@@ -20,16 +20,98 @@ import std.traits;
 
 import ddbc.core;
 
+/// base class for all HibernateD exceptions
 class HibernatedException : Exception {
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
     this(Exception causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
 }
 
-class SyntaxError : HibernatedException {
+/// Thrown when the user passes a transient instance to a Session method that expects a persistent instance. 
+class TransientObjectException : HibernatedException {
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
+    this(Exception causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+}
+
+/// Something went wrong in the cache
+class CacheException : HibernatedException {
+    this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
+    this(Exception causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+}
+
+/// Thrown when the (illegal) value of a property can not be persisted. There are two main causes: a property declared not-null="true" is null or an association references an unsaved transient instance 
+class PropertyValueException : HibernatedException {
+    this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
+    this(Exception causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+}
+
+/// A problem occurred translating a Hibernate query to SQL due to invalid query syntax, etc. 
+class QueryException : HibernatedException {
+    this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
+    this(Exception causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+}
+
+/// Exception thrown when there is a syntax error in the HQL. 
+class QuerySyntaxException : QueryException {
+    this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
+    this(Exception causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+}
+
+/// Parameter invalid or not found in the query
+class QueryParameterException : QueryException {
+    this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
+    this(Exception causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+}
+
+/// Indicates that a transaction could not be begun, committed or rolled back. 
+class TransactionException : HibernatedException {
+    this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
+    this(Exception causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+}
+
+/// Indicates access to unfetched data outside of a session context. For example, when an uninitialized proxy or collection is accessed after the session was closed. 
+class LazyInitializationException : HibernatedException {
+    this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
+    this(Exception causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+}
+
+/// An exception that usually occurs as a result of something screwy in the O-R mappings. 
+class MappingException : HibernatedException {
+    this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
+    this(Exception causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+}
+
+/// Thrown when Hibernate could not resolve an object by id, especially when loading an association.
+class UnresolvableObjectException : HibernatedException {
+    this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
+    this(Exception causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+}
+
+/// An exception occurs when query result is expected but object is not found in DB.
+class ObjectNotFoundException : UnresolvableObjectException {
+    this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
+    this(Exception causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+}
+
+/// Thrown when the user tries to do something illegal with a deleted object. 
+class ObjectDeletedException : UnresolvableObjectException {
+    this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
+    this(Exception causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+}
+
+/// Thrown when the user calls a method of a Session that is in an inappropropriate state for the given call (for example, the the session is closed or disconnected). 
+class SessionException : HibernatedException {
+    this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
+    this(Exception causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+}
+
+/// Thrown when the application calls Query.uniqueResult() and the query returned more than one result. Unlike all other Hibernate exceptions, this one is recoverable! 
+class NonUniqueResultException : HibernatedException {
+    this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
+    this(Exception causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
 }
 
 
+/// Base class for HibernateD property types
 class Type {
 public:
 	immutable SqlType getSqlType() { return SqlType.OTHER; }
@@ -115,7 +197,7 @@ public:
 }
 
 /**
- * Lazy loader. 
+ * Lazy entity loader. 
  * 
  * 
  */
@@ -174,7 +256,7 @@ struct Lazy(T) {
 }
 
 /**
- * Lazy collection loader. 
+ * Lazy entity collection loader. 
  */
 struct LazyCollection(T) {
     alias Object[] delegate() delegate_t;

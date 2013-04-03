@@ -197,7 +197,7 @@ class EntityCache {
         return items[key];
     }
     Object get(Variant key) {
-        enforceEx!HibernatedException((key in items) !is null, "entity " ~ name ~ " with key " ~ key.toString() ~ " not found in cache");
+        enforceEx!CacheException((key in items) !is null, "entity " ~ name ~ " with key " ~ key.toString() ~ " not found in cache");
         return items[key];
     }
     void put(Variant key, Object obj) {
@@ -226,9 +226,9 @@ class SessionAccessor {
     this(SessionImpl session) {
         _session = session;
     }
-    /// returns session, with session state check
+    /// returns session, with session state check - throws LazyInitializationException if attempting to get unfetched lazy data while session is closed
     SessionImpl get() {
-        enforceEx!HibernatedException(_session !is null, "Cannot read from closed session");
+        enforceEx!LazyInitializationException(_session !is null, "Cannot read from closed session");
         return _session;
     }
     /// nulls session reference
@@ -290,7 +290,7 @@ class SessionImpl : Session {
     }
 
     private void checkClosed() {
-        enforceEx!HibernatedException(!closed, "Session is closed");
+        enforceEx!SessionException(!closed, "Session is closed");
     }
 
     this(SessionFactoryImpl sessionFactory, EntityMetaData metaData, Dialect dialect, DataSource connectionPool) {
@@ -359,7 +359,7 @@ class SessionImpl : Session {
     /// Read the persistent state associated with the given identifier into the given transient instance.
     override Object loadObject(string entityName, Variant id) {
         Object obj = getObject(entityName, id);
-        enforceEx!HibernatedException(obj !is null, "Entity " ~ entityName ~ " with id " ~ to!string(id) ~ " not found");
+        enforceEx!ObjectNotFoundException(obj !is null, "Entity " ~ entityName ~ " with id " ~ to!string(id) ~ " not found");
         return obj;
     }
 
@@ -367,7 +367,7 @@ class SessionImpl : Session {
     override void loadObject(Object obj, Variant id) {
         auto info = metaData.findEntityForObject(obj);
         Object found = getObject(info, obj, id);
-        enforceEx!HibernatedException(found !is null, "Entity " ~ info.name ~ " with id " ~ to!string(id) ~ " not found");
+        enforceEx!ObjectNotFoundException(found !is null, "Entity " ~ info.name ~ " with id " ~ to!string(id) ~ " not found");
     }
 
     /// Read the persistent state associated with the given identifier into the given transient instance
@@ -410,7 +410,7 @@ class SessionImpl : Session {
     override void refresh(Object obj) {
         auto info = metaData.findEntityForObject(obj);
         string query = metaData.generateFindByPkForEntity(info);
-        enforceEx!HibernatedException(info.isKeySet(obj), "Cannot refresh entity " ~ info.name ~ ": no Id specified");
+        enforceEx!TransientObjectException(info.isKeySet(obj), "Cannot refresh entity " ~ info.name ~ ": no Id specified");
         Variant id = info.getKey(obj);
         //writeln("Finder query: " ~ query);
         PreparedStatement stmt = conn.prepareStatement(query);
@@ -425,7 +425,7 @@ class SessionImpl : Session {
             //writeln("value: " ~ obj.toString);
         } else {
             // not found!
-            enforceEx!HibernatedException(false, "Entity " ~ info.name ~ " with id " ~ to!string(id) ~ " not found");
+            enforceEx!ObjectNotFoundException(false, "Entity " ~ info.name ~ " with id " ~ to!string(id) ~ " not found");
         }
     }
 
@@ -454,7 +454,7 @@ class SessionImpl : Session {
                 stmt.executeUpdate();
                 return info.getKey(obj);
             } else {
-                throw new HibernatedException("Key is not set and no generator is specified");
+                throw new PropertyValueException("Key is not set and no generator is specified");
             }
         } else {
 			string query = metaData.generateInsertAllFieldsForEntity(info);
@@ -469,7 +469,7 @@ class SessionImpl : Session {
 	/// Persist the given transient instance.
 	override void persist(Object obj) {
         auto info = metaData.findEntityForObject(obj);
-		enforceEx!HibernatedException(info.isKeySet(obj), "Cannot persist entity w/o key assigned");
+        enforceEx!TransientObjectException(info.isKeySet(obj), "Cannot persist entity w/o key assigned");
 		string query = metaData.generateInsertAllFieldsForEntity(info);;
 		PreparedStatement stmt = conn.prepareStatement(query);
 		scope(exit) stmt.close();
@@ -479,7 +479,7 @@ class SessionImpl : Session {
 
     override void update(Object obj) {
         auto info = metaData.findEntityForObject(obj);
-		enforceEx!HibernatedException(info.isKeySet(obj), "Cannot persist entity w/o key assigned");
+        enforceEx!TransientObjectException(info.isKeySet(obj), "Cannot persist entity w/o key assigned");
 		string query = metaData.generateUpdateForEntity(info);
 		//writeln("Query: " ~ query);
 		PreparedStatement stmt = conn.prepareStatement(query);
@@ -542,7 +542,7 @@ class SessionFactoryImpl : SessionFactory {
 //            observer.sessionFactoryCreated(this);
 //    }
     private void checkClosed() {
-        enforceEx!HibernatedException(!closed, "Session factory is closed");
+        enforceEx!SessionException(!closed, "Session factory is closed");
     }
 
 	override void close() {
@@ -715,7 +715,7 @@ class QueryImpl : Query
         Object[] rows = listObjects(obj);
         if (rows == null)
             return null;
-        enforceEx!HibernatedException(rows.length == 1, "Query returned more than one object: " ~ getQueryString());
+        enforceEx!NonUniqueResultException(rows.length == 1, "Query returned more than one object: " ~ getQueryString());
         return rows[0];
     }
 
@@ -724,7 +724,7 @@ class QueryImpl : Query
 		Variant[][] rows = listRows();
 		if (rows == null)
 			return null;
-		enforceEx!HibernatedException(rows.length == 1, "Query returned more than one row: " ~ getQueryString());
+        enforceEx!NonUniqueResultException(rows.length == 1, "Query returned more than one row: " ~ getQueryString());
 		return rows[0];
 	}
 
@@ -926,7 +926,7 @@ class QueryImpl : Query
     Object[] listObjects(Object placeFirstObjectHere, PropertyLoadMap loadMap) {
         writeln("Entering listObjects " ~ query.hql);
         auto ei = query.entity;
-        enforceEx!HibernatedException(ei !is null, "No entity expected in result of query " ~ getQueryString());
+        enforceEx!SessionException(ei !is null, "No entity expected in result of query " ~ getQueryString());
         params.checkAllParametersSet();
         sess.checkClosed();
         

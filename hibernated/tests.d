@@ -471,8 +471,8 @@ unittest {
         assert(g1.id !is null);
         
         
-        assertThrown!HibernatedException(sess.createQuery("SELECT id, name, blabla FROM User ORDER BY name"));
-        assertThrown!SyntaxError(sess.createQuery("SELECT id: name FROM User ORDER BY name"));
+        assertThrown!MappingException(sess.createQuery("SELECT id, name, blabla FROM User ORDER BY name"));
+        assertThrown!QuerySyntaxException(sess.createQuery("SELECT id: name FROM User ORDER BY name"));
         
         // test multiple row query
         Query q = sess.createQuery("FROM User ORDER BY name");

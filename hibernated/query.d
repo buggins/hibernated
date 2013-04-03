@@ -108,7 +108,7 @@ class FromClause {
             if (m.entityAlias == aliasName)
                 return m;
         }
-        throw new SyntaxError("Cannot find FROM alias by name " ~ aliasName);
+        throw new QuerySyntaxException("Cannot find FROM alias by name " ~ aliasName);
     }
     FromClauseItem findByPath(string path) {
         foreach(ref m; items) {
@@ -161,11 +161,11 @@ class QueryParser {
 		int selectPos = findKeyword(KeywordType.SELECT);
 		int wherePos = findKeyword(KeywordType.WHERE);
 		int orderPos = findKeyword(KeywordType.ORDER);
-		enforceEx!SyntaxError(fromPos >= 0, "No FROM clause in query " ~ query);
-		enforceEx!SyntaxError(selectPos <= 0, "SELECT clause should be first - invalid query " ~ query);
-		enforceEx!SyntaxError(wherePos == -1 || wherePos > fromPos, "Invalid WHERE position in query " ~ query);
-		enforceEx!SyntaxError(orderPos == -1 || (orderPos < tokens.length - 2 && tokens[orderPos + 1].keyword == KeywordType.BY), "Invalid ORDER BY in query " ~ query);
-		enforceEx!SyntaxError(orderPos == -1 || orderPos > fromPos, "Invalid ORDER BY position in query " ~ query);
+		enforceEx!QuerySyntaxException(fromPos >= 0, "No FROM clause in query " ~ query);
+		enforceEx!QuerySyntaxException(selectPos <= 0, "SELECT clause should be first - invalid query " ~ query);
+		enforceEx!QuerySyntaxException(wherePos == -1 || wherePos > fromPos, "Invalid WHERE position in query " ~ query);
+		enforceEx!QuerySyntaxException(orderPos == -1 || (orderPos < tokens.length - 2 && tokens[orderPos + 1].keyword == KeywordType.BY), "Invalid ORDER BY in query " ~ query);
+		enforceEx!QuerySyntaxException(orderPos == -1 || orderPos > fromPos, "Invalid ORDER BY position in query " ~ query);
 		int fromEnd = len;
 		if (orderPos >= 0)
 			fromEnd = orderPos;
@@ -289,9 +289,9 @@ class QueryParser {
 		int p = start;
 		for (int i = start; i < end; i++) {
 			if (tokens[i].type == TokenType.Comma || i == end - 1) {
-				enforceEx!SyntaxError(tokens[i].type != TokenType.Comma || i != end - 1, "Invalid comma at end of list" ~ errorContext(tokens[start]));
+				enforceEx!QuerySyntaxException(tokens[i].type != TokenType.Comma || i != end - 1, "Invalid comma at end of list" ~ errorContext(tokens[start]));
 				int endp = i < end - 1 ? i : end;
-				enforceEx!SyntaxError(endp > p, "Invalid comma delimited list" ~ errorContext(tokens[start]));
+				enforceEx!QuerySyntaxException(endp > p, "Invalid comma delimited list" ~ errorContext(tokens[start]));
 				callback(p, endp);
 				p = i + 1;
 			}
@@ -302,7 +302,7 @@ class QueryParser {
         int pos = start;
         while (pos < end) {
             if (tokens[pos].type == TokenType.Ident || tokens[pos].type == TokenType.Alias) {
-                enforceEx!SyntaxError(path.length == 0 || tokens[pos].type != TokenType.Alias, "Alias is allowed only as first item" ~ errorContext(tokens[pos]));
+                enforceEx!QuerySyntaxException(path.length == 0 || tokens[pos].type != TokenType.Alias, "Alias is allowed only as first item" ~ errorContext(tokens[pos]));
                 path ~= tokens[pos].text;
                 pos++;
                 if (pos == end || tokens[pos].type != TokenType.Dot)
@@ -314,18 +314,18 @@ class QueryParser {
                 break;
             }
         }
-        enforceEx!SyntaxError(tokens[pos].type != TokenType.Dot, "Unexpected dot at end in field list" ~ errorContext(tokens[pos]));
-        enforceEx!SyntaxError(path.length > 0, "Empty field list" ~ errorContext(tokens[pos]));
+        enforceEx!QuerySyntaxException(tokens[pos].type != TokenType.Dot, "Unexpected dot at end in field list" ~ errorContext(tokens[pos]));
+        enforceEx!QuerySyntaxException(path.length > 0, "Empty field list" ~ errorContext(tokens[pos]));
         return pos;
     }
 	
     private void parseFirstFromClause(int start, int end, out int pos) {
-        enforceEx!SyntaxError(start < end, "Invalid FROM clause " ~ errorContext(tokens[start]));
+        enforceEx!QuerySyntaxException(start < end, "Invalid FROM clause " ~ errorContext(tokens[start]));
         // minimal support:
         //    Entity
         //    Entity alias
         //    Entity AS alias
-        enforceEx!SyntaxError(tokens[start].type == TokenType.Ident, "Entity name identifier expected in FROM clause" ~ errorContext(tokens[start]));
+        enforceEx!QuerySyntaxException(tokens[start].type == TokenType.Ident, "Entity name identifier expected in FROM clause" ~ errorContext(tokens[start]));
         string entityName = cast(string)tokens[start].text;
         auto ei = metadata.findEntity(entityName);
         updateEntity(ei, entityName);
@@ -334,7 +334,7 @@ class QueryParser {
         if (p < end && tokens[p].type == TokenType.Keyword && tokens[p].keyword == KeywordType.AS)
             p++;
         if (p < end) {
-            enforceEx!SyntaxError(tokens[p].type == TokenType.Ident, "Alias name identifier expected in FROM clause" ~ errorContext(tokens[p]));
+            enforceEx!QuerySyntaxException(tokens[p].type == TokenType.Ident, "Alias name identifier expected in FROM clause" ~ errorContext(tokens[p]));
             aliasName = cast(string)tokens[p].text;
             p++;
         }
@@ -346,19 +346,19 @@ class QueryParser {
 
     void appendFromClause(Token context, string[] path, string aliasName, JoinType joinType, bool fetch) {
         int p = 0;
-        enforceEx!SyntaxError(fromClause.hasAlias(path[p]), "Unknown alias " ~ path[p] ~ " in FROM clause" ~ errorContext(context));
+        enforceEx!QuerySyntaxException(fromClause.hasAlias(path[p]), "Unknown alias " ~ path[p] ~ " in FROM clause" ~ errorContext(context));
         FromClauseItem baseClause = findFromClauseByAlias(path[p]);
         //string pathString = path[p];
         p++;
         while(true) {
             auto baseEntity = baseClause.entity;
-            enforceEx!SyntaxError(p < path.length, "Property name expected in FROM clause" ~ errorContext(context));
+            enforceEx!QuerySyntaxException(p < path.length, "Property name expected in FROM clause" ~ errorContext(context));
             string propertyName = path[p++];
             auto property = baseEntity[propertyName];
             auto referencedEntity = property.referencedEntity;
             assert(referencedEntity !is null);
-            enforceEx!SyntaxError(!property.simple, "Simple property " ~ propertyName ~ " cannot be used in JOIN" ~ errorContext(context));
-            enforceEx!SyntaxError(!property.embedded, "Embedded property " ~ propertyName ~ " cannot be used in JOIN" ~ errorContext(context));
+            enforceEx!QuerySyntaxException(!property.simple, "Simple property " ~ propertyName ~ " cannot be used in JOIN" ~ errorContext(context));
+            enforceEx!QuerySyntaxException(!property.embedded, "Embedded property " ~ propertyName ~ " cannot be used in JOIN" ~ errorContext(context));
             bool last = (p == path.length);
             FromClauseItem item = fromClause.add(referencedEntity, last ? aliasName : null, joinType, fetch, baseClause, property);
             if (last && aliasName !is null)
@@ -381,14 +381,14 @@ class QueryParser {
             } else if (tokens[p].keyword == KeywordType.INNER) {
                 p++;
             }
-            enforceEx!SyntaxError(p < end && tokens[p].keyword == KeywordType.JOIN, "Invalid FROM clause" ~ errorContext(tokens[p]));
+            enforceEx!QuerySyntaxException(p < end && tokens[p].keyword == KeywordType.JOIN, "Invalid FROM clause" ~ errorContext(tokens[p]));
             p++;
-            enforceEx!SyntaxError(p < end, "Invalid FROM clause - incomplete JOIN" ~ errorContext(tokens[p]));
+            enforceEx!QuerySyntaxException(p < end, "Invalid FROM clause - incomplete JOIN" ~ errorContext(tokens[p]));
             bool fetch = false;
             if (tokens[p].keyword == KeywordType.FETCH) {
                 fetch = true;
                 p++;
-                enforceEx!SyntaxError(p < end, "Invalid FROM clause - incomplete JOIN" ~ errorContext(tokens[p]));
+                enforceEx!QuerySyntaxException(p < end, "Invalid FROM clause - incomplete JOIN" ~ errorContext(tokens[p]));
             }
             string[] path;
             p = parseFieldRef(p, end, path);
@@ -398,12 +398,12 @@ class QueryParser {
                 p++;
                 hasAS = true;
             }
-            enforceEx!SyntaxError(p < end && tokens[p].type == TokenType.Ident, "Invalid FROM clause - no alias in JOIN" ~ errorContext(tokens[p]));
+            enforceEx!QuerySyntaxException(p < end && tokens[p].type == TokenType.Ident, "Invalid FROM clause - no alias in JOIN" ~ errorContext(tokens[p]));
             aliasName = tokens[p].text;
             p++;
             appendFromClause(context, path, aliasName, joinType, fetch);
         }
-		enforceEx!SyntaxError(p == end, "Invalid FROM clause" ~ errorContext(tokens[p]));
+		enforceEx!QuerySyntaxException(p == end, "Invalid FROM clause" ~ errorContext(tokens[p]));
 	}
 	
 	// in pairs {: Ident} replace type of ident with Parameter 
@@ -432,12 +432,12 @@ class QueryParser {
 			while (item.prop.embedded) {
 				//writeln("Embedded property " ~ item.prop.propertyName ~ " of type " ~ item.prop.referencedEntityName);
                 ei = cast(EntityInfo)item.prop.referencedEntity;
-			    enforceEx!SyntaxError(propertyNames.length > 0, "@Embedded field property name should be specified when selecting " ~ aliasName ~ "." ~ item.prop.propertyName);
+			    enforceEx!QuerySyntaxException(propertyNames.length > 0, "@Embedded field property name should be specified when selecting " ~ aliasName ~ "." ~ item.prop.propertyName);
                 item.prop = cast(PropertyInfo)ei.findProperty(propertyNames[0]);
 				propertyNames.popFront();
 			}
 		}
-		enforceEx!SyntaxError(propertyNames.length == 0, "Extra field names in SELECT clause in query " ~ query);
+		enforceEx!QuerySyntaxException(propertyNames.length == 0, "Extra field names in SELECT clause in query " ~ query);
 		selectClause ~= item;
 		//insertInPlace(selectClause, 0, item);
 	}
@@ -464,19 +464,19 @@ class QueryParser {
 			asc = false;
 			end--;
 		}
-		enforceEx!SyntaxError(start < end, "Empty ORDER BY clause item" ~ errorContext(tokens[start]));
+		enforceEx!QuerySyntaxException(start < end, "Empty ORDER BY clause item" ~ errorContext(tokens[start]));
 		if (start == end - 1) {
 			// no alias
-			enforceEx!SyntaxError(tokens[start].type == TokenType.Ident, "Property name expected in ORDER BY clause" ~ errorContext(tokens[start]));
+			enforceEx!QuerySyntaxException(tokens[start].type == TokenType.Ident, "Property name expected in ORDER BY clause" ~ errorContext(tokens[start]));
 			addOrderByClauseItem(null, cast(string)tokens[start].text, asc);
 		} else if (start == end - 3) {
-			enforceEx!SyntaxError(tokens[start].type == TokenType.Alias, "Entity alias expected in ORDER BY clause" ~ errorContext(tokens[start]));
-			enforceEx!SyntaxError(tokens[start + 1].type == TokenType.Dot, "Dot expected after entity alias in ORDER BY clause" ~ errorContext(tokens[start]));
-			enforceEx!SyntaxError(tokens[start + 2].type == TokenType.Ident, "Property name expected after entity alias in ORDER BY clause" ~ errorContext(tokens[start]));
+			enforceEx!QuerySyntaxException(tokens[start].type == TokenType.Alias, "Entity alias expected in ORDER BY clause" ~ errorContext(tokens[start]));
+			enforceEx!QuerySyntaxException(tokens[start + 1].type == TokenType.Dot, "Dot expected after entity alias in ORDER BY clause" ~ errorContext(tokens[start]));
+			enforceEx!QuerySyntaxException(tokens[start + 2].type == TokenType.Ident, "Property name expected after entity alias in ORDER BY clause" ~ errorContext(tokens[start]));
 			addOrderByClauseItem(cast(string)tokens[start].text, cast(string)tokens[start + 2].text, asc);
 		} else {
 			//writeln("range: " ~ to!string(start) ~ " .. " ~ to!string(end));
-			enforceEx!SyntaxError(false, "Invalid ORDER BY clause (expected {property [ASC | DESC]} or {alias.property [ASC | DESC]} )" ~ errorContext(tokens[start]));
+			enforceEx!QuerySyntaxException(false, "Invalid ORDER BY clause (expected {property [ASC | DESC]} or {alias.property [ASC | DESC]} )" ~ errorContext(tokens[start]));
 		}
 	}
 	
@@ -485,14 +485,14 @@ class QueryParser {
 		// in current version it can only be
 		// {property}  or  {alias . property}
 		//writeln("SELECT ITEM: " ~ to!string(start) ~ " .. " ~ to!string(end));
-		enforceEx!SyntaxError(tokens[start].type == TokenType.Ident || tokens[start].type == TokenType.Alias, "Property name or alias expected in SELECT clause in query " ~ query ~ errorContext(tokens[start]));
+		enforceEx!QuerySyntaxException(tokens[start].type == TokenType.Ident || tokens[start].type == TokenType.Alias, "Property name or alias expected in SELECT clause in query " ~ query ~ errorContext(tokens[start]));
 		string aliasName;
 		int p = start;
 		if (tokens[p].type == TokenType.Alias) {
             //writeln("select clause alias: " ~ tokens[p].text ~ " query: " ~ query);
 			aliasName = cast(string)tokens[p].text;
 			p++;
-			enforceEx!SyntaxError(p == end || tokens[p].type == TokenType.Dot, "SELECT clause item is invalid (only  [alias.]field{[.field2]}+ allowed) " ~ errorContext(tokens[start]));
+			enforceEx!QuerySyntaxException(p == end || tokens[p].type == TokenType.Dot, "SELECT clause item is invalid (only  [alias.]field{[.field2]}+ allowed) " ~ errorContext(tokens[start]));
 			if (p < end - 1 && tokens[p].type == TokenType.Dot)
 				p++;
 		} else {
@@ -508,12 +508,12 @@ class QueryParser {
 			p++;
 		}
 		//writeln("parseSelectClauseItem pos=" ~ to!string(p) ~ " end=" ~ to!string(end));
-		enforceEx!SyntaxError(p >= end, "SELECT clause item is invalid (only  [alias.]field{[.field2]}+ allowed) " ~ errorContext(tokens[start]));
+		enforceEx!QuerySyntaxException(p >= end, "SELECT clause item is invalid (only  [alias.]field{[.field2]}+ allowed) " ~ errorContext(tokens[start]));
 		addSelectClauseItem(aliasName, fieldNames);
 	}
 	
 	void parseSelectClause(int start, int end) {
-		enforceEx!SyntaxError(start < end, "Invalid SELECT clause" ~ errorContext(tokens[start]));
+		enforceEx!QuerySyntaxException(start < end, "Invalid SELECT clause" ~ errorContext(tokens[start]));
 		splitCommaDelimitedList(start, end, &parseSelectClauseItem);
 	}
 	
@@ -522,7 +522,7 @@ class QueryParser {
 	}
 	
 	bool validateSelectClause() {
-		enforceEx!SyntaxError(selectClause != null && selectClause.length > 0, "Invalid SELECT clause");
+		enforceEx!QuerySyntaxException(selectClause != null && selectClause.length > 0, "Invalid SELECT clause");
 		int aliasCount = 0;
 		int fieldCount = 0;
 		foreach(a; selectClause) {
@@ -531,12 +531,12 @@ class QueryParser {
 			else
 				aliasCount++;
 		}
-		enforceEx!SyntaxError((aliasCount == 1 && fieldCount == 0) || (aliasCount == 0 && fieldCount > 0), "You should either use single entity alias or one or more properties in SELECT clause. Don't mix objects with primitive fields");
+		enforceEx!QuerySyntaxException((aliasCount == 1 && fieldCount == 0) || (aliasCount == 0 && fieldCount > 0), "You should either use single entity alias or one or more properties in SELECT clause. Don't mix objects with primitive fields");
         return aliasCount > 0;
 	}
 	
 	void parseWhereClause(int start, int end) {
-		enforceEx!SyntaxError(start < end, "Invalid WHERE clause" ~ errorContext(tokens[start]));
+		enforceEx!QuerySyntaxException(start < end, "Invalid WHERE clause" ~ errorContext(tokens[start]));
 		whereClause = new Token(tokens[start].pos, TokenType.Expression, tokens, start, end);
 		//writeln("before convert fields:\n" ~ whereClause.dump(0));
 		convertFields(whereClause.children);
@@ -570,7 +570,7 @@ class QueryParser {
 			if (lastOpen == -1 && firstClose == -1)
 				return;
 			//writeln("folding braces " ~ to!string(lastOpen) ~ " .. " ~ to!string(firstClose));
-			enforceEx!SyntaxError(lastOpen >= 0 && lastOpen < firstClose, "Unpaired braces in WHERE clause" ~ errorContext(tokens[lastOpen]));
+			enforceEx!QuerySyntaxException(lastOpen >= 0 && lastOpen < firstClose, "Unpaired braces in WHERE clause" ~ errorContext(tokens[lastOpen]));
 			Token folded = new Token(items[lastOpen].pos, TokenType.Braces, items, lastOpen + 1, firstClose);
 			//			size_t oldlen = items.length;
 			//			int removed = firstClose - lastOpen;
@@ -634,7 +634,7 @@ class QueryParser {
 			for (int i=p + 1; i < items.length - 1; i+=2) {
 				if (items[i].type != TokenType.Dot)
 					break;
-				enforceEx!SyntaxError(i < items.length - 1 && items[i + 1].type == TokenType.Ident, "Syntax error in WHERE condition - no property name after . " ~ errorContext(items[p]));
+				enforceEx!QuerySyntaxException(i < items.length - 1 && items[i + 1].type == TokenType.Ident, "Syntax error in WHERE condition - no property name after . " ~ errorContext(items[p]));
 				lastp = i + 1;
 				idents ~= items[i + 1].text;
 			}
@@ -649,7 +649,7 @@ class QueryParser {
 			}
 			string aliasName = a.entityAlias;
             EntityInfo ei = cast(EntityInfo)a.entity;
-			enforceEx!SyntaxError(idents.length > 0, "Syntax error in WHERE condition - alias w/o property name: " ~ aliasName ~ errorContext(items[p]));
+			enforceEx!QuerySyntaxException(idents.length > 0, "Syntax error in WHERE condition - alias w/o property name: " ~ aliasName ~ errorContext(items[p]));
             PropertyInfo pi;
             fullName = aliasName;
             while(true) {
@@ -658,7 +658,7 @@ class QueryParser {
     			fullName ~= "." ~ propertyName;
                 pi = cast(PropertyInfo)ei.findProperty(propertyName);
     			while (pi.embedded) { // loop to allow nested @Embedded
-    				enforceEx!SyntaxError(idents.length > 0, "Syntax error in WHERE condition - @Embedded property reference should include reference to @Embeddable property " ~ aliasName ~ errorContext(items[p]));
+    				enforceEx!QuerySyntaxException(idents.length > 0, "Syntax error in WHERE condition - @Embedded property reference should include reference to @Embeddable property " ~ aliasName ~ errorContext(items[p]));
     				propertyName = idents[0];
     				idents.popFront();
                     pi = cast(PropertyInfo)pi.referencedEntity.findProperty(propertyName);
@@ -669,7 +669,7 @@ class QueryParser {
                 if (idents.length > 0) {
                     // more field names
                     string pname = idents[0];
-                    enforceEx!SyntaxError(pi.referencedEntity !is null, "Unexpected extra field name " ~ pname ~ " - property " ~ propertyName ~ " doesn't content subproperties " ~ errorContext(items[p]));
+                    enforceEx!QuerySyntaxException(pi.referencedEntity !is null, "Unexpected extra field name " ~ pname ~ " - property " ~ propertyName ~ " doesn't content subproperties " ~ errorContext(items[p]));
                     ei = cast(EntityInfo)pi.referencedEntity;
                     FromClauseItem newClause = fromClause.findByPath(fullName);
                     if (newClause is null) {
@@ -679,7 +679,7 @@ class QueryParser {
                     a = newClause;
                 }
             }
-			enforceEx!SyntaxError(idents.length == 0, "Unexpected extra field name " ~ idents[0] ~ errorContext(items[p]));
+			enforceEx!QuerySyntaxException(idents.length == 0, "Unexpected extra field name " ~ idents[0] ~ errorContext(items[p]));
 			//writeln("full name = " ~ fullName);
 			Token t = new Token(items[p].pos, TokenType.Field, fullName);
             t.entity = cast(EntityInfo)ei;
@@ -718,16 +718,16 @@ class QueryParser {
         Token[] list;
         for (int i=0; i <= items.length; i++) {
             if (i == items.length || items[i].type == TokenType.Comma) {
-                enforceEx!SyntaxError(i > start, "Empty item in comma separated list" ~ errorContext(items[i]));
-                enforceEx!SyntaxError(i != items.length - 1, "Empty item in comma separated list" ~ errorContext(items[i]));
+                enforceEx!QuerySyntaxException(i > start, "Empty item in comma separated list" ~ errorContext(items[i]));
+                enforceEx!QuerySyntaxException(i != items.length - 1, "Empty item in comma separated list" ~ errorContext(items[i]));
                 Token item = new Token(items[start].pos, TokenType.Expression, braces.children, start, i);
                 foldOperators(item.children);
-                enforceEx!SyntaxError(item.children.length == 1, "Invalid expression in list item" ~ errorContext(items[i]));
+                enforceEx!QuerySyntaxException(item.children.length == 1, "Invalid expression in list item" ~ errorContext(items[i]));
                 list ~= item.children[0];
                 start = i + 1;
             }
         }
-        enforceEx!SyntaxError(list.length > 0, "Empty list" ~ errorContext(items[0]));
+        enforceEx!QuerySyntaxException(list.length > 0, "Empty list" ~ errorContext(items[0]));
         braces.type = TokenType.CommaDelimitedList;
         braces.children = list;
     }
@@ -757,29 +757,29 @@ class QueryParser {
 			//writeln("Found op " ~ items[bestOpPosition].toString() ~ " at position " ~ to!string(bestOpPosition) ~ " with priority " ~ to!string(bestOpPrecedency));
 			if (t == OperatorType.NOT || t == OperatorType.UNARY_PLUS || t == OperatorType.UNARY_MINUS) {
 				// fold unary
-				enforceEx!SyntaxError(bestOpPosition < items.length && items[bestOpPosition + 1].isExpression(), "Syntax error in WHERE condition " ~ errorContext(items[bestOpPosition]));
+				enforceEx!QuerySyntaxException(bestOpPosition < items.length && items[bestOpPosition + 1].isExpression(), "Syntax error in WHERE condition " ~ errorContext(items[bestOpPosition]));
 				Token folded = new Token(items[bestOpPosition].pos, t, items[bestOpPosition].text, items[bestOpPosition + 1]);
 				replaceInPlace(items, bestOpPosition, bestOpPosition + 2, [folded]);
 			} else if (t == OperatorType.IS_NULL || t == OperatorType.IS_NOT_NULL) {
 				// fold unary
-				enforceEx!SyntaxError(bestOpPosition > 0 && items[bestOpPosition - 1].isExpression(), "Syntax error in WHERE condition " ~ errorContext(items[bestOpPosition]));
+				enforceEx!QuerySyntaxException(bestOpPosition > 0 && items[bestOpPosition - 1].isExpression(), "Syntax error in WHERE condition " ~ errorContext(items[bestOpPosition]));
 				Token folded = new Token(items[bestOpPosition - 1].pos, t, items[bestOpPosition].text, items[bestOpPosition - 1]);
 				replaceInPlace(items, bestOpPosition - 1, bestOpPosition + 1, [folded]);
 			} else if (t == OperatorType.BETWEEN) {
 				// fold  X BETWEEN A AND B
-				enforceEx!SyntaxError(bestOpPosition > 0, "Syntax error in WHERE condition - no left arg for BETWEEN operator");
-				enforceEx!SyntaxError(bestOpPosition < items.length - 1, "Syntax error in WHERE condition - no min bound for BETWEEN operator " ~ errorContext(items[bestOpPosition]));
-				enforceEx!SyntaxError(bestOpPosition < items.length - 3, "Syntax error in WHERE condition - no max bound for BETWEEN operator " ~ errorContext(items[bestOpPosition]));
-				enforceEx!SyntaxError(items[bestOpPosition + 2].operator == OperatorType.AND, "Syntax error in WHERE condition - no max bound for BETWEEN operator" ~ errorContext(items[bestOpPosition]));
+				enforceEx!QuerySyntaxException(bestOpPosition > 0, "Syntax error in WHERE condition - no left arg for BETWEEN operator");
+				enforceEx!QuerySyntaxException(bestOpPosition < items.length - 1, "Syntax error in WHERE condition - no min bound for BETWEEN operator " ~ errorContext(items[bestOpPosition]));
+				enforceEx!QuerySyntaxException(bestOpPosition < items.length - 3, "Syntax error in WHERE condition - no max bound for BETWEEN operator " ~ errorContext(items[bestOpPosition]));
+				enforceEx!QuerySyntaxException(items[bestOpPosition + 2].operator == OperatorType.AND, "Syntax error in WHERE condition - no max bound for BETWEEN operator" ~ errorContext(items[bestOpPosition]));
 				Token folded = new Token(items[bestOpPosition - 1].pos, t, items[bestOpPosition].text, items[bestOpPosition - 1]);
 				folded.children ~= items[bestOpPosition + 1];
 				folded.children ~= items[bestOpPosition + 3];
 				replaceInPlace(items, bestOpPosition - 1, bestOpPosition + 4, [folded]);
             } else if (t == OperatorType.IN) {
                 // fold  X IN (A, B, ...)
-                enforceEx!SyntaxError(bestOpPosition > 0, "Syntax error in WHERE condition - no left arg for IN operator");
-                enforceEx!SyntaxError(bestOpPosition < items.length - 1, "Syntax error in WHERE condition - no value list for IN operator " ~ errorContext(items[bestOpPosition]));
-                enforceEx!SyntaxError(items[bestOpPosition + 1].type == TokenType.Braces, "Syntax error in WHERE condition - no value list in braces for IN operator" ~ errorContext(items[bestOpPosition]));
+                enforceEx!QuerySyntaxException(bestOpPosition > 0, "Syntax error in WHERE condition - no left arg for IN operator");
+                enforceEx!QuerySyntaxException(bestOpPosition < items.length - 1, "Syntax error in WHERE condition - no value list for IN operator " ~ errorContext(items[bestOpPosition]));
+                enforceEx!QuerySyntaxException(items[bestOpPosition + 1].type == TokenType.Braces, "Syntax error in WHERE condition - no value list in braces for IN operator" ~ errorContext(items[bestOpPosition]));
                 Token folded = new Token(items[bestOpPosition - 1].pos, t, items[bestOpPosition].text, items[bestOpPosition - 1]);
                 folded.children ~= items[bestOpPosition + 1];
                 foldCommaSeparatedList(items[bestOpPosition + 1]);
@@ -788,11 +788,11 @@ class QueryParser {
                 //writeln("IN operator found: " ~ folded.dump(3));
             } else {
 				// fold binary
-				enforceEx!SyntaxError(bestOpPosition > 0, "Syntax error in WHERE condition - no left arg for binary operator " ~ errorContext(items[bestOpPosition]));
-				enforceEx!SyntaxError(bestOpPosition < items.length - 1, "Syntax error in WHERE condition - no right arg for binary operator " ~ errorContext(items[bestOpPosition]));
+				enforceEx!QuerySyntaxException(bestOpPosition > 0, "Syntax error in WHERE condition - no left arg for binary operator " ~ errorContext(items[bestOpPosition]));
+				enforceEx!QuerySyntaxException(bestOpPosition < items.length - 1, "Syntax error in WHERE condition - no right arg for binary operator " ~ errorContext(items[bestOpPosition]));
 				//writeln("binary op " ~ items[bestOpPosition - 1].toString() ~ " " ~ items[bestOpPosition].toString() ~ " " ~ items[bestOpPosition + 1].toString());
-				enforceEx!SyntaxError(items[bestOpPosition - 1].isExpression(), "Syntax error in WHERE condition - wrong type of left arg for binary operator " ~ errorContext(items[bestOpPosition]));
-				enforceEx!SyntaxError(items[bestOpPosition + 1].isExpression(), "Syntax error in WHERE condition - wrong type of right arg for binary operator " ~ errorContext(items[bestOpPosition]));
+				enforceEx!QuerySyntaxException(items[bestOpPosition - 1].isExpression(), "Syntax error in WHERE condition - wrong type of left arg for binary operator " ~ errorContext(items[bestOpPosition]));
+				enforceEx!QuerySyntaxException(items[bestOpPosition + 1].isExpression(), "Syntax error in WHERE condition - wrong type of right arg for binary operator " ~ errorContext(items[bestOpPosition]));
 				Token folded = new Token(items[bestOpPosition - 1].pos, t, items[bestOpPosition].text, items[bestOpPosition - 1], items[bestOpPosition + 1]);
 				auto oldlen = items.length;
 				replaceInPlace(items, bestOpPosition - 1, bestOpPosition + 2, [folded]);
@@ -802,7 +802,7 @@ class QueryParser {
 	}
 	
 	void parseOrderClause(int start, int end) {
-		enforceEx!SyntaxError(start < end, "Invalid ORDER BY clause" ~ errorContext(tokens[start]));
+		enforceEx!QuerySyntaxException(start < end, "Invalid ORDER BY clause" ~ errorContext(tokens[start]));
 		splitCommaDelimitedList(start, end, &parseOrderByClauseItem);
 	}
 	
@@ -963,7 +963,7 @@ class QueryParser {
                     res.appendSQL(dialect.quoteIfNeeded(join.baseProperty.referencedProperty.columnName));
                 } else {
                     // TODO: support other relations
-                    throw new SyntaxError("Invalid relation type in join");
+                    throw new QuerySyntaxException("Invalid relation type in join");
                 }
             }
         }
@@ -1062,7 +1062,7 @@ class QueryParser {
                     break;
 				case OperatorType.IS:
 				default:
-					enforceEx!SyntaxError(false, "Unexpected operator" ~ errorContext(t));
+					enforceEx!QuerySyntaxException(false, "Unexpected operator" ~ errorContext(t));
 					break;
 			}
 			if (needBraces)
@@ -1421,13 +1421,13 @@ Token[] tokenize(string s) {
 					break;
 				}
 			}
-			enforceEx!SyntaxError(text.length > 0, "Invalid parameter name near " ~ cast(string)s[startpos .. $]);
+			enforceEx!QuerySyntaxException(text.length > 0, "Invalid parameter name near " ~ cast(string)s[startpos .. $]);
 			res ~= new Token(startpos, TokenType.Parameter, text);
 		} else if (isAlpha(ch) || ch=='_' || quotedIdent) {
 			// identifier or keyword
 			if (quotedIdent) {
 				i++;
-				enforceEx!SyntaxError(i < len - 1, "Invalid quoted identifier near " ~ cast(string)s[startpos .. $]);
+				enforceEx!QuerySyntaxException(i < len - 1, "Invalid quoted identifier near " ~ cast(string)s[startpos .. $]);
 			}
 			// && state == 0
 			for(int j=i; j<len; j++) {
@@ -1438,9 +1438,9 @@ Token[] tokenize(string s) {
 					break;
 				}
 			}
-			enforceEx!SyntaxError(text.length > 0, "Invalid quoted identifier near " ~ cast(string)s[startpos .. $]);
+			enforceEx!QuerySyntaxException(text.length > 0, "Invalid quoted identifier near " ~ cast(string)s[startpos .. $]);
 			if (quotedIdent) {
-				enforceEx!SyntaxError(i < len - 1 && s[i + 1] == '`', "Invalid quoted identifier near " ~ cast(string)s[startpos .. $]);
+				enforceEx!QuerySyntaxException(i < len - 1 && s[i + 1] == '`', "Invalid quoted identifier near " ~ cast(string)s[startpos .. $]);
 				i++;
 			}
 			KeywordType keywordId = isKeyword(text);
@@ -1478,7 +1478,7 @@ Token[] tokenize(string s) {
 					break;
 				}
 			}
-			enforceEx!SyntaxError(i < len - 1 && s[i + 1] == '\'', "Unfinished string near " ~ cast(string)s[startpos .. $]);
+			enforceEx!QuerySyntaxException(i < len - 1 && s[i + 1] == '\'', "Unfinished string near " ~ cast(string)s[startpos .. $]);
 			i++;
 			res ~= new Token(startpos, TokenType.String, text);
 		} else if (isDigit(ch) || (ch == '.' && isDigit(ch2))) {
@@ -1526,7 +1526,7 @@ Token[] tokenize(string s) {
 					text ~= s[i+1];
 					i++;
 				}
-				enforceEx!SyntaxError(i < len - 1 && isDigit(s[i]), "Invalid number near " ~ cast(string)s[startpos .. $]);
+				enforceEx!QuerySyntaxException(i < len - 1 && isDigit(s[i]), "Invalid number near " ~ cast(string)s[startpos .. $]);
 				for(int j = i; j<len; j++) {
 					if (isDigit(s[j])) {
 						text ~= s[j];
@@ -1536,7 +1536,7 @@ Token[] tokenize(string s) {
 					}
 				}
 			}
-			enforceEx!SyntaxError(i >= len - 1 || !isAlpha(s[i]), "Invalid number near " ~ cast(string)s[startpos .. $]);
+			enforceEx!QuerySyntaxException(i >= len - 1 || !isAlpha(s[i]), "Invalid number near " ~ cast(string)s[startpos .. $]);
 			res ~= new Token(startpos, TokenType.Number, text);
 		} else if (ch == '.') {
 			res ~= new Token(startpos, TokenType.Dot, ".");
@@ -1547,7 +1547,7 @@ Token[] tokenize(string s) {
 		} else if (ch == ',') {
 			res ~= new Token(startpos, TokenType.Comma, ",");
 		} else {
-			enforceEx!SyntaxError(false, "Invalid character near " ~ cast(string)s[startpos .. $]);
+			enforceEx!QuerySyntaxException(false, "Invalid character near " ~ cast(string)s[startpos .. $]);
 		}
 	}
 	return res;
@@ -1580,7 +1580,7 @@ class ParameterValues {
 		}
 	}
 	void setParameter(string name, Variant value) {
-		enforceEx!HibernatedException((name in params) !is null, "Attempting to set unknown parameter " ~ name);
+        enforceEx!QueryParameterException((name in params) !is null, "Attempting to set unknown parameter " ~ name);
 		unboundParams.remove(name);
 		values[name] = value;
 	}
@@ -1593,7 +1593,7 @@ class ParameterValues {
 				list ~= ", ";
 			list ~= key;
 		}
-		enforceEx!HibernatedException(false, "Parameters " ~ list ~ " not set");
+        enforceEx!QueryParameterException(false, "Parameters " ~ list ~ " not set");
 	}
 	void applyParams(DataSetWriter ds) {
 		foreach(key, indexes; params) {

@@ -290,7 +290,7 @@ class EntityInfo {
             }
         }
 		this._propertyMap = map;
-        enforceEx!HibernatedException(keyProperty !is null || embeddable, "No key specified for non-embeddable entity " ~ name);
+        enforceEx!MappingException(keyProperty !is null || embeddable, "No key specified for non-embeddable entity " ~ name);
 	}
 	/// returns key value as Variant from entity instance
     Variant getKey(Object obj) const { return keyProperty.getFunc(obj); }
@@ -332,7 +332,7 @@ class EntityInfo {
 	/// returns property by index
     const(PropertyInfo) getProperty(int propertyIndex) const { return properties[propertyIndex]; }
 	/// returns property by name, throws exception if not found
-	const(PropertyInfo) findProperty(string propertyName) const { try { return _propertyMap[propertyName]; } catch (Throwable e) { throw new HibernatedException("No property " ~ propertyName ~ " found in entity " ~ name); } }
+    const(PropertyInfo) findProperty(string propertyName) const { try { return _propertyMap[propertyName]; } catch (Throwable e) { throw new MappingException("No property " ~ propertyName ~ " found in entity " ~ name); } }
 	/// create instance of entity object (using default constructor)
 	Object createEntity() const { return Object.factory(classInfo.name); }
 
@@ -2275,10 +2275,10 @@ string entityListDef(T ...)() {
         "        foreach(p; e._properties) {\n" ~
 		"            if (p.referencedEntityName !is null) {\n" ~
 		"                //writeln(\"embedded entity \" ~ p.referencedEntityName);\n" ~
-		"                enforceEx!HibernatedException((p.referencedEntityName in map) !is null, \"referenced entity not found in schema: \" ~ p.referencedEntityName);\n" ~
+        "                enforceEx!MappingException((p.referencedEntityName in map) !is null, \"referenced entity not found in schema: \" ~ p.referencedEntityName);\n" ~
 		"                p._referencedEntity = map[p.referencedEntityName];\n" ~
 		"                if (p.referencedPropertyName !is null) {\n" ~
-        "                    enforceEx!HibernatedException((p.referencedPropertyName in p._referencedEntity._propertyMap) !is null, \"embedded entity property not found in schema: \" ~ p.referencedEntityName);\n" ~
+        "                    enforceEx!MappingException((p.referencedPropertyName in p._referencedEntity._propertyMap) !is null, \"embedded entity property not found in schema: \" ~ p.referencedEntityName);\n" ~
         "                    p._referencedProperty = p._referencedEntity._propertyMap[p.referencedPropertyName];\n" ~
 		"				 }\n" ~
 		"            }\n" ~
@@ -2539,27 +2539,27 @@ class SchemaInfoImpl(T...) : SchemaInfo {
     }
 
     override public const(EntityInfo) findEntity(string entityName) const  { 
-        enforceEx!HibernatedException((entityName in entityMap) !is null, "Cannot find entity by name " ~ entityName);
+        enforceEx!MappingException((entityName in entityMap) !is null, "Cannot find entity by name " ~ entityName);
         return entityMap[entityName]; 
     }
 
     override public const(EntityInfo) findEntity(TypeInfo_Class entityClass) const { 
-        enforceEx!HibernatedException((entityClass in classMap) !is null, "Cannot find entity by class " ~ entityClass.toString());
+        enforceEx!MappingException((entityClass in classMap) !is null, "Cannot find entity by class " ~ entityClass.toString());
         return classMap[entityClass]; 
     }
 
     override public const(EntityInfo) getEntity(int entityIndex) const { 
-        enforceEx!HibernatedException(entityIndex >= 0 && entityIndex < entities.length, "Invalid entity index " ~ to!string(entityIndex));
+        enforceEx!MappingException(entityIndex >= 0 && entityIndex < entities.length, "Invalid entity index " ~ to!string(entityIndex));
         return entities[entityIndex]; 
     }
 
     override public Object createEntity(string entityName) const { 
-        enforceEx!HibernatedException((entityName in entityMap) !is null, "Cannot find entity by name " ~ entityName);
+        enforceEx!MappingException((entityName in entityMap) !is null, "Cannot find entity by name " ~ entityName);
         return entityMap[entityName].createEntity(); 
     }
 
     override public const(EntityInfo) findEntityForObject(Object obj) const {
-        enforceEx!HibernatedException((obj.classinfo in classMap) !is null, "Cannot find entity by class " ~ obj.classinfo.toString());
+        enforceEx!MappingException((obj.classinfo in classMap) !is null, "Cannot find entity by class " ~ obj.classinfo.toString());
         return classMap[obj.classinfo];
     }
     this() {
