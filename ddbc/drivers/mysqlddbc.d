@@ -386,8 +386,8 @@ public:
     	    resultSet = new MySQLResultSet(this, rs, createMetadata(cmd.getResultHeaders().getFieldDescriptions()));
         	return resultSet;
 		} catch (Throwable e) {
-		    throw new SQLException(e);
-		}
+            throw new SQLException(e.msg ~ " - while execution of query " ~ query);
+        }
 	}
     override int executeUpdate(string query) {
         checkClosed();
@@ -399,7 +399,7 @@ public:
 			cmd.execSQL(rowsAffected);
 	        return cast(int)rowsAffected;
 		} catch (Throwable e) {
-			throw new SQLException(e);
+			throw new SQLException(e.msg ~ " - while execution of query " ~ query);
 		}
     }
 	override int executeUpdate(string query, out Variant insertId) {
@@ -413,7 +413,7 @@ public:
     		insertId = Variant(cmd.lastInsertID);
     		return cast(int)rowsAffected;
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw new SQLException(e.msg ~ " - while execution of query " ~ query);
         }
 	}
 	override void close() {

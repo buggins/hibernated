@@ -14,6 +14,7 @@
  */
 module hibernated.tests;
 
+import std.algorithm;
 import std.conv;
 import std.stdio;
 import std.datetime;
@@ -574,6 +575,26 @@ unittest {
             assert(u10.customer.users[0] == u10);
             assert(u10.roles[0].users.length == 1);
             assert(u10.roles[0].users[0] == u10);
+            // removing one role from user
+            u10.roles.get().remove(0);
+            sess.update(u10);
+        }
+        {
+            // check that only one role left
+            Session sess = factory.openSession();
+            scope(exit) sess.close();
+            User u10 = sess.createQuery("FROM User WHERE name=:Name").setParameter("Name", "Alex").uniqueResult!User();
+            assert(u10.roles.length == 1);
+            assert(u10.roles[0].name == "role10" || u10.roles.get()[0].name == "role11");
+            // remove user
+            sess.remove(u10);
+        }
+        {
+            // check that user is removed
+            Session sess = factory.openSession();
+            scope(exit) sess.close();
+            User u10 = sess.createQuery("FROM User WHERE name=:Name").setParameter("Name", "Alex").uniqueResult!User();
+            assert(u10 is null);
         }
     }
 }

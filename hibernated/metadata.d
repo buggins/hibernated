@@ -394,7 +394,7 @@ class JoinTableInfo {
     }
 
     string getOtherKeySelectSQL(const Dialect dialect, string thisKeySQL) const {
-        return "SELECT " ~ dialect.quoteIfNeeded(_tableName) ~ "." ~ dialect.quoteIfNeeded(column2) ~ " WHERE " ~ dialect.quoteIfNeeded(_column1) ~ "=" ~ thisKeySQL;
+        return "SELECT " ~ dialect.quoteIfNeeded(column2) ~ " FROM " ~ dialect.quoteIfNeeded(_tableName) ~ " WHERE " ~ dialect.quoteIfNeeded(_column1) ~ "=" ~ thisKeySQL;
     }
 
     string getInsertSQL(const Dialect dialect, string thisKeySQL, string[] otherKeysSQL) const {
