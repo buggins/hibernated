@@ -422,31 +422,104 @@ class SessionImpl : Session {
 
     private void saveRelations(const EntityInfo ei, Object obj) {
         foreach(p; ei) {
-            if (p.simple || p.embedded)
-                continue;
-            if (p.lazyLoad && !p.isLoadedFunc(obj))
-                continue; // skip non-loaded lazy objects
-            if (p.oneToMany || p.manyToMany) {
-                Object[] relations = p.getCollectionFunc(obj);
-                Variant thisId = ei.getKey(obj);
-                if (relations !is null && relations.length > 0) {
-                    string sql = p.joinTable.getInsertSQL(dialect);
-                    string list;
-                    foreach(r; relations) {
-                        Variant otherId = p.referencedEntity.getKey(r);
-                        if (list.length != 0)
-                            list ~= ", ";
-                        list ~= createKeyPairSQL(thisId, otherId);
-                    }
-                    sql ~= list;
-                    Statement stmt = conn.createStatement();
-                    scope(exit) stmt.close();
-                    writeln("sql: " ~ sql);
-                    stmt.executeUpdate(sql);
-                }
+            if (p.manyToMany) {
+                saveRelations(p, obj);
             }
         }
     }
+
+    private void saveRelations(const PropertyInfo p, Object obj) {
+        Object[] relations = p.getCollectionFunc(obj);
+        Variant thisId = p.entity.getKey(obj);
+        if (relations !is null && relations.length > 0) {
+            string sql = p.joinTable.getInsertSQL(dialect);
+            string list;
+            foreach(r; relations) {
+                Variant otherId = p.referencedEntity.getKey(r);
+                if (list.length != 0)
+                    list ~= ", ";
+                list ~= createKeyPairSQL(thisId, otherId);
+            }
+            sql ~= list;
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            //writeln("sql: " ~ sql);
+            stmt.executeUpdate(sql);
+        }
+    }
+    
+    private void updateRelations(const EntityInfo ei, Object obj) {
+        foreach(p; ei) {
+            if (p.manyToMany) {
+                updateRelations(p, obj);
+            }
+        }
+    }
+
+    private void deleteRelations(const EntityInfo ei, Object obj) {
+        foreach(p; ei) {
+            if (p.manyToMany) {
+                deleteRelations(p, obj);
+            }
+        }
+    }
+    
+    private Variant[] readRelationIds(const PropertyInfo p, Variant thisId) {
+        Variant[] res;
+        string q = p.joinTable.getOtherKeySelectSQL(dialect, createKeySQL(thisId));
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+        ResultSet rs = stmt.executeQuery(q);
+        scope(exit) rs.close();
+        while (rs.next()) {
+            res ~= rs.getVariant(1);
+        }
+        return res;
+    }
+
+    private void updateRelations(const PropertyInfo p, Object obj) {
+        Variant thisId = p.entity.getKey(obj);
+        Variant[] oldRelIds = readRelationIds(p, thisId);
+        Variant[] newRelIds = p.getCollectionIds(obj);
+        bool[string] oldmap;
+        foreach(v; oldRelIds)
+            oldmap[createKeySQL(v)] = true;
+        bool[string] newmap;
+        foreach(v; newRelIds)
+            newmap[createKeySQL(v)] = true;
+        string[] keysToDelete;
+        string[] keysToAdd;
+        foreach(v; newmap.keys)
+            if ((v in oldmap) is null)
+                keysToAdd ~= v;
+        foreach(v; oldmap.keys)
+            if ((v in newmap) is null)
+                keysToDelete ~= v;
+        if (keysToAdd.length > 0) {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            stmt.executeUpdate(p.joinTable.getInsertSQL(dialect, createKeySQL(thisId), keysToAdd));
+        }
+        if (keysToDelete.length > 0) {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            stmt.executeUpdate(p.joinTable.getDeleteSQL(dialect, createKeySQL(thisId), keysToDelete));
+        }
+    }
+    
+    private void deleteRelations(const PropertyInfo p, Object obj) {
+        Variant thisId = p.entity.getKey(obj);
+        Variant[] oldRelIds = readRelationIds(p, thisId);
+        string[] ids;
+        foreach(v; oldRelIds)
+            ids ~= createKeySQL(v);
+        if (ids.length > 0) {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            stmt.executeUpdate(p.joinTable.getDeleteSQL(dialect, createKeySQL(thisId), ids));
+        }
+    }
+    
 
     /// Persist the given transient instance, first assigning a generated identifier if not assigned; returns generated value
     override Variant save(Object obj) {
@@ -505,17 +578,21 @@ class SessionImpl : Session {
         enforceEx!TransientObjectException(info.isKeySet(obj), "Cannot persist entity w/o key assigned");
 		string query = metaData.generateUpdateForEntity(info);
 		//writeln("Query: " ~ query);
-		PreparedStatement stmt = conn.prepareStatement(query);
-		scope(exit) stmt.close();
-		int columnCount = metaData.writeAllColumns(obj, stmt, 1, true);
-		info.keyProperty.writeFunc(obj, stmt, columnCount + 1);
-		stmt.executeUpdate();
+        {
+    		PreparedStatement stmt = conn.prepareStatement(query);
+    		scope(exit) stmt.close();
+    		int columnCount = metaData.writeAllColumns(obj, stmt, 1, true);
+    		info.keyProperty.writeFunc(obj, stmt, columnCount + 1);
+    		stmt.executeUpdate();
+        }
+        updateRelations(info, obj);
 	}
 
     // renamed from Session.delete since delete is D keyword
     override void remove(Object obj) {
         auto info = metaData.findEntityForObject(obj);
-		string query = "DELETE FROM " ~ info.tableName ~ " WHERE " ~ info.getKeyProperty().columnName ~ "=?";
+        deleteRelations(info, obj);
+        string query = "DELETE FROM " ~ info.tableName ~ " WHERE " ~ info.getKeyProperty().columnName ~ "=?";
 		PreparedStatement stmt = conn.prepareStatement(query);
 		info.getKeyProperty().writeFunc(obj, stmt, 1);
 		stmt.executeUpdate();

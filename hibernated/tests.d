@@ -538,6 +538,7 @@ unittest {
 
         }
         {
+            // prepare data
             Session sess = factory.openSession();
             scope(exit) sess.close();
 
@@ -561,6 +562,7 @@ unittest {
             assert(r11.id != 0);
         }
         {
+            // check data in separate session
             Session sess = factory.openSession();
             scope(exit) sess.close();
             User u10 = sess.createQuery("FROM User WHERE name=:Name").setParameter("Name", "Alex").uniqueResult!User();
@@ -570,6 +572,8 @@ unittest {
             assert(u10.customer.name == "Customer 10");
             assert(u10.customer.users.length == 1);
             assert(u10.customer.users[0] == u10);
+            assert(u10.roles[0].users.length == 1);
+            assert(u10.roles[0].users[0] == u10);
         }
     }
 }

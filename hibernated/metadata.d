@@ -243,6 +243,18 @@ public:
     const int opCmp(ref const PropertyInfo s) const {
         return this == s ? 0 : (opHash() > s.opHash() ? 1 : -1);
     }
+
+    Variant[] getCollectionIds(Object obj) const {
+        assert(oneToMany || manyToMany);
+        Variant[] res;
+        Object[] list = getCollectionFunc(obj);
+        if (list is null)
+            return res;
+        foreach(item; list) {
+            res ~= referencedEntity.getKey(item);
+        }
+        return res;
+    }
 }
 
 /// Metadata of single entity
@@ -379,6 +391,31 @@ class JoinTableInfo {
     
     string getInsertSQL(const Dialect dialect) const {
         return "INSERT INTO " ~ dialect.quoteIfNeeded(_tableName) ~ "(" ~ dialect.quoteIfNeeded(_column1) ~ ", " ~ dialect.quoteIfNeeded(column2) ~ ") VALUES ";
+    }
+
+    string getOtherKeySelectSQL(const Dialect dialect, string thisKeySQL) const {
+        return "SELECT " ~ dialect.quoteIfNeeded(_tableName) ~ "." ~ dialect.quoteIfNeeded(column2) ~ " WHERE " ~ dialect.quoteIfNeeded(_column1) ~ "=" ~ thisKeySQL;
+    }
+
+    string getInsertSQL(const Dialect dialect, string thisKeySQL, string[] otherKeysSQL) const {
+        string list;
+        foreach(otherKeySQL; otherKeysSQL) {
+            if (list.length > 0)
+                list ~= ", ";
+            list ~= "(" ~ thisKeySQL ~ ", " ~ otherKeySQL ~ ")";
+        }
+        return getInsertSQL(dialect) ~ list;
+    }
+
+    string getDeleteSQL(const Dialect dialect, string thisKeySQL, string[] otherKeysSQL) const {
+        string sql = "DELETE FROM " ~ dialect.quoteIfNeeded(_tableName) ~ " WHERE " ~ dialect.quoteIfNeeded(_column1) ~ "=" ~ thisKeySQL ~ " AND " ~ dialect.quoteIfNeeded(_column2) ~ " IN ";
+        string list;
+        foreach(otherKeySQL; otherKeysSQL) {
+            if (list.length > 0)
+                list ~= ", ";
+            list ~= otherKeySQL;
+        }
+        return sql ~ "(" ~ list ~ ")";
     }
 }
 
