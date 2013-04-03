@@ -1674,7 +1674,8 @@ unittest {
 unittest {
 
 	//writeln("query unittest");
-	
+    import hibernated.tests;
+
     EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, Address, Person, MoreInfo, EvenMoreInfo, Role);
 	QueryParser parser = new QueryParser(schema, "SELECT a FROM User AS a WHERE id = :Id AND name != :skipName OR name IS NULL  AND a.flags IS NOT NULL ORDER BY name, a.flags DESC");
 	assert(parser.parameterNames.length == 2);

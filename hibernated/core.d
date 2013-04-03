@@ -6,7 +6,7 @@
  * 
  * Source file hibernated/core.d.
  *
- * This module contains some common declarations for HibernateD.
+ * This module contains all imports to use HibernateD.
  * 
  * Copyright: Copyright 2013
  * License:   $(LINK www.boost.org/LICENSE_1_0.txt, Boost License 1.0).
@@ -14,14 +14,24 @@
  */
 module hibernated.core;
 
-import std.exception;
+//public import std.ascii;
+//public import std.conv;
+//public import std.datetime;
+//public import std.exception;
+//public import std.stdio;
 
-class HibernatedException : Exception {
-    this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
-    this(Exception causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
-}
+//public import std.string;
+//public import std.traits;
+//public import std.typecons;
+//public import std.typetuple;
+//public import std.variant;
 
-class SyntaxError : HibernatedException {
-	this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
-}
+public import ddbc.core;
+public import ddbc.common;
 
+public import hibernated.annotations;
+public import hibernated.session;
+public import hibernated.metadata;
+public import hibernated.core;
+public import hibernated.type;
+public import hibernated.dialect;

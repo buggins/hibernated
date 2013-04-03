@@ -20,6 +20,16 @@ import std.traits;
 
 import ddbc.core;
 
+class HibernatedException : Exception {
+    this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
+    this(Exception causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+}
+
+class SyntaxError : HibernatedException {
+    this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
+}
+
+
 class Type {
 public:
 	immutable SqlType getSqlType() { return SqlType.OTHER; }

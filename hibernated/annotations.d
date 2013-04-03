@@ -20,7 +20,6 @@ module hibernated.annotations;
  * HibernateD maps values of some class to DB table. This class is referred as Entity.
  * 
  * Entity contains one or more properties - which are usually mapped to DB table columns.
- * 
  */
 
 /**
@@ -57,12 +56,12 @@ struct Table {
  * Property level annotations.
  * 
  * Supported simple types for properties (may be stored in single DB table column):
- *     byte, short, int, long, ubyte, ushort, uint, ulong, byte[], ubyte[], string, DateTime, Date, TimeOfDay
+ *     byte, short, int, long, ubyte, ushort, uint, ulong, float, double, byte[], ubyte[], string, DateTime, Date, TimeOfDay
  * 
  * Other possible types of properties:
  *     Embeddable entity class -- implementation in progress
- *     Entity class -- ManyToOne or OneToOne relation -- TODO
- *     Entity class collection -- OneToMany or ManyToMany -- TODO
+ *     Entity class Lazy!class -- ManyToOne or OneToOne relation
+ *     Entity class array or LazyCollection!class -- collection for OneToMany or ManyToMany
  * 
  * Supported kinds of property holders:
  *     field -- just public field
@@ -193,17 +192,6 @@ struct ManyToMany {
     immutable string joinColumn2;
 }
 
-/*
-struct DynamicInsert {
-	immutable bool enabled;
-	this(bool enabled) { this.enabled = enabled; }
-}
-
-struct DynamicUpdate {
-	immutable bool enabled;
-	this(bool enabled) { this.enabled = enabled; }
-}
-  */
 
 unittest {
 
