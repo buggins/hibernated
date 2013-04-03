@@ -30,11 +30,10 @@ version(unittest) {
     @Table("users")
     class User {
         
-        @Id @Generated
-        @Column("id")
+        @Generated
         long id;
         
-        @Column("name")
+        @Column
         string name;
         
         // property column
@@ -49,7 +48,6 @@ version(unittest) {
         string getComment() { return comment; }
         void setComment(string v) { comment = v; }
         
-        // long column which can hold NULL value
         @ManyToOne
         @JoinColumn("customer_fk")
         Customer customer;
@@ -67,8 +65,7 @@ version(unittest) {
     @Entity
     @Table("customers")
     class Customer {
-        @Id @Generated
-        @Column
+        @Generated
         int id;
         @Column
         string name;

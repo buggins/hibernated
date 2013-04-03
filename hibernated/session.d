@@ -41,6 +41,7 @@ interface SessionFactory {
 /// Session - main interface to load and persist entities -- similar to org.hibernate.Session
 abstract class Session
 {
+    /// returns metadata
     EntityMetaData getMetaData();
 
 	/// not supported in current implementation
@@ -61,10 +62,11 @@ abstract class Session
     bool isConnected();
     /// Check if this instance is associated with this Session.
     bool contains(Object object);
+    /// Retrieve session factory used to create this session
 	SessionFactory getSessionFactory();
-
+    /// Lookup metadata to find entity name for object.
 	string getEntityName(Object object);
-
+    /// Lookup metadata to find entity name for class type info.
     string getEntityName(TypeInfo_Class type);
 
     /// Return the persistent instance of the given named entity with the given identifier, or null if there is no such persistent instance.
@@ -106,7 +108,7 @@ abstract class Session
 	/// Update the persistent instance with the identifier of the given detached instance.
 	void update(Object object);
 
-    /// renamed from Session.delete
+    /// remove object from DB (renamed from original Session.delete - it's keyword in D)
     void remove(Object object);
 
 	/// Create a new instance of Query for the given HQL query string
