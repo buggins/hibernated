@@ -2250,13 +2250,33 @@ string getEntityDef(T)() {
 string entityListDef(T ...)() {
 	string res;
 	foreach(t; T) {
-		immutable string def = getEntityDef!t;
+        static if (__traits(compiles, isImplicitlyConvertible!(t, Object)) && isImplicitlyConvertible!(t, Object)) {
+    		immutable string def = getEntityDef!t;
 
-        //pragma(msg, def);
+            //pragma(msg, def);
 
-		if (res.length > 0)
-			res ~= ",\n";
-		res ~= def;
+    		if (res.length > 0)
+    			res ~= ",\n";
+    		res ~= def;
+        } else {
+            static if (t.stringof.startsWith("module ")) {
+                // TODO: support import of all module classes
+                //pragma(msg, "Module passed as schema parameter: " ~ t.stringof);
+                //pragma(msg, __traits(allMembers, t));
+                foreach(tt; __traits(allMembers, t)) {
+                    static if (__traits(compiles, isImplicitlyConvertible!(tt, Object)) && isImplicitlyConvertible!(tt, Object)) {
+                        if (hasOneOfAnnotations!(tt, Entity, Embeddable)) {
+                            immutable string def = getEntityDef!t;
+                            if (res.length > 0)
+                                res ~= ",\n";
+                            res ~= def;
+                        }
+                    }
+                }
+            } else {
+                static assert(t.stringof ~ " cannot be passed as schema item");
+            }
+        }
 	}
 	string code = 
 		"static this() {\n" ~

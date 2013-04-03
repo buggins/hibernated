@@ -622,7 +622,7 @@ unittest {
     //  foreach(e; schema["Person"]) {
     //      writeln("property: " ~ e.propertyName);
     //  }
-    schema = new SchemaInfoImpl!(Person, MoreInfo, EvenMoreInfo);
+    schema = new SchemaInfoImpl!(hibernated.tests); //Person, MoreInfo, EvenMoreInfo, 
     
     {
         
