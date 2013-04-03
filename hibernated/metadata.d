@@ -377,6 +377,9 @@ class JoinTableInfo {
         return "new JoinTableInfo(" ~ quoteString(table) ~ ", " ~ quoteString(column1) ~ ", " ~ quoteString(column2) ~ ")";
     }
     
+    string getInsertSQL(const Dialect dialect) const {
+        return "INSERT INTO " ~ dialect.quoteIfNeeded(_tableName) ~ "(" ~ dialect.quoteIfNeeded(_column1) ~ ", " ~ dialect.quoteIfNeeded(column2) ~ ") VALUES ";
+    }
 }
 
 string quoteString(string s) {
@@ -2260,13 +2263,16 @@ string entityListDef(T ...)() {
     		res ~= def;
         } else {
             static if (t.stringof.startsWith("module ")) {
-                // TODO: support import of all module classes
                 //pragma(msg, "Module passed as schema parameter: " ~ t.stringof);
                 //pragma(msg, __traits(allMembers, t));
                 foreach(tt; __traits(allMembers, t)) {
-                    static if (__traits(compiles, isImplicitlyConvertible!(tt, Object)) && isImplicitlyConvertible!(tt, Object)) {
-                        if (hasOneOfAnnotations!(tt, Entity, Embeddable)) {
-                            immutable string def = getEntityDef!t;
+                    //alias  ti;
+                    //pragma(msg, "Module member: " ~ (__traits(getMember, t, tt)).stringof);
+                    static if (__traits(compiles, isImplicitlyConvertible!((__traits(getMember, t, tt)), Object)) && isImplicitlyConvertible!((__traits(getMember, t, tt)), Object)) {
+                        //pragma(msg, "checking member" ~ (__traits(getMember, t, tt)).stringof);
+                        static if (hasOneOfAnnotations!((__traits(getMember, t, tt)), Entity, Embeddable)) {
+                            //pragma(msg, "member has entity level annotation: " ~ (__traits(getMember, t, tt)).stringof);
+                            immutable string def = getEntityDef!(__traits(getMember, t, tt));
                             if (res.length > 0)
                                 res ~= ",\n";
                             res ~= def;

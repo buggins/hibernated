@@ -411,6 +411,34 @@ class SessionImpl : Session {
         }
     }
 
+    private void saveRelations(const EntityInfo ei, Object obj) {
+        foreach(p; ei) {
+            if (p.simple || p.embedded)
+                continue;
+            if (p.lazyLoad && !p.isLoadedFunc(obj))
+                continue; // skip non-loaded lazy objects
+            if (p.oneToMany || p.manyToMany) {
+                Object[] relations = p.getCollectionFunc(obj);
+                Variant thisId = ei.getKey(obj);
+                if (relations !is null && relations.length > 0) {
+                    string sql = p.joinTable.getInsertSQL(dialect);
+                    string list;
+                    foreach(r; relations) {
+                        Variant otherId = p.referencedEntity.getKey(r);
+                        if (list.length != 0)
+                            list ~= ", ";
+                        list ~= createKeyPairSQL(thisId, otherId);
+                    }
+                    sql ~= list;
+                    Statement stmt = conn.createStatement();
+                    scope(exit) stmt.close();
+                    writeln("sql: " ~ sql);
+                    stmt.executeUpdate(sql);
+                }
+            }
+        }
+    }
+
     /// Persist the given transient instance, first assigning a generated identifier if not assigned; returns generated value
     override Variant save(Object obj) {
         auto info = metaData.findEntityForObject(obj);
@@ -423,8 +451,7 @@ class SessionImpl : Session {
 				metaData.writeAllColumns(obj, stmt, 1, true);
 				Variant generatedKey;
 				stmt.executeUpdate(generatedKey);
-				info.setKey(obj, generatedKey);
-				return info.getKey(obj);
+			    info.setKey(obj, generatedKey);
             } else if (info.getKeyProperty().generatorFunc !is null) {
                 // has generator function
                 Variant generatedKey = info.getKeyProperty().generatorFunc(conn, info.getKeyProperty());
@@ -434,7 +461,6 @@ class SessionImpl : Session {
                 scope(exit) stmt.close();
                 metaData.writeAllColumns(obj, stmt, 1);
                 stmt.executeUpdate();
-                return info.getKey(obj);
             } else {
                 throw new PropertyValueException("Key is not set and no generator is specified");
             }
@@ -444,8 +470,11 @@ class SessionImpl : Session {
 			scope(exit) stmt.close();
 			metaData.writeAllColumns(obj, stmt, 1);
 			stmt.executeUpdate();
-			return info.getKey(obj);
         }
+        Variant key = info.getKey(obj);
+        putToCache(info.name, key, obj);
+        saveRelations(info, obj);
+        return key;
     }
 
 	/// Persist the given transient instance.
@@ -457,7 +486,10 @@ class SessionImpl : Session {
 		scope(exit) stmt.close();
 		metaData.writeAllColumns(obj, stmt, 1);
 		stmt.executeUpdate();
-	}
+        Variant key = info.getKey(obj);
+        putToCache(info.name, key, obj);
+        saveRelations(info, obj);
+    }
 
     override void update(Object obj) {
         auto info = metaData.findEntityForObject(obj);
@@ -597,23 +629,31 @@ class PropertyLoadItem {
     }
     string createCommaSeparatedKeyList() {
         assert(map.length > 0);
-        return createCommaSeparatedKeyList(map.keys);
+        return .createCommaSeparatedKeyList(map.keys);
     }
-    string createCommaSeparatedKeyList(Variant[] list) {
-        assert(map.length > 0);
-        string res;
-        foreach(v; list) {
-            if (res.length > 0)
-                res ~= ", ";
-            if (v.convertsTo!long || v.convertsTo!ulong) {
-                res ~= v.toString();
-            } else {
-                // TODO: add escaping
-                res ~= "'" ~ v.toString() ~ "'";
-            }
-        }
-        return res;
+}
+
+string createKeySQL(Variant id) {
+    if (id.convertsTo!long || id.convertsTo!ulong) {
+        return id.toString();
+    } else {
+        return "'" ~ id.toString() ~ "'";
     }
+}
+
+string createKeyPairSQL(Variant id1, Variant id2) {
+    return "(" ~ createKeySQL(id1) ~ ", " ~ createKeySQL(id2) ~ ")";
+}
+
+string createCommaSeparatedKeyList(Variant[] list) {
+    assert(list.length > 0);
+    string res;
+    foreach(v; list) {
+        if (res.length > 0)
+            res ~= ", ";
+        res ~= createKeySQL(v);
+    }
+    return res;
 }
 
 /// task to load reference entity
@@ -833,7 +873,7 @@ class QueryImpl : Query
                     Variant[] unknownKeys;
                     Object[] list = sess.lookupCache(pi.referencedEntity.name, map.keys, unknownKeys);
                     if (unknownKeys.length > 0) {
-                        string hql = "FROM " ~ pi.referencedEntity.name ~ " WHERE " ~ pi.referencedEntity.keyProperty.propertyName ~ " IN (" ~ map.createCommaSeparatedKeyList(unknownKeys) ~ ")";
+                        string hql = "FROM " ~ pi.referencedEntity.name ~ " WHERE " ~ pi.referencedEntity.keyProperty.propertyName ~ " IN (" ~ createCommaSeparatedKeyList(unknownKeys) ~ ")";
                         static if (TRACE_REFS) writeln("delayedLoadRelations: loading " ~ pi.propertyName ~ " HQL: " ~ hql);
                         QueryImpl q = cast(QueryImpl)sess.createQuery(hql);
                         Object[] fromDB = q.listObjects(null, loadMap);

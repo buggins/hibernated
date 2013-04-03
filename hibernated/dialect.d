@@ -20,11 +20,11 @@ import std.string;
 /// Represents a dialect of SQL implemented by a particular RDBMS. -- generated from JavaDocs on org.hibernate.dialect.Dialect
 abstract class Dialect {
     ///The character specific to this dialect used to close a quoted identifier.
-    char closeQuote();
+    char closeQuote() const;
     ///The character specific to this dialect used to begin a quoted identifier.
-    char  openQuote();
+    char  openQuote() const;
     ///Apply dialect-specific quoting (for `quoted` identifier, replace backtick quotes with dialect specific)
-    string quote(string name) {
+    string quote(string name) const {
         //Apply dialect-specific quoting.
         //By default, the incoming value is checked to see if its first character is the back-tick (`). If so, the dialect specific quoting is applied. 
         if (name.length <=2 || name[0] != '`')
@@ -33,11 +33,11 @@ abstract class Dialect {
     }
 
 	// should return true for identifiers which cannot be used w/o quote (e.g. keywords)
-	bool needQuote(string ident) {
+	bool needQuote(string ident) const {
 		return (toUpper(ident) in keywordList) !is null;
 	}
 
-	string quoteIfNeeded(string ident) {
+	string quoteIfNeeded(string ident) const {
 		if (needQuote(ident))
 			return quote("`" ~ ident ~ "`");
 		return quote(ident);
