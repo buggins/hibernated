@@ -1790,4 +1790,16 @@ unittest {
 //    writeln(q.sql);
     assert(q.sql == "SELECT _t1.id, _t1.name, _t1.flags, _t1.comment, _t1.customer_fk FROM users AS _t1 LEFT JOIN customers AS _t2 ON _t1.customer_fk=_t2.id WHERE _t2.id = 1");
 
+    parser = new QueryParser(schema, "SELECT a2 FROM User AS a1 JOIN a1.roles AS a2 WHERE a1.id = 1");
+    q = parser.makeSQL(dialect);
+    //writeln(q.hql);
+    //writeln(q.sql);
+    assert(q.sql == "SELECT _t2.id, _t2.name FROM users AS _t1 INNER JOIN role_users AS _t1_t2 ON _t1.id=_t1_t2.user_fk INNER JOIN role AS _t2 ON _t1_t2.role_fk=_t2.id WHERE _t1.id = 1");
+
+    parser = new QueryParser(schema, "SELECT a2 FROM Customer AS a1 JOIN a1.users AS a2 WHERE a1.id = 1");
+    q = parser.makeSQL(dialect);
+    //writeln(q.hql);
+    //writeln(q.sql);
+    assert(q.sql == "SELECT _t2.id, _t2.name, _t2.flags, _t2.comment, _t2.customer_fk FROM customers AS _t1 INNER JOIN users AS _t2 ON _t1.id=_t2.customer_fk WHERE _t1.id = 1");
+    
 }

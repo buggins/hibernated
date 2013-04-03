@@ -373,10 +373,9 @@ class SessionImpl : Session {
 //        }
     }
     
-    /// Read entities by foreign key column value
-    Object[] loadReferencedObjects(const EntityInfo info, string referencedPropertyName, Variant fk) {
-        const PropertyInfo referencedProperty = info[referencedPropertyName];
-        string hql = "FROM " ~ info.name ~ " WHERE " ~ referencedPropertyName ~ "." ~ referencedProperty.entity.getKeyProperty().propertyName ~ "=:Fk";
+    /// Read entities referenced by property 
+    Object[] loadReferencedObjects(const EntityInfo info, string referencePropertyName, Variant fk) {
+        string hql = "SELECT a2 FROM " ~ info.name ~ " AS a1 JOIN a1." ~ referencePropertyName ~ " AS a2 WHERE a1." ~ info.getKeyProperty().propertyName ~ "=:Fk";
         Query q = createQuery(hql).setParameter("Fk", fk);
         Object[] res = q.listObjects();
         return res;
@@ -975,21 +974,15 @@ class LazyCollectionLoader {
     SessionImpl sess;
     this(SessionImpl sess, const PropertyInfo pi, Variant fk) {
         assert(!pi.oneToMany || (pi.referencedEntity !is null && pi.referencedProperty !is null), "LazyCollectionLoader: No referenced property specified for OneToMany foreign key column");
-        writeln("Created lazy loader for collection " ~ pi.referencedEntityName ~ " by fk " ~ fk.toString);
+        writeln("Created lazy loader for collection for references " ~ pi.entity.name ~ "." ~ pi.propertyName ~ " by id " ~ fk.toString);
         this.pi = pi;
         this.fk = fk;
         this.sess = sess;
     }
     Object[] load() {
         writeln("LazyObjectLoader.load()");
-        writeln("lazy loading of " ~ pi.referencedEntityName ~ " with fk " ~ pi.referencedPropertyName ~ " == " ~ fk.toString);
-        string propertyName;
-        if (pi.oneToMany)
-            propertyName = pi.referencedPropertyName;
-        else
-            propertyName = pi.referencedEntity.getKeyProperty().propertyName;
-        // TODO: handle closed session
-        Object[] res = sess.loadReferencedObjects(pi.referencedEntity, propertyName, fk);
+        writeln("lazy loading of references " ~ pi.entity.name ~ "." ~ pi.propertyName ~ " by id " ~ fk.toString);
+        Object[] res = sess.loadReferencedObjects(pi.entity, pi.propertyName, fk);
         return res;
     }
 }
