@@ -17,8 +17,21 @@ module hibernated.type;
 import std.datetime;
 import std.stdio;
 import std.traits;
+import std.typecons;
 
 import ddbc.core;
+
+// convenient aliases for Nullable types
+alias Nullable!byte Byte;
+alias Nullable!ubyte Ubyte;
+alias Nullable!short Short;
+alias Nullable!ushort Ushort;
+alias Nullable!int Int;
+alias Nullable!uint Uint;
+alias Nullable!long Long;
+alias Nullable!ulong Ulong;
+alias Nullable!float Float;
+alias Nullable!double Double;
 
 /// base class for all HibernateD exceptions
 class HibernatedException : Exception {
