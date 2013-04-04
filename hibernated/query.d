@@ -1717,9 +1717,9 @@ unittest {
     assert(parser.fromClause.hasAlias("a"));
     assert(parser.fromClause.hasAlias("b"));
     assert(parser.fromClause.findByAlias("a").entityName == "Person");
-    assert(parser.fromClause.findByAlias("b").entityName == "More");
+    assert(parser.fromClause.findByAlias("b").entityName == "MoreInfo");
     assert(parser.fromClause.findByAlias("b").joinType == JoinType.LeftJoin);
-    assert(parser.fromClause.findByAlias("c").entityName == "EvenMore");
+    assert(parser.fromClause.findByAlias("c").entityName == "EvenMoreInfo");
     // indirect JOIN
     parser = new QueryParser(schema, "SELECT a FROM Person a WHERE a.id = :Id AND a.moreInfo.evenMore.flags > 0");
     assert(parser.fromClause.hasAlias("a"));

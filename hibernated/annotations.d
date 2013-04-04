@@ -35,11 +35,11 @@ struct Transient {
 /**
  * Mark class with this annotation if you want to make it persistable.
  * @Entity or @Entity() - marks class as entity, using class name as entity name.
- * @Entity("CustomEntityName") - marks class as entity with specified entity name.
  */
 struct Entity {
-	immutable string name;
-//	this(string name) { this.name = name; }
+	//immutable string name;
+    immutable bool dummy;
+    //	this(string name) { this.name = name; }
 }
 
 /**

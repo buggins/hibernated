@@ -620,7 +620,7 @@ version (unittest) {
     }
     
     // for testing of Embeddable
-    @Entity("Person")
+    @Entity
     class Person {
         @Id
         int id;
@@ -637,7 +637,7 @@ version (unittest) {
     }
     
     
-    @Entity("More")
+    @Entity
     @Table("person_info")
     class MoreInfo {
         @Id @Generated
@@ -650,7 +650,7 @@ version (unittest) {
         EvenMoreInfo evenMore;
     }
     
-    @Entity("EvenMore")
+    @Entity
     @Table("person_info2")
     class EvenMoreInfo {
         @Id @Generated
@@ -677,7 +677,7 @@ unittest {
     EntityMetaData schema = new SchemaInfoImpl!(EMName, EMUser);
     
     static assert(hasMemberAnnotation!(Person, "moreInfo", OneToOne));
-    static assert(getPropertyReferencedEntityName!(Person, "moreInfo") == "More");
+    static assert(getPropertyReferencedEntityName!(Person, "moreInfo") == "MoreInfo");
     static assert(getPropertyReferencedClassName!(Person, "moreInfo") == "hibernated.tests.MoreInfo");
     //pragma(msg, getOneToOnePropertyDef!(Person, "moreInfo"));
     //pragma(msg, getOneToOnePropertyDef!(MoreInfo, "person"));

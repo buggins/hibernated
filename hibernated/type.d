@@ -39,6 +39,7 @@ alias Nullable!Date NullableDate;
 alias Nullable!TimeOfDay NullableTimeOfDay;
 
 /// Wrapper around string, to distinguish between Null and NotNull fields: string is NotNull, String is Null -- same interface as in Nullable
+// Looks ugly, but I tried `typedef string String`, but it is deprecated; `alias string String` cannot be distinguished from just string. How to define String better?
 struct String
 {
     private string _value;

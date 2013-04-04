@@ -520,14 +520,14 @@ bool hasMemberAnnotation(T, string m, A)() {
 
 /// returns entity name for class type
 string getEntityName(T : Object)() {
-	foreach (a; __traits(getAttributes, T)) {
-		static if (is(typeof(a) == Entity)) {
-			return a.name;
-		}
-		static if (a.stringof == Entity.stringof) {
-			return T.stringof;
-		}
-	}
+//	foreach (a; __traits(getAttributes, T)) {
+//		static if (is(typeof(a) == Entity)) {
+//			return a.name;
+//		}
+//		static if (a.stringof == Entity.stringof) {
+//			return T.stringof;
+//		}
+//	}
 	return T.stringof;
 }
 
@@ -764,17 +764,97 @@ template isLazyCollectionMember(T : Object, string m) {
         enum bool isLazyCollectionMember = false;
 }
 
+template isObject(T) {
+    enum bool isObject = (__traits(compiles, isImplicitlyConvertible!(T, Object)) && isImplicitlyConvertible!(T, Object));
+}
+
+/// member is field or function or property with SomeClass type
+template isObjectMember(T : Object, string m) {
+    alias typeof(__traits(getMember, T, m)) ti;
+    static if (is(ti == function)) {
+        enum bool isObjectMember = isImplicitlyConvertible!(ReturnType!(ti), Object);
+    } else {
+        enum bool isObjectMember = isImplicitlyConvertible!(ti, Object);
+    }
+}
+
+/// member is field or function or property returing SomeClass[] or LazyCollection!SomeClass
 template isCollectionMember(T : Object, string m) {
     alias typeof(__traits(getMember, T, m)) ti;
-    static if (is(typeof(__traits(getMember, T, m)) x == LazyCollection!Args, Args...))
-        enum bool isCollectionMember = true;
-    else {
-        //pragma(msg, typeof(__traits(getMember, T, m).init[0]));
-        static if (isArray!(ti) && isImplicitlyConvertible!(typeof(__traits(getMember, T, m).init[0]), Object))
+    static if (is(ti == function)) {
+        static if (is(ReturnType!(typeof(__traits(getMember, T, m))) x == LazyCollection!Args, Args...))
             enum bool isCollectionMember = true;
-        else
-            enum bool isCollectionMember = false;
+        else {
+            //pragma(msg, typeof(__traits(getMember, T, m).init[0]));
+            alias ReturnType!ti rti;
+            static if (isArray!rti && isImplicitlyConvertible!(typeof(rti.init[0]), Object))
+                enum bool isCollectionMember = true;
+            else
+                enum bool isCollectionMember = false;
+        }
+    } else {
+        static if (is(typeof(__traits(getMember, T, m)) x == LazyCollection!Args, Args...))
+            enum bool isCollectionMember = true;
+        else {
+            //pragma(msg, typeof(__traits(getMember, T, m).init[0]));
+            static if (isArray!(ti) && isImplicitlyConvertible!(typeof(__traits(getMember, T, m).init[0]), Object))
+                enum bool isCollectionMember = true;
+            else
+                enum bool isCollectionMember = false;
+        }
     }
+}
+
+unittest {
+    class Foo {
+        bool dummy;
+    }
+    struct Bar {
+        bool dummy;
+    }
+    class MemberTest {
+        bool simple;
+        int someInt;
+        Long someLong;
+        bool[] simples;
+        bool[] getSimples() { return simples; }
+        @property bool[] simpless() { return simples; }
+        Foo foo;
+        Foo getFoo() { return foo; }
+        @property Foo fooo() { return foo; }
+        Foo[] foos;
+        Foo[] getFoos() { return foos; }
+        @property Foo[] fooos() { return foos; }
+        LazyCollection!Foo lfoos;
+        ref LazyCollection!Foo lgetFoos() { return lfoos; }
+        @property ref LazyCollection!Foo lfooos() { return lfoos; }
+    }
+    static assert(isObject!Foo);
+    static assert(!isObject!Bar);
+    static assert(!isObjectMember!(MemberTest, "simple"));
+    static assert(!isObjectMember!(MemberTest, "simples"));
+    static assert(!isObjectMember!(MemberTest, "getSimples"));
+    static assert(!isObjectMember!(MemberTest, "simpless"));
+    static assert(!isCollectionMember!(MemberTest, "simples"));
+    static assert(!isCollectionMember!(MemberTest, "getSimples"));
+    static assert(!isCollectionMember!(MemberTest, "simpless"));
+    static assert(isObjectMember!(MemberTest, "foo"));
+    static assert(isObjectMember!(MemberTest, "getFoo"));
+    static assert(isObjectMember!(MemberTest, "fooo"));
+    static assert(!isCollectionMember!(MemberTest, "simple"));
+    static assert(!isCollectionMember!(MemberTest, "foo"));
+    static assert(!isCollectionMember!(MemberTest, "getFoo"));
+    static assert(!isCollectionMember!(MemberTest, "fooo"));
+    static assert(isCollectionMember!(MemberTest, "foos"));
+    static assert(isCollectionMember!(MemberTest, "getFoos"));
+    static assert(isCollectionMember!(MemberTest, "fooos"));
+    static assert(isCollectionMember!(MemberTest, "lfoos"));
+    static assert(isCollectionMember!(MemberTest, "lgetFoos"));
+    static assert(isCollectionMember!(MemberTest, "lfooos"));
+    static assert(!isSupportedSimpleType!(MemberTest, "simple")); // bool not supported so far
+    static assert(!isSupportedSimpleType!(MemberTest, "foo"));
+    static assert(isSupportedSimpleType!(MemberTest, "someInt"));
+    static assert(isSupportedSimpleType!(MemberTest, "someLong"));
 }
 
 template getLazyInstanceType(T) {
@@ -904,10 +984,140 @@ enum PropertyMemberType : int {
 	UBYTE_ARRAY_TYPE, // ubyte[]
 }
 
+template isSupportedSimpleType(T, string m) {
+    alias typeof(__traits(getMember, T, m)) ti;
+    static if (is(ti == function)) {
+        static if (is(ReturnType!(ti) == byte)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == short)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == int)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == long)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == ubyte)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == ushort)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == uint)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == ulong)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == float)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == double)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == Nullable!byte)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == Nullable!short)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == Nullable!int)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == Nullable!long)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == Nullable!ubyte)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == Nullable!ushort)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == Nullable!uint)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == Nullable!ulong)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == Nullable!float)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == Nullable!double)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == string)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == String)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == DateTime)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == Date)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == TimeOfDay)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == Nullable!DateTime)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == Nullable!Date)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == Nullable!TimeOfDay)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == byte[])) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == ubyte[])) {
+            enum bool isSupportedSimpleType = true;
+        } else {
+            enum bool isSupportedSimpleType = false;
+        }
+    } else static if (is(ti == byte)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == short)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == int)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == long)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == ubyte)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == ushort)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == uint)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == ulong)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == float)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == double)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!byte)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!short)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!int)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!long)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!ubyte)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!ushort)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!uint)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!ulong)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!float)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!double)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == string)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == String)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == DateTime)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Date)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == TimeOfDay)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!DateTime)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!Date)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!TimeOfDay)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == byte[])) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == ubyte[])) {
+        enum bool isSupportedSimpleType = true;
+    } else {
+        enum bool isSupportedSimpleType = false;
+    }
+}
+
 PropertyMemberType getPropertyMemberType(T, string m)() {
 	alias typeof(__traits(getMember, T, m)) ti;
     static if (is(ti == function)) {
-		assert (is(ti == function));
 		static if (is(ReturnType!(ti) == byte)) {
 			return PropertyMemberType.BYTE_TYPE;
 		} else if (is(ReturnType!(ti) == short)) {
@@ -2245,7 +2455,9 @@ string getEntityDef(T)() {
     immutable string typeName = fullyQualifiedName!T;
 	immutable bool isEntity = hasAnnotation!(T, Entity);
 
-	static assert (hasOneOfAnnotations!(T, Entity, Embeddable), "Type " ~ typeName ~ " has neither @Entity nor @Embeddable annotation");
+    //Don't require class level annotation. If no @Embeddable annotation, will treat as if there is @Entity annotation
+	//static assert (hasOneOfAnnotations!(T, Entity, Embeddable), "Type " ~ typeName ~ " has neither @Entity nor @Embeddable annotation");
+    static assert (!hasAnnotation!(T, Entity) || !hasAnnotation!(T, Embeddable), "Type " ~ typeName ~ " may not have both @Entity and @Embeddable at the same time");
     //pragma(msg, "Entity type name: " ~ typeName);
 
 	immutable string entityName = getEntityName!T();
@@ -2268,23 +2480,27 @@ string getEntityDef(T)() {
 		//pragma(msg, m);
 
 		static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
-			
-//			static if (hasHibernatedAnnotation!(T, m)) {
-//				pragma(msg, "Member " ~ m ~ " has known annotation");
-//			}
 
-			alias typeof(__traits(getMember, T, m)) ti;
+            // skip non-public members
+            static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
+
+    //			static if (hasHibernatedAnnotation!(T, m)) {
+    //				pragma(msg, "Member " ~ m ~ " has known annotation");
+    //			}
+
+    			alias typeof(__traits(getMember, T, m)) ti;
 
 
-			static if (hasHibernatedPropertyAnnotation!(T, m)) {
-				
-				immutable string propertyDef = getPropertyDef!(T, m)();
-				//pragma(msg, propertyDef);
+    			static if (hasHibernatedPropertyAnnotation!(T, m)) {
+    				
+    				immutable string propertyDef = getPropertyDef!(T, m)();
+    				//pragma(msg, propertyDef);
 
-				if (generatedPropertyInfo != null)
-					generatedPropertyInfo ~= ",\n";
-				generatedPropertyInfo ~= propertyDef;
-			}
+    				if (generatedPropertyInfo != null)
+    					generatedPropertyInfo ~= ",\n";
+    				generatedPropertyInfo ~= propertyDef;
+    			}
+            }
 		}
 	}
 	//pragma(msg, t);
@@ -2300,38 +2516,41 @@ string getEntityDef(T)() {
 	return generatedEntityInfo ~ "\n" ~ generatedGettersSetters;
 }
 
-
 string entityListDef(T ...)() {
 	string res;
 	foreach(t; T) {
-        static if (__traits(compiles, isImplicitlyConvertible!(t, Object)) && isImplicitlyConvertible!(t, Object)) {
-    		immutable string def = getEntityDef!t;
-
-            //pragma(msg, def);
-
-    		if (res.length > 0)
-    			res ~= ",\n";
-    		res ~= def;
-        } else {
-            static if (t.stringof.startsWith("module ")) {
-                //pragma(msg, "Module passed as schema parameter: " ~ t.stringof);
-                //pragma(msg, __traits(allMembers, t));
-                foreach(tt; __traits(allMembers, t)) {
-                    //alias  ti;
-                    //pragma(msg, "Module member: " ~ (__traits(getMember, t, tt)).stringof);
-                    static if (__traits(compiles, isImplicitlyConvertible!((__traits(getMember, t, tt)), Object)) && isImplicitlyConvertible!((__traits(getMember, t, tt)), Object)) {
-                        //pragma(msg, "checking member" ~ (__traits(getMember, t, tt)).stringof);
-                        static if (hasOneOfAnnotations!((__traits(getMember, t, tt)), Entity, Embeddable)) {
-                            //pragma(msg, "member has entity level annotation: " ~ (__traits(getMember, t, tt)).stringof);
-                            immutable string def = getEntityDef!(__traits(getMember, t, tt));
-                            if (res.length > 0)
-                                res ~= ",\n";
-                            res ~= def;
-                        }
+        //pragma(msg, t);
+        static if (t.stringof.startsWith("module ")) {
+            //pragma(msg, "is module");
+            //pragma(msg, "Module passed as schema parameter: " ~ t.stringof);
+            //pragma(msg, __traits(allMembers, t));
+            foreach(tt; __traits(allMembers, t)) {
+                //alias  ti;
+                //pragma(msg, "Module member: " ~ (__traits(getMember, t, tt)).stringof);
+                static if (__traits(compiles, isImplicitlyConvertible!((__traits(getMember, t, tt)), Object)) && isImplicitlyConvertible!((__traits(getMember, t, tt)), Object)) {
+                    //pragma(msg, "checking member" ~ (__traits(getMember, t, tt)).stringof);
+                    static if (hasOneOfAnnotations!((__traits(getMember, t, tt)), Entity, Embeddable)) {
+                        //pragma(msg, "member has entity level annotation: " ~ (__traits(getMember, t, tt)).stringof);
+                        immutable string def = getEntityDef!(__traits(getMember, t, tt));
+                        if (res.length > 0)
+                            res ~= ",\n";
+                        res ~= def;
                     }
                 }
+            }
+        } else {
+            //pragma(msg, "not module");
+            static if (__traits(compiles, isImplicitlyConvertible!(t, Object)) && isImplicitlyConvertible!(t, Object)) {
+                // will be considered as @Entity if doesn't have @Embeddable annotation
+        		immutable string def = getEntityDef!t;
+
+                //pragma(msg, def);
+
+        		if (res.length > 0)
+        			res ~= ",\n";
+        		res ~= def;
             } else {
-                static assert(t.stringof ~ " cannot be passed as schema item");
+                    static assert(t.stringof ~ " cannot be passed as schema item");
             }
         }
 	}
