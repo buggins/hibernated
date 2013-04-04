@@ -434,6 +434,11 @@ string capitalizeFieldName(immutable string name) {
 	    return toUpper(name[0..1]) ~ name[1..$];
 }
 
+/// lowercases first letter
+string classNameToPropertyName(immutable string name) {
+    return toLower(name[0..1]) ~ name[1..$];
+}
+
 string getterNameToFieldName(immutable string name) {
 	if (name[0..3] == "get")
 		return toLower(name[3..4]) ~ name[4..$];
@@ -478,7 +483,7 @@ unittest {
 
 /// returns true if class member has at least one known property level annotation (@Column, @Id, @Generated)
 template hasHibernatedPropertyAnnotation(T, string m) {
-    enum bool hasHibernatedPropertyAnnotation = hasOneOfMemberAnnotations!(T, m, Id, Embedded, Column, OneToOne, ManyToOne, ManyToMany, OneToMany, Generated, Generator);
+    enum bool hasHibernatedPropertyAnnotation = hasOneOfMemberAnnotations!(T, m, Id, Column, OneToOne, ManyToOne, ManyToMany, OneToMany, Generated, Generator);
 }
 
 bool hasHibernatedClassOrPropertyAnnotation(T)() {
@@ -567,13 +572,13 @@ string applyDefault(string s, string defaultValue) {
 string getColumnName(T, string m)() {
 	foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
 		static if (is(typeof(a) == Column)) {
-			return applyDefault(a.name, camelCaseToUnderscoreDelimited(getPropertyName!(T,m)()));
+			return applyDefault(a.name, camelCaseToUnderscoreDelimited(getPropertyName!(T,m)));
 		}
 		static if (a.stringof == Column.stringof) {
-			return camelCaseToUnderscoreDelimited(getPropertyName!(T,m)());
+			return camelCaseToUnderscoreDelimited(getPropertyName!(T,m));
 		}
 	}
-	return camelCaseToUnderscoreDelimited(m);
+    return camelCaseToUnderscoreDelimited(getPropertyName!(T,m));
 }
 
 string getGeneratorCode(T, string m)() {
@@ -645,15 +650,16 @@ string getOneToOneReferencedPropertyName(T, string m)() {
 }
 
 string getOneToManyReferencedPropertyName(T, string m)() {
+    immutable string defaultPropertyName = classNameToPropertyName(getEntityName!(T));
     foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
         static if (is(typeof(a) == OneToMany)) {
-            return emptyStringToNull(a.name);
+            return applyDefault(a.name, defaultPropertyName);
         }
         static if (a.stringof == OneToOne.stringof) {
-            return null;
+            return defaultPropertyName;
         }
     }
-    return null;
+    return defaultPropertyName;
 }
 
 int getColumnLength(T, string m)() {
@@ -805,6 +811,16 @@ template hasPublicMember(T : Object, string m) {
     }
 }
 
+/// returns true if it's object field of Embeddable object type
+template isEmbeddedObjectMember(T : Object, string m) {
+    static if (isObjectMember!(T, m)) {
+        alias typeof(__traits(getMember, T, m)) ti;
+        enum bool isEmbeddedObjectMember = hasAnnotation!(getReferencedInstanceType!ti, Embeddable);
+    } else {
+        enum bool isEmbeddedObjectMember = false;
+    }
+}
+
 template hasPublicField(T : Object, string m) {
     static if (hasPublicMember!(T, m)) {
         enum bool hasPublicField = !is(typeof(__traits(getMember, T, m)) == function) && !is(typeof(__traits(getMember, T, m)) == delegate);
@@ -942,6 +958,7 @@ unittest {
     }
     class MemberTest {
         bool simple;
+        bool getSimple() { return simple; }
         int someInt;
         Long someLong;
         bool[] simples;
@@ -957,6 +974,8 @@ unittest {
         ref LazyCollection!Foo lgetFoos() { return lfoos; }
         @property ref LazyCollection!Foo lfooos() { return lfoos; }
     }
+    static assert(getColumnName!(MemberTest, "simple") == "simple");
+    static assert(getColumnName!(MemberTest, "getSimple") == "simple");
     static assert(isObject!Foo);
     static assert(!isObject!Bar);
     static assert(!isObjectMember!(MemberTest, "simple"));
@@ -1858,7 +1877,7 @@ string getOneToOnePropertyDef(T, immutable string m)() {
 	immutable string entityClassName = fullyQualifiedName!T;
     immutable string propertyName = getPropertyName!(T,m);
     static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
-    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, Generator, ManyToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": OneToOne property cannot have Column, Id, Generated, Generator, ManyToOne, ManyToMany or Embedded annotation");
+    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, Generator, ManyToOne, ManyToMany), entityClassName ~ "." ~ propertyName ~ ": OneToOne property cannot have Column, Id, Generated, Generator, ManyToOne, ManyToMany annotation");
     immutable bool isLazy = isLazyMember!(T,m);
     immutable string columnName = getJoinColumnName!(T, m);
 	immutable length = getColumnLength!(T, m)();
@@ -1979,7 +1998,7 @@ string getManyToOnePropertyDef(T, immutable string m)() {
     immutable string entityClassName = fullyQualifiedName!T;
     immutable string propertyName = getPropertyName!(T,m);
     static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
-    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, Generator, OneToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": ManyToOne property cannot have Column, Id, Generated, Generator, OneToOne, ManyToMany or Embedded annotation");
+    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, Generator, OneToOne, ManyToMany), entityClassName ~ "." ~ propertyName ~ ": ManyToOne property cannot have Column, Id, Generated, Generator, OneToOne, ManyToMany annotation");
     immutable string columnName = getJoinColumnName!(T, m);
     static assert (columnName != null, "ManyToOne property " ~ m ~ " has no JoinColumn name");
     immutable bool isLazy = isLazyMember!(T,m);
@@ -2105,7 +2124,7 @@ string getOneToManyPropertyDef(T, immutable string m)() {
     immutable string entityClassName = fullyQualifiedName!T;
     immutable string propertyName = getPropertyName!(T,m)();
     static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
-    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, Generator, OneToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": OneToMany property cannot have Column, Id, Generated, Generator, OneToOne, ManyToMany or Embedded annotation");
+    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, Generator, OneToOne, ManyToMany), entityClassName ~ "." ~ propertyName ~ ": OneToMany property cannot have Column, Id, Generated, Generator, OneToOne, ManyToMany or Embedded annotation");
     immutable string columnName = getJoinColumnName!(T, m)();
     immutable bool isCollection = isCollectionMember!(T,m);
     static assert (isCollection, "OneToMany property " ~ m ~ " should be array of objects or LazyCollection");
@@ -2230,7 +2249,7 @@ string getManyToManyPropertyDef(T, immutable string m)() {
     immutable string entityClassName = fullyQualifiedName!T;
     immutable string propertyName = getPropertyName!(T,m);
     static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
-    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, Generator, OneToOne, OneToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": ManyToMany property cannot have Column, Id, Generated, Generator, OneToOne, OneToMany or Embedded annotation");
+    static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, Generator, OneToOne, OneToMany), entityClassName ~ "." ~ propertyName ~ ": ManyToMany property cannot have Column, Id, Generated, Generator, OneToOne, OneToMany annotation");
     immutable string columnName = getJoinColumnName!(T, m);
     immutable string joinTableName = getJoinTableName!(T, m);
     immutable string joinColumn1 = getJoinTableColumn1!(T, m);
@@ -2453,7 +2472,7 @@ string getSimplePropertyDef(T, immutable string m)() {
 	immutable string entityClassName = fullyQualifiedName!T;
 	immutable string propertyName = getPropertyName!(T,m);
 	static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
-    static assert (!hasOneOfMemberAnnotations!(T, m, ManyToOne, OneToOne, ManyToMany, Embedded), entityClassName ~ "." ~ propertyName ~ ": simple property cannot have OneToOne, ManyToOne, ManyToMany or Embedded annotation");
+    static assert (!hasOneOfMemberAnnotations!(T, m, ManyToOne, OneToOne, ManyToMany), entityClassName ~ "." ~ propertyName ~ ": simple property cannot have OneToOne, ManyToOne, or ManyToMany annotation");
     immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
     immutable string generatorCode = getGeneratorCode!(T, m);
     immutable bool isId = hasMemberAnnotation!(T, m, Id) || isGenerated || generatorCode != null;
@@ -2542,34 +2561,34 @@ string getSimplePropertyDef(T, immutable string m)() {
 
 /// creates "new PropertyInfo(...)" code to create property metadata for member m of class T
 string getPropertyDef(T, string m)() {
-	immutable bool isEmbedded = hasMemberAnnotation!(T, m, Embedded);
+    immutable bool isObject = isObjectMember!(T, m);
+    immutable bool isCollection = isCollectionMember!(T, m);
+    immutable bool isEmbedded = isEmbeddedObjectMember!(T, m);
 	immutable bool isOneToOne = hasMemberAnnotation!(T, m, OneToOne);
     immutable bool isManyToOne = hasMemberAnnotation!(T, m, ManyToOne);
     immutable bool isManyToMany = hasMemberAnnotation!(T, m, ManyToMany);
     immutable bool isOneToMany = hasMemberAnnotation!(T, m, OneToMany);
-    immutable bool isSimple = !isEmbedded && !isOneToOne && !isManyToOne && !isManyToMany && !isOneToMany;
-	static if (isEmbedded) {
-		//pragma(msg, getEmbeddedPropertyDef!(T, m)());
-		return getEmbeddedPropertyDef!(T, m);
-	} 
-	static if (isSimple) {
-		return getSimplePropertyDef!(T, m);
-	} 
-	static if (isOneToOne) {
-		//pragma(msg, getOneToOnePropertyDef!(T, m)());
-		return getOneToOnePropertyDef!(T, m);
-	}
-    static if (isManyToOne) {
-        //pragma(msg, getOneToOnePropertyDef!(T, m)());
-        return getManyToOnePropertyDef!(T, m);
-    }
-    static if (isOneToMany) {
-        //pragma(msg, getOneToManyPropertyDef!(T, m));
-        return getOneToManyPropertyDef!(T, m);
-    }
-    static if (isManyToMany) {
-        //pragma(msg, getOneToOnePropertyDef!(T, m)());
-        return getManyToManyPropertyDef!(T, m);
+    immutable bool isSimple = isSupportedSimpleType!(T, m);
+    static if (isSimple) {
+        return getSimplePropertyDef!(T, m);
+    } else static if (isObject) {
+        static if (isOneToOne) {
+            return getOneToOnePropertyDef!(T, m);
+        } else static if (isEmbedded) {
+            return getEmbeddedPropertyDef!(T, m);
+        } else {
+            // if no annotations on Object field, assume it is ManyToOne
+            return getManyToOnePropertyDef!(T, m);
+        }
+
+    } else static if (isCollection) {
+        static assert(!isEmbedded && !isOneToOne && !isManyToOne, "Collection object array or LazyCollection! cannot be marked as @Embedded, @OneToOne, or @ManyToOne");
+        static if (isManyToMany) {
+            return getManyToManyPropertyDef!(T, m);
+        } else {
+            // if no annotations on collection field, assume it is OneToMany
+            return getOneToManyPropertyDef!(T, m);
+        }
     }
 }
 

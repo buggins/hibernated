@@ -44,7 +44,7 @@ struct Entity {
 
 /**
  * @Embeddable or @Embeddable() - mark class as entity which can only be embedded into other entities, and doesn't have separate columns.
- * Columns for each of Embeddable entity properties will be placed into parent entity's table, where this embeddable entity is @Embedded
+ * Columns for each of Embeddable entity properties will be placed into parent entity's table, where this embeddable entity is embedded
  */
 struct Embeddable {
 	immutable bool dummy;
@@ -125,14 +125,6 @@ struct Generator {
 
 /// standard generator - generates random UUID - for use as @Generator() annotation parameter. Don't forget to import std.uuid
 const string UUID_GENERATOR = "std.uuid.randomUUID().toString()";
-
-/**
- * @Embedded or @Embedded() - embed @Embeddable entity's properties to owner entity (add columns to the same table)
- * Columns for each of Embeddable entity properties will be placed into parent entity's table, where this embeddable entity is @Embedded
- */
-struct Embedded {
-	immutable bool dummy;
-}
 
 /**
  * @NotNull or @NotNull() - mark entity property as not null (NULLs are not allowed in DB)

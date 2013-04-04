@@ -33,22 +33,20 @@ version(unittest) {
         @Generated
         long id;
         
-        @Column
         string name;
         
         // property column
         private long _flags;
-        @Column
         @property long flags() { return _flags; }
         @property void flags(long v) { _flags = v; }
         
         // getter/setter property
         string comment;
-        @Column
+        // @Column -- not mandatory, will be deduced
         string getComment() { return comment; }
         void setComment(string v) { comment = v; }
         
-        @ManyToOne
+        //@ManyToOne -- not mandatory, will be deduced
         @JoinColumn("customer_fk")
         Customer customer;
         
@@ -67,19 +65,20 @@ version(unittest) {
     class Customer {
         @Generated
         int id;
-        @Column
+        // @Column -- not mandatory, will be deduced
         string name;
-        @Embedded
+
+        // deduced as @Embedded automatically
         Address address;
         
-        @ManyToOne
+        //@ManyToOne -- not mandatory, will be deduced
         @JoinColumn("account_type_fk")
         Lazy!AccountType accountType;
         
         //        @OneToMany("customer")
         //        LazyCollection!User users;
         
-        @OneToMany("customer")
+        //@OneToMany("customer") -- not mandatory, will be deduced
         User[] users;
         
         this() {
@@ -89,15 +88,15 @@ version(unittest) {
             return "id=" ~ to!string(id) ~ ", name=" ~ name ~ ", address=" ~ address.toString();
         }
     }
+
+    static assert(isEmbeddedObjectMember!(Customer, "address"));
     
     @Embeddable
     class Address {
-        @Column
         string zip;
-        @Column
         string city;
-        @Column
         string streetAddress;
+
         override string toString() {
             return " zip=" ~ zip ~ ", city=" ~ city ~ ", streetAddress=" ~ streetAddress;
         }
@@ -107,7 +106,6 @@ version(unittest) {
     class AccountType {
         @Generated
         int id;
-        @Column
         string name;
     }
     
@@ -115,7 +113,6 @@ version(unittest) {
     class Role {
         @Generated
         int id;
-        @Column
         string name;
         @ManyToMany
         LazyCollection!User users;
@@ -125,23 +122,20 @@ version(unittest) {
     @Table("t1")
     class T1 {
         @Id @Generated
-        @Column
         int id;
         
-        @Column
-        @NotNull
-        @UniqueKey
+        @NotNull @UniqueKey
         string name;
         
         // property column
         private long _flags;
-        @Column
+        // @Column -- not mandatory, will be deduced
         @property long flags() { return _flags; }
         @property void flags(long v) { _flags = v; }
         
         // getter/setter property
         string comment;
-        @Column
+        // @Column -- not mandatory, will be deduced
         @Null
         string getComment() { return comment; }
         void setComment(string v) { comment = v; }
@@ -157,7 +151,6 @@ version(unittest) {
         //@Generator("std.uuid.randomUUID().toString()")
         @Generator(UUID_GENERATOR)
         string id;
-        @Column
         string name;
     }
     
@@ -165,66 +158,33 @@ version(unittest) {
     static class TypeTest {
         @Generated
         int id;
-        
-        @Column
         string string_field;
-        @Column
         String nullable_string_field;
-
-        @Column
         byte byte_field;
-        @Column
         short short_field;
-        @Column
         int int_field;
-        @Column
         long long_field;
-        @Column
         ubyte ubyte_field;
-        @Column
         ushort ushort_field;
-        @Column
         ulong ulong_field;
-        @Column
         DateTime datetime_field;
-        @Column
         Date date_field;
-        @Column
         TimeOfDay time_field;
-        
-        @Column
         Byte nullable_byte_field;
-        @Column
         Short nullable_short_field;
-        @Column
         Int nullable_int_field;
-        @Column
         Long nullable_long_field;
-        @Column
         Ubyte nullable_ubyte_field;
-        @Column
         Ushort nullable_ushort_field;
-        @Column
         Ulong nullable_ulong_field;
-        @Column
         NullableDateTime nullable_datetime_field;
-        @Column
         NullableDate nullable_date_field;
-        @Column
         NullableTimeOfDay nullable_time_field;
-        
-        @Column
         float float_field;
-        @Column
         double double_field;
-        @Column
         Float nullable_float_field;
-        @Column
         Double nullable_double_field;
-        
-        @Column
         byte[] byte_array_field;
-        @Column
         ubyte[] ubyte_array_field;
     }
     
@@ -304,7 +264,7 @@ unittest {
     EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, T1, TypeTest, Address, Role);
     
     //writeln("metadata test 1");
-    
+    assert(schema["TypeTest"].length==29);
     assert(schema.getEntityCount() == 7);
     assert(schema["User"]["name"].columnName == "name");
     assert(schema["User"][0].columnName == "id");
@@ -615,7 +575,7 @@ version (unittest) {
         @Column
         int id;
         
-        @Embedded 
+        // deduced as @Embedded automatically
         EMName userName;
     }
     
@@ -667,7 +627,7 @@ version (unittest) {
 
 unittest {
     static assert(hasAnnotation!(EMName, Embeddable));
-    static assert(hasMemberAnnotation!(EMUser, "userName", Embedded));
+    static assert(isEmbeddedObjectMember!(EMUser, "userName"));
     static assert(!hasMemberAnnotation!(EMUser, "userName", OneToOne));
     static assert(getPropertyEmbeddedEntityName!(EMUser, "userName") == "EMName");
     static assert(getPropertyEmbeddedClassName!(EMUser, "userName") == "hibernated.tests.EMName");
