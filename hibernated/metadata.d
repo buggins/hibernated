@@ -428,7 +428,10 @@ string quoteBool(bool b) {
 }
 
 string capitalizeFieldName(immutable string name) {
-	return toUpper(name[0..1]) ~ name[1..$];
+    if (name[0] == '_')
+        return toUpper(name[1..2]) ~ name[2..$];
+    else
+	    return toUpper(name[0..1]) ~ name[1..$];
 }
 
 string getterNameToFieldName(immutable string name) {
@@ -474,8 +477,24 @@ unittest {
 }
 
 /// returns true if class member has at least one known property level annotation (@Column, @Id, @Generated)
-bool hasHibernatedPropertyAnnotation(T, string m)() {
-    return hasOneOfMemberAnnotations!(T, m, Id, Embedded, Column, OneToOne, ManyToOne, ManyToMany, OneToMany, Generated, Generator);
+template hasHibernatedPropertyAnnotation(T, string m) {
+    enum bool hasHibernatedPropertyAnnotation = hasOneOfMemberAnnotations!(T, m, Id, Embedded, Column, OneToOne, ManyToOne, ManyToMany, OneToMany, Generated, Generator);
+}
+
+bool hasHibernatedClassOrPropertyAnnotation(T)() {
+    static if (hasOneOfAnnotations!(T, Entity, Embeddable, Table)) {
+        return true;
+    } else {
+        foreach (m; __traits(allMembers, T)) {
+            static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
+                static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
+                    static if (hasHibernatedPropertyAnnotation(T, m))
+                        return true;
+                }
+            }
+        }
+        return false;
+    }
 }
 
 /// returns true if class has one of specified anotations
@@ -775,6 +794,115 @@ template isObjectMember(T : Object, string m) {
         enum bool isObjectMember = isImplicitlyConvertible!(ReturnType!(ti), Object);
     } else {
         enum bool isObjectMember = isImplicitlyConvertible!(ti, Object);
+    }
+}
+
+template hasPublicMember(T : Object, string m) {
+    static if (__traits(hasMember, T, m)) {
+        enum bool hasPublicMember = __traits(getProtection, __traits(getMember, T, m)) == "public";
+    } else {
+        enum bool hasPublicMember = false;
+    }
+}
+
+template hasPublicField(T : Object, string m) {
+    static if (hasPublicMember!(T, m)) {
+        enum bool hasPublicField = !is(typeof(__traits(getMember, T, m)) == function) && !is(typeof(__traits(getMember, T, m)) == delegate);
+    } else {
+        enum bool hasPublicField = false;
+    }
+}
+
+template hasPublicFieldWithAnnotation(T : Object, string m) {
+    static if (hasPublicField!(T, m)) {
+        enum bool hasPublicFieldWithAnnotation = hasHibernatedPropertyAnnotation!(T, m);
+    } else {
+        enum bool hasPublicFieldWithAnnotation = false;
+    }
+}
+
+/// check that member m exists in class T, and it's function with single parameter of type ti
+template isValidSetter(T : Object, string m, ParamType) {
+    // it's public member
+    static if (hasPublicMember!(T, m)) {
+        // it's function with single parameter of proper type
+        enum bool isValidSetter = is(typeof(__traits(getMember, T, m)) == function) &&
+                ParameterTypeTuple!(typeof(__traits(getMember, T, m))).length == 1 &&
+                is(ParameterTypeTuple!(typeof(__traits(getMember, T, m)))[0] == ParamType);
+    } else {
+        enum bool isValidSetter = false; 
+    }
+}
+
+template isValidGetter(T : Object, string m) {
+    // it's public member with get or is prefix
+    static if ((m.startsWith("get") || m.startsWith("is")) && hasPublicMember!(T, m)) {
+        alias typeof(__traits(getMember, T, m)) ti;
+        alias ReturnType!ti rti;
+        // it's function
+        static if (is(typeof(__traits(getMember, T, m)) == function)) {
+            // function has no parameters
+            static if (ParameterTypeTuple!(typeof(__traits(getMember, T, m))).length == 0) {
+                // has paired setter function of the same type
+                static if (isValidSetter!(T, getterNameToSetterName(m), rti)) {
+                    enum bool isValidGetter = true; 
+                } else {
+                    enum bool isValidGetter = false; 
+                }
+            }
+        } else {
+            enum bool isValidGetter = false; 
+        }
+    } else {
+        enum bool isValidGetter = false; 
+    }
+}
+
+template isValidGetterWithAnnotation(T : Object, string m) {
+    // it's public member with get or is prefix
+    static if (isValidGetter!(T, m)) {
+        enum bool isValidGetterWithAnnotation = hasHibernatedPropertyAnnotation!(T,m); 
+    } else {
+        enum bool isValidGetterWithAnnotation = false; 
+    }
+}
+
+bool isMainMemberForProperty(T : Object, string m)() {
+    // skip non-public members
+    static if (hasPublicMember!(T, m)) {
+        alias typeof(__traits(getMember, T, m)) ti;
+        immutable bool thisMemberHasAnnotation = hasHibernatedPropertyAnnotation!(T,m);
+        static if (is(ti == function)) {
+            // function or property
+            static if (functionAttributes!ti & FunctionAttribute.property) {
+                // property
+                return false;
+            } else {
+                // getter function
+                // should have corresponding setter
+                static if (isValidGetter!(T,m)) {
+                    // if any field with matching name is found, only one of them may have annotation
+                    immutable bool annotatedField = hasPublicFieldWithAnnotation!(T, getterNameToFieldName(m)) || hasPublicFieldWithAnnotation!(T, "_" ~ getterNameToFieldName(m));
+                    static assert(!annotatedField || !thisMemberHasAnnotation, "Both getter and corresponding field have annotations. Annotate only one of them.");
+                    return !annotatedField;
+                } else {
+                    // non-conventional name for getter or no setter
+                    return false;
+                }
+            }
+        } else {
+            // field
+            //capitalizeFieldName
+            immutable string gname = capitalizeFieldName(m);
+            immutable bool hasAnnotadedGetter = isValidGetterWithAnnotation!(T, "get" ~ gname) || isValidGetterWithAnnotation!(T, "is" ~ gname);
+            immutable bool hasGetter = isValidGetter!(T, "get" ~ gname) || isValidGetter!(T, "is" ~ gname);
+            static assert (!thisMemberHasAnnotation || !hasAnnotadedGetter, "Both getter and corresponding field have annotations. Annotate only one of them.");
+            return !hasAnnotadedGetter && (thisMemberHasAnnotation || !hasGetter);
+        }
+        return false;
+    } else {
+        // member is not public
+        return false;
     }
 }
 
@@ -2484,14 +2612,13 @@ string getEntityDef(T)() {
             // skip non-public members
             static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
 
-    //			static if (hasHibernatedAnnotation!(T, m)) {
-    //				pragma(msg, "Member " ~ m ~ " has known annotation");
-    //			}
-
     			alias typeof(__traits(getMember, T, m)) ti;
 
-
-    			static if (hasHibernatedPropertyAnnotation!(T, m)) {
+                // hasHibernatedPropertyAnnotation!(T, m) &&
+                // automatically treat all public members of supported types as persistent
+                immutable bool typeSupported = (isSupportedSimpleType!(T, m) || isObjectMember!(T, m) || isCollectionMember!(T, m));
+                immutable bool isMainProp = isMainMemberForProperty!(T,m);
+                static if (typeSupported && isMainProp) {
     				
     				immutable string propertyDef = getPropertyDef!(T, m)();
     				//pragma(msg, propertyDef);
@@ -2529,7 +2656,8 @@ string entityListDef(T ...)() {
                 //pragma(msg, "Module member: " ~ (__traits(getMember, t, tt)).stringof);
                 static if (__traits(compiles, isImplicitlyConvertible!((__traits(getMember, t, tt)), Object)) && isImplicitlyConvertible!((__traits(getMember, t, tt)), Object)) {
                     //pragma(msg, "checking member" ~ (__traits(getMember, t, tt)).stringof);
-                    static if (hasOneOfAnnotations!((__traits(getMember, t, tt)), Entity, Embeddable)) {
+                    // import class metadata if class or any of its members has hibenrated annotation
+                    static if (hasHibernatedClassOrPropertyAnnotation!(__traits(getMember, t, tt))) {
                         //pragma(msg, "member has entity level annotation: " ~ (__traits(getMember, t, tt)).stringof);
                         immutable string def = getEntityDef!(__traits(getMember, t, tt));
                         if (res.length > 0)
