@@ -21,7 +21,9 @@ import std.typecons;
 
 import ddbc.core;
 
+
 // convenient aliases for Nullable types
+
 alias Nullable!byte Byte;
 alias Nullable!ubyte Ubyte;
 alias Nullable!short Short;
@@ -32,6 +34,51 @@ alias Nullable!long Long;
 alias Nullable!ulong Ulong;
 alias Nullable!float Float;
 alias Nullable!double Double;
+alias Nullable!DateTime NullableDateTime;
+alias Nullable!Date NullableDate;
+alias Nullable!TimeOfDay NullableTimeOfDay;
+
+/// Wrapper around string, to distinguish between Null and NotNull fields: string is NotNull, String is Null -- same interface as in Nullable
+struct String
+{
+    private string _value;
+
+    this()(string value) inout
+    {
+        _value = value;
+    }
+    
+/**
+Returns $(D true) if and only if $(D this) is in the null state.
+*/
+    @property bool isNull() const pure nothrow @safe
+    {
+        return _value is null;
+    }
+    
+/**
+Forces $(D this) to the null state.
+*/
+    void nullify()
+    {
+        _value = null;
+    }
+    
+    void opAssign(string value)
+    {
+        _value = value;
+    }
+    
+    @property ref inout(string) get() inout pure nothrow @safe
+    {
+        return _value;
+    }
+    
+    alias get this;
+}
+
+
+// Exception classes
 
 /// base class for all HibernateD exceptions
 class HibernatedException : Exception {

@@ -893,7 +893,8 @@ enum PropertyMemberType : int {
 	NULLABLE_FLOAT_TYPE, // Nullable!float
 	NULLABLE_DOUBLE_TYPE,// Nullable!double
 	STRING_TYPE,   // string
-	DATETIME_TYPE, // std.datetime.DateTime
+    NULLABLE_STRING_TYPE,   // nullable string - String struct
+    DATETIME_TYPE, // std.datetime.DateTime
 	DATE_TYPE, // std.datetime.Date
 	TIME_TYPE, // std.datetime.TimeOfDay
 	NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
@@ -949,7 +950,9 @@ PropertyMemberType getPropertyMemberType(T, string m)() {
 			return PropertyMemberType.NULLABLE_DOUBLE_TYPE;
 		} else if (is(ReturnType!(ti) == string)) {
 			return PropertyMemberType.STRING_TYPE;
-		} else if (is(ReturnType!(ti) == DateTime)) {
+        } else if (is(ReturnType!(ti) == String)) {
+            return PropertyMemberType.NULLABLE_STRING_TYPE;
+        } else if (is(ReturnType!(ti) == DateTime)) {
 			return PropertyMemberType.DATETIME_TYPE;
 		} else if (is(ReturnType!(ti) == Date)) {
 			return PropertyMemberType.DATE_TYPE;
@@ -1010,7 +1013,9 @@ PropertyMemberType getPropertyMemberType(T, string m)() {
 		return PropertyMemberType.NULLABLE_DOUBLE_TYPE;
 	} else if (is(ti == string)) {
 		return PropertyMemberType.STRING_TYPE;
-	} else if (is(ti == DateTime)) {
+    } else if (is(ti == String)) {
+        return PropertyMemberType.NULLABLE_STRING_TYPE;
+    } else if (is(ti == DateTime)) {
 		return PropertyMemberType.DATETIME_TYPE;
 	} else if (is(ti == Date)) {
 		return PropertyMemberType.DATE_TYPE;
@@ -1059,8 +1064,9 @@ static immutable bool[] ColumnTypeCanHoldNulls =
 	 false,//DOUBLE_TYPE,   // double
 	 true, //NULLABLE_FLOAT_TYPE, // Nullable!float
 	 true, //NULLABLE_DOUBLE_TYPE,// Nullable!double
-	 true, //STRING_TYPE   // string
-	 false, //DATETIME_TYPE, // std.datetime.DateTime
+	 false, //STRING_TYPE   // string  -- treat as @NotNull by default
+     true, //NULLABLE_STRING_TYPE   // String
+     false, //DATETIME_TYPE, // std.datetime.DateTime
 	 false, //DATE_TYPE, // std.datetime.Date
 	 false, //TIME_TYPE, // std.datetime.TimeOfDay
 	 true, //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
@@ -1070,7 +1076,7 @@ static immutable bool[] ColumnTypeCanHoldNulls =
 	 true, //UBYTE_ARRAY_TYPE, // ubyte[]
 	 ];
 
-string canColumnTypeHoldNulls(T, string m)() {
+bool isColumnTypeNullableByDefault(T, string m)() {
 	return ColumnTypeCanHoldNulls[getPropertyMemberType!(T,m)];
 }
 
@@ -1098,7 +1104,8 @@ static immutable string[] ColumnTypeKeyIsSetCode =
 	 "(!%s.isNull)", //NULLABLE_FLOAT_TYPE, // Nullable!float
 	 "(!%s.isNull)", //NULLABLE_DOUBLE_TYPE,// Nullable!double
 	 "(%s !is null)", //STRING_TYPE   // string
-	 "(%s != DateTime())", //DATETIME_TYPE, // std.datetime.DateTime
+     "(!%s.isNull)", //NULLABLE_STRING_TYPE   // String
+     "(%s != DateTime())", //DATETIME_TYPE, // std.datetime.DateTime
 	 "(%s != Date())", //DATE_TYPE, // std.datetime.Date
 	 "(%s != TimeOfDay())", //TIME_TYPE, // std.datetime.TimeOfDay
 	 "(!%s.isNull)", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
@@ -1135,7 +1142,8 @@ static immutable string[] ColumnTypeIsNullCode =
 	 "(%s.isNull)", //NULLABLE_FLOAT_TYPE, // Nullable!float
 	 "(%s.isNull)", //NULLABLE_DOUBLE_TYPE,// Nullable!double
 	 "(%s is null)", //STRING_TYPE   // string
-	 "(false)", //DATETIME_TYPE, // std.datetime.DateTime
+     "(%s.isNull)", //NULLABLE_STRING_TYPE   // String
+     "(false)", //DATETIME_TYPE, // std.datetime.DateTime
 	 "(false)", //DATE_TYPE, // std.datetime.Date
 	 "(false)", //TIME_TYPE, // std.datetime.TimeOfDay
 	 "(%s.isNull)", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
@@ -1172,7 +1180,8 @@ static immutable string[] ColumnTypeSetNullCode =
 	 "Nullable!float nv;", //NULLABLE_FLOAT_TYPE, // Nullable!float
 	 "Nullable!double nv;", //NULLABLE_DOUBLE_TYPE,// Nullable!double
 	 "string nv = null;", //STRING_TYPE   // string
-	 "DateTime nv;", //DATETIME_TYPE, // std.datetime.DateTime
+     "String nv = null;", //NULLABLE_STRING_TYPE   // String
+     "DateTime nv;", //DATETIME_TYPE, // std.datetime.DateTime
 	 "Date nv;", //DATE_TYPE, // std.datetime.Date
 	 "TimeOfDay nv;", //TIME_TYPE, // std.datetime.TimeOfDay
 	 "Nullable!DateTime nv;", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
@@ -1205,7 +1214,8 @@ static immutable string[] ColumnTypePropertyToVariant =
 	 "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_FLOAT_TYPE, // Nullable!float
 	 "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_DOUBLE_TYPE,// Nullable!double
 	 "Variant(%s)", //STRING_TYPE   // string
-	 "Variant(%s)", //DATETIME_TYPE, // std.datetime.DateTime
+     "Variant(%s)", //NULLABLE_STRING_TYPE   // String
+     "Variant(%s)", //DATETIME_TYPE, // std.datetime.DateTime
 	 "Variant(%s)", //DATE_TYPE, // std.datetime.Date
 	 "Variant(%s)", //TIME_TYPE, // std.datetime.TimeOfDay
 	 "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
@@ -1286,7 +1296,8 @@ static immutable string[] ColumnTypeConstructorCode =
 	 "new NumberType(7, false, SqlType.FLOAT)", //NULLABLE_FLOAT_TYPE, // Nullable!float
 	 "new NumberType(14, false, SqlType.DOUBLE)", //NULLABLE_DOUBLE_TYPE,// Nullable!double
 	 "new StringType()", //STRING_TYPE   // string
-	 "new DateTimeType()", //DATETIME_TYPE, // std.datetime.DateTime
+     "new StringType()", //NULLABLE_STRING_TYPE   // String
+     "new DateTimeType()", //DATETIME_TYPE, // std.datetime.DateTime
 	 "new DateType()", //DATE_TYPE, // std.datetime.Date
 	 "new TimeType()", //TIME_TYPE, // std.datetime.TimeOfDay
 	 "new DateTimeType()", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
@@ -1323,7 +1334,8 @@ static immutable string[] ColumnTypeDatasetReaderCode =
 	 "Nullable!float(r.getFloat(index))", //NULLABLE_FLOAT_TYPE, // Nullable!float
 	 "Nullable!double(r.getDouble(index))", //NULLABLE_DOUBLE_TYPE,// Nullable!double
 	 "r.getString(index)", //STRING_TYPE   // string
-	 "r.getDateTime(index)", //DATETIME_TYPE, // std.datetime.DateTime
+     "r.getString(index)", //NULLABLE_STRING_TYPE   // String
+     "r.getDateTime(index)", //DATETIME_TYPE, // std.datetime.DateTime
 	 "r.getDate(index)", //DATE_TYPE, // std.datetime.Date
 	 "r.getTime(index)", //TIME_TYPE, // std.datetime.TimeOfDay
 	 "Nullable!DateTime(r.getDateTime(index))", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
@@ -1360,7 +1372,8 @@ static immutable string[] ColumnTypeVariantReadCode =
 	 "(value == null ? nv : (value.convertsTo!(float) ? value.get!(float) : to!float(value.get!(double))))", //NULLABLE_FLOAT_TYPE, // Nullable!float
 	 "(value == null ? nv : (value.convertsTo!(double) ? value.get!(double) : to!double(value.get!(double))))", //NULLABLE_DOUBLE_TYPE,// Nullable!double
 	 "(value == null ? nv : value.get!(string))", //STRING_TYPE   // string
-	 "(value == null ? nv : value.get!(DateTime))", //DATETIME_TYPE, // std.datetime.DateTime
+     "(value == null ? nv : value.get!(string))", //NULLABLE_STRING_TYPE   // String
+     "(value == null ? nv : value.get!(DateTime))", //DATETIME_TYPE, // std.datetime.DateTime
 	 "(value == null ? nv : value.get!(Date))", //DATE_TYPE, // std.datetime.Date
 	 "(value == null ? nv : value.get!(TimeOfDay))", //TIME_TYPE, // std.datetime.TimeOfDay
 	 "(value == null ? nv : value.get!(DateTime))", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
@@ -1393,7 +1406,8 @@ static immutable string[] DatasetWriteCode =
 	 "r.setFloat(index, %s);", //NULLABLE_FLOAT_TYPE, // Nullable!float
 	 "r.setDouble(index, %s);", //NULLABLE_DOUBLE_TYPE,// Nullable!double
 	 "r.setString(index, %s);", //STRING_TYPE   // string
-	 "r.setDateTime(index, %s);", //DATETIME_TYPE, // std.datetime.DateTime
+     "r.setString(index, %s);", //NULLABLE_STRING_TYPE   // String
+     "r.setDateTime(index, %s);", //DATETIME_TYPE, // std.datetime.DateTime
 	 "r.setDate(index, %s);", //DATE_TYPE, // std.datetime.Date
 	 "r.setTime(index, %s);", //TIME_TYPE, // std.datetime.TimeOfDay
 	 "r.setDateTime(index, %s);", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
@@ -2110,7 +2124,7 @@ string getSimplePropertyDef(T, immutable string m)() {
 	immutable length = getColumnLength!(T, m)();
 	immutable bool hasNull = hasMemberAnnotation!(T,m,Null);
 	immutable bool hasNotNull = hasMemberAnnotation!(T,m,NotNull);
-	immutable bool nullable = hasNull ? true : (hasNotNull ? false : true); //canColumnTypeHoldNulls!(T.m)
+    immutable bool nullable = hasNull ? true : (hasNotNull ? false : isColumnTypeNullableByDefault!(T, m)); //canColumnTypeHoldNulls!(T.m)
 	immutable bool unique = hasMemberAnnotation!(T, m, UniqueKey);
 	immutable string typeName = getColumnTypeName!(T, m);
 	immutable string propertyReadCode = getPropertyReadCode!(T,m);

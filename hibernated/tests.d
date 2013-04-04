@@ -168,7 +168,9 @@ version(unittest) {
         
         @Column
         string string_field;
-        
+        @Column
+        String nullable_string_field;
+
         @Column
         byte byte_field;
         @Column
@@ -191,34 +193,34 @@ version(unittest) {
         TimeOfDay time_field;
         
         @Column
-        Nullable!byte nullable_byte_field;
+        Byte nullable_byte_field;
         @Column
-        Nullable!short nullable_short_field;
+        Short nullable_short_field;
         @Column
-        Nullable!int nullable_int_field;
+        Int nullable_int_field;
         @Column
-        Nullable!long nullable_long_field;
+        Long nullable_long_field;
         @Column
-        Nullable!ubyte nullable_ubyte_field;
+        Ubyte nullable_ubyte_field;
         @Column
-        Nullable!ushort nullable_ushort_field;
+        Ushort nullable_ushort_field;
         @Column
-        Nullable!ulong nullable_ulong_field;
+        Ulong nullable_ulong_field;
         @Column
-        Nullable!DateTime nullable_datetime_field;
+        NullableDateTime nullable_datetime_field;
         @Column
-        Nullable!Date nullable_date_field;
+        NullableDate nullable_date_field;
         @Column
-        Nullable!TimeOfDay nullable_time_field;
+        NullableTimeOfDay nullable_time_field;
         
         @Column
         float float_field;
         @Column
         double double_field;
         @Column
-        Nullable!float nullable_float_field;
+        Float nullable_float_field;
         @Column
-        Nullable!double nullable_double_field;
+        Double nullable_double_field;
         
         @Column
         byte[] byte_array_field;
