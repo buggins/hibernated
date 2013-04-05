@@ -2652,7 +2652,7 @@ string getEntityDef(T)() {
                 // hasHibernatedPropertyAnnotation!(T, m) &&
                 // automatically treat all public members of supported types as persistent
                 immutable bool typeSupported = (isSupportedSimpleType!(T, m) || isObjectMember!(T, m) || isCollectionMember!(T, m));
-                immutable bool isMainProp = isMainMemberForProperty!(T,m);
+                immutable bool isMainProp = isMainMemberForProperty!(T,m) && !hasMemberAnnotation!(T, m, Transient);
                 static if (typeSupported && isMainProp) {
     				
     				immutable string propertyDef = getPropertyDef!(T, m)();

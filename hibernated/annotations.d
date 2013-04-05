@@ -18,6 +18,7 @@ module hibernated.annotations;
 
 /**
  * @Transient - mark class or field as transient, to not generate HibernateD persistence metadata for it.
+ * Use this annotation in cases when field you wan't persist will be considered as persistent.
  */
 struct Transient {
     immutable bool dummy;
