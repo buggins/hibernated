@@ -11,7 +11,12 @@
  */
 module hibernated.dialects.mysqldialect;
 
+import std.conv;
+
 import hibernated.dialect;
+import hibernated.metadata;
+import hibernated.type;
+import ddbc.core;
 
 string[] MYSQL_RESERVED_WORDS = 
 	[
@@ -102,6 +107,117 @@ class MySQLDialect : Dialect {
     override char closeQuote() { return '`'; }
     ///The character specific to this dialect used to begin a quoted identifier.
     override char  openQuote() { return '`'; }
+
+    // returns string like "BIGINT(20) NOT NULL" or "VARCHAR(255) NULL"
+    override string getColumnTypeDefinition(const PropertyInfo pi, const PropertyInfo overrideTypeFrom = null) {
+        immutable Type type = overrideTypeFrom !is null ? overrideTypeFrom.columnType : pi.columnType;
+        immutable SqlType sqlType = type.getSqlType();
+        string nullablility = pi.nullable ? " NULL" : " NOT NULL";
+        string pk = pi.key ? " PRIMARY KEY" : "";
+        string autoinc = pi.generated ? " AUTO_INCREMENT" : "";
+        string def = ""; // TODO
+        int len = 0;
+        string unsigned = "";
+        if (cast(NumberType)type !is null) {
+            len = (cast(NumberType)type).length;
+            unsigned = (cast(NumberType)type).unsigned ? " UNSIGNED" : "";
+        }
+        if (cast(StringType)type !is null) {
+            len = (cast(StringType)type).length;
+        }
+        string modifiers = unsigned ~ nullablility ~ def ~ pk ~ autoinc;
+        string lenmodifiers = "(" ~ to!string(len > 0 ? len : 255) ~ ")" ~ modifiers;
+        switch (sqlType) {
+            case SqlType.BIGINT:
+                return "BIGINT" ~ modifiers;
+                ///sometimes referred to as a type code, that identifies the generic SQL type BINARY.
+                //BINARY,
+                //sometimes referred to as a type code, that identifies the generic SQL type BIT.
+            case SqlType.BIT:
+                return "TINYINT" ~ modifiers;
+                ///sometimes referred to as a type code, that identifies the generic SQL type BLOB.
+            case SqlType.BLOB:
+                return "BLOB";
+                ///somtimes referred to as a type code, that identifies the generic SQL type BOOLEAN.
+            case SqlType.BOOLEAN:
+                return "TINYINT" ~ modifiers;
+                ///sometimes referred to as a type code, that identifies the generic SQL type CHAR.
+            case SqlType.CHAR:
+                return "CHAR" ~ lenmodifiers;
+                ///sometimes referred to as a type code, that identifies the generic SQL type CLOB.
+            case SqlType.CLOB:
+                return "MEDIUMTEXT";
+                //somtimes referred to as a type code, that identifies the generic SQL type DATALINK.
+                    //DATALINK,
+                    ///sometimes referred to as a type code, that identifies the generic SQL type DATE.
+            case SqlType.DATE:
+                return "DATE" ~ modifiers;
+                ///sometimes referred to as a type code, that identifies the generic SQL type DATETIME.
+            case SqlType.DATETIME:
+                return "DATETIME" ~ modifiers;
+                ///sometimes referred to as a type code, that identifies the generic SQL type DECIMAL.
+            case SqlType.DECIMAL:
+                return "DOUBLE" ~ modifiers;
+                //sometimes referred to as a type code, that identifies the generic SQL type DISTINCT.
+                    //DISTINCT,
+                    ///sometimes referred to as a type code, that identifies the generic SQL type DOUBLE.
+            case SqlType.DOUBLE:
+                return "DOUBLE" ~ modifiers;
+                ///sometimes referred to as a type code, that identifies the generic SQL type FLOAT.
+            case SqlType.FLOAT:
+                return "FLOAT" ~ modifiers;
+                ///sometimes referred to as a type code, that identifies the generic SQL type INTEGER.
+            case SqlType.INTEGER:
+                return "INT" ~ modifiers;
+                //sometimes referred to as a type code, that identifies the generic SQL type JAVA_OBJECT.
+                    //JAVA_OBJECT,
+                    ///sometimes referred to as a type code, that identifies the generic SQL type LONGNVARCHAR.
+            case SqlType.LONGNVARCHAR:
+                return "VARCHAR" ~ lenmodifiers;
+                ///sometimes referred to as a type code, that identifies the generic SQL type LONGVARBINARY.
+            case SqlType.LONGVARBINARY:
+                return "VARCHAR" ~ lenmodifiers;
+                ///sometimes referred to as a type code, that identifies the generic SQL type LONGVARCHAR.
+            case SqlType.LONGVARCHAR:
+                return "VARCHAR" ~ lenmodifiers;
+                ///sometimes referred to as a type code, that identifies the generic SQL type NCHAR
+            case SqlType.NCHAR:
+                return "NCHAR" ~ lenmodifiers;
+                ///sometimes referred to as a type code, that identifies the generic SQL type NCLOB.
+            case SqlType.NCLOB:
+                return "MEDIUMTEXT";
+                ///sometimes referred to as a type code, that identifies the generic SQL type NUMERIC.
+            case SqlType.NUMERIC:
+                return "DOUBLE" ~ modifiers;
+                ///sometimes referred to as a type code, that identifies the generic SQL type NVARCHAR.
+            case SqlType.NVARCHAR:
+                return "NVARCHAR" ~ lenmodifiers;
+                ///sometimes referred to as a type code, that identifies the generic SQL type SMALLINT.
+            case SqlType.SMALLINT:
+                return "SMALLINT" ~ modifiers;
+                //sometimes referred to as a type code, that identifies the generic SQL type XML.
+                    //SQLXML,
+                    //sometimes referred to as a type code, that identifies the generic SQL type STRUCT.
+                    //STRUCT,
+                    ///sometimes referred to as a type code, that identifies the generic SQL type TIME.
+            case SqlType.TIME:
+                return "TIME" ~ modifiers;
+                //sometimes referred to as a type code, that identifies the generic SQL type TIMESTAMP.
+                    //TIMESTAMP,
+                    ///sometimes referred to as a type code, that identifies the generic SQL type TINYINT.
+            case SqlType.TINYINT:
+                return "TINYINT" ~ modifiers;
+                ///sometimes referred to as a type code, that identifies the generic SQL type VARBINARY.
+            case SqlType.VARBINARY:
+                return "VARCHAR" ~ lenmodifiers;
+                ///sometimes referred to as a type code, that identifies the generic SQL type VARCHAR.
+            case SqlType.VARCHAR:
+                return "VARCHAR" ~ lenmodifiers;
+            default:
+                return "VARCHAR(255)";
+        }
+    }
+
 
 	this() {
 		addKeywords(MYSQL_RESERVED_WORDS);

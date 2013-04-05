@@ -17,8 +17,19 @@ module hibernated.dialect;
 import std.stdio;
 import std.string;
 
+import hibernated.metadata;
+
 /// Represents a dialect of SQL implemented by a particular RDBMS. -- generated from JavaDocs on org.hibernate.dialect.Dialect
 abstract class Dialect {
+
+    // returns string like "BIGINT(20) NOT NULL" or "VARCHAR(255) NULL"
+    string getColumnTypeDefinition(const PropertyInfo pi, const PropertyInfo overrideTypeFrom = null);
+
+    // returns string like "`columnname` BIGINT(20) NOT NULL" or "VARCHAR(255) NULL"
+    string getColumnDefinition(const PropertyInfo pi) {
+        return quoteIfNeeded(pi.columnName) ~ " " ~ getColumnTypeDefinition(pi);
+    }
+    
     ///The character specific to this dialect used to close a quoted identifier.
     char closeQuote() const;
     ///The character specific to this dialect used to begin a quoted identifier.

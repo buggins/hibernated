@@ -3054,6 +3054,136 @@ class SchemaInfoImpl(T...) : SchemaInfo {
 }
 
 
+class DBInfo {
+    Dialect dialect;
+    EntityMetaData metaData;
+
+    this(Dialect dialect, EntityMetaData metaData) {
+        this.dialect = dialect;
+        this.metaData = metaData;
+
+        foreach(entity; metaData) {
+            add(new TableInfo(this, entity));
+        }
+    }
+
+    TableInfo[] tables;
+    TableInfo[string] tableNameMap;
+    TableInfo get(string tableName) {
+        TableInfo res = find(tableName);
+        enforceEx!HibernatedException(res !is null, "table " ~ tableName ~ " is not found in schema");
+        return res;
+    }
+    TableInfo find(string tableName) {
+        if ((tableName in tableNameMap) is null)
+            return null;
+        return tableNameMap[tableName];
+    }
+    void add(TableInfo table) {
+        enforceEx!HibernatedException((table.tableName in tableNameMap) is null, "duplicate table " ~ table.tableName ~ " in schema");
+        tables ~= table;
+        tableNameMap[table.tableName] = table;
+    }
+    string[] getCreateTableSQL() {
+        string[] res;
+        foreach(table; tables) {
+            res ~= table.getCreateTableSQL();
+        }
+        return res;
+    }
+}
+
+class TableInfo {
+    DBInfo schema;
+    string tableName;
+    const EntityInfo entity;
+    const EntityInfo entity2;
+    ColumnInfo[] columns;
+    ColumnInfo[string] columnNameMap;
+    IndexInfo[] indexes;
+
+    this(DBInfo schema, const EntityInfo entity, const EntityInfo entity2, const JoinTableInfo joinTable) {
+        this.schema = schema;
+        this.tableName = joinTable.tableName;
+        this.entity = entity;
+        this.entity2 = entity;
+    }
+    private void appendColumns(const EntityInfo entity) {
+        foreach(pi; entity) {
+            if (pi.embedded) {
+                appendColumns(pi.referencedEntity);
+            } else if (pi.simple || (pi.columnName !is null)) {
+                addColumn(new ColumnInfo(this, pi));
+                if (false) //pi.unique)
+                    addUniqueColumn(pi);
+            } else if (pi.joinTable !is null) {
+                addJoinTable(pi);
+            }
+            //            if (pi.isUnique) {
+            //            }
+        }
+    }
+    this(DBInfo schema, const EntityInfo entity) {
+        this.schema = schema;
+        this.entity = entity;
+        this.entity2 = null;
+        this.tableName = entity.tableName;
+        appendColumns(entity);
+    }
+    void addJoinTable(const PropertyInfo pi) {
+        // TODO
+    }
+    void addUniqueColumn(const PropertyInfo pi) {
+        // TODO
+    }
+    void addColumn(ColumnInfo column) {
+        enforceEx!HibernatedException((column.columnName in columnNameMap) is null, "duplicate column name " ~ tableName ~ "." ~ column.columnName ~ " in schema");
+        columns ~= column;
+        columnNameMap[column.columnName] = column;
+    }
+    string getCreateTableSQL() {
+        string res;
+        foreach(col; columns) {
+            if (res.length > 0)
+                res ~= ", ";
+            res ~= col.columnDefinition;
+        }
+        return "CREATE TABLE " ~ schema.dialect.quoteIfNeeded(tableName) ~ " (" ~ res ~ ")";
+    }
+}
+
+class ColumnInfo {
+    TableInfo table;
+    const PropertyInfo property;
+    string columnName;
+    string columnDefinition;
+    this(TableInfo table, const PropertyInfo property) {
+        this.table = table;
+        this.property = property;
+        this.columnName = property.columnName;
+        assert(columnName !is null);
+        if (property.manyToOne || property.oneToOne) {
+            assert(property.columnName !is null);
+            assert(property.referencedEntity !is null);
+            this.columnDefinition = table.schema.dialect.quoteIfNeeded(property.columnName) ~ " " ~ table.schema.dialect.getColumnTypeDefinition(property, property.referencedEntity.getKeyProperty());
+        } else {
+            this.columnDefinition = table.schema.dialect.getColumnDefinition(property);
+        }
+    }
+}
+
+enum IndexType {
+    Index,
+    Unique,
+    ForeignKey
+}
+
+class IndexInfo {
+    TableInfo table;
+    IndexType type;
+    string indexName;
+}
+
 unittest {
 
 	@Entity

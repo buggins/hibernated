@@ -27,7 +27,7 @@ import hibernated.core;
 version(unittest) {
     
     //@Entity
-    @Table("users")
+    @Table("users") // to override table name - "users" instead of default "user"
     class User {
         
         //@Generated
@@ -61,7 +61,7 @@ version(unittest) {
     
     
     //@Entity
-    @Table("customers")
+    @Table("customers") // to override table name - "customers" instead of default "customer"
     class Customer {
         //@Generated
         int id;
@@ -337,7 +337,10 @@ unittest {
     assert(e2 !is null);
     User e2user = cast(User)e2;
     assert(e2user !is null);
-    
+
+
+
+
     // TODO:
     //    e2user.customer = new Customer();
     //    e2user.customer.id = 25;
@@ -374,6 +377,14 @@ unittest {
         // Checking generated metadata
         EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, T1, TypeTest, Address, Role, GeneratorTest);
         Dialect dialect = new MySQLDialect();
+
+        DBInfo db = new DBInfo(dialect, schema);
+        string[] createTables = db.getCreateTableSQL();
+        foreach(t; createTables) {
+            writeln(t);
+        }
+
+
         DataSource ds = createUnitTestMySQLDataSource();
         SessionFactory factory = new SessionFactoryImpl(schema, dialect, ds);
         scope(exit) factory.close();
