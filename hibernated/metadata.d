@@ -1473,7 +1473,7 @@ static immutable string[] ColumnTypeKeyIsSetCode =
 	 "(!%s.isNull)", //NULLABLE_FLOAT_TYPE, // Nullable!float
 	 "(!%s.isNull)", //NULLABLE_DOUBLE_TYPE,// Nullable!double
 	 "(%s !is null)", //STRING_TYPE   // string
-     "(!%s.isNull)", //NULLABLE_STRING_TYPE   // String
+     "(%s !is null)", //NULLABLE_STRING_TYPE   // String
      "(%s != DateTime())", //DATETIME_TYPE, // std.datetime.DateTime
 	 "(%s != Date())", //DATE_TYPE, // std.datetime.Date
 	 "(%s != TimeOfDay())", //TIME_TYPE, // std.datetime.TimeOfDay
@@ -1511,7 +1511,7 @@ static immutable string[] ColumnTypeIsNullCode =
 	 "(%s.isNull)", //NULLABLE_FLOAT_TYPE, // Nullable!float
 	 "(%s.isNull)", //NULLABLE_DOUBLE_TYPE,// Nullable!double
 	 "(%s is null)", //STRING_TYPE   // string
-     "(%s.isNull)", //NULLABLE_STRING_TYPE   // String
+     "(%s is null)", //NULLABLE_STRING_TYPE   // String
      "(false)", //DATETIME_TYPE, // std.datetime.DateTime
 	 "(false)", //DATE_TYPE, // std.datetime.Date
 	 "(false)", //TIME_TYPE, // std.datetime.TimeOfDay
@@ -1548,8 +1548,8 @@ static immutable string[] ColumnTypeSetNullCode =
 	 "double nv = 0;",//DOUBLE_TYPE,   // double
 	 "Nullable!float nv;", //NULLABLE_FLOAT_TYPE, // Nullable!float
 	 "Nullable!double nv;", //NULLABLE_DOUBLE_TYPE,// Nullable!double
-	 "string nv = null;", //STRING_TYPE   // string
-     "String nv = null;", //NULLABLE_STRING_TYPE   // String
+	 "string nv;", //STRING_TYPE   // string
+     "string nv;", //NULLABLE_STRING_TYPE   // String
      "DateTime nv;", //DATETIME_TYPE, // std.datetime.DateTime
 	 "Date nv;", //DATE_TYPE, // std.datetime.Date
 	 "TimeOfDay nv;", //TIME_TYPE, // std.datetime.TimeOfDay
@@ -2984,6 +2984,7 @@ class SchemaInfoImpl(T...) : SchemaInfo {
 	static EntityInfo [string] entityMap;
 	static EntityInfo [] entities;
 	static EntityInfo [TypeInfo_Class] classMap;
+
     //pragma(msg, entityListDef!(T)());
     mixin(entityListDef!(T)());
 
