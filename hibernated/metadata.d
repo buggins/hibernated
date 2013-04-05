@@ -493,13 +493,25 @@ bool hasHibernatedClassOrPropertyAnnotation(T)() {
         foreach (m; __traits(allMembers, T)) {
             static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
                 static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
-                    static if (hasHibernatedPropertyAnnotation(T, m))
+                    static if (hasHibernatedPropertyAnnotation!(T, m))
                         return true;
                 }
             }
         }
         return false;
     }
+}
+
+bool hasAnyKeyPropertyAnnotation(T)() {
+    foreach (m; __traits(allMembers, T)) {
+        static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
+            static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
+                static if (hasOneOfMemberAnnotations!(T, m, Id, Generated, Generator))
+                    return true;
+            }
+        }
+    }
+    return false;
 }
 
 /// returns true if class has one of specified anotations
@@ -1999,7 +2011,7 @@ string getManyToOnePropertyDef(T, immutable string m)() {
     immutable string propertyName = getPropertyName!(T,m);
     static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
     static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, Generator, OneToOne, ManyToMany), entityClassName ~ "." ~ propertyName ~ ": ManyToOne property cannot have Column, Id, Generated, Generator, OneToOne, ManyToMany annotation");
-    immutable string columnName = getJoinColumnName!(T, m);
+    immutable string columnName = applyDefault(getJoinColumnName!(T, m),camelCaseToUnderscoreDelimited(referencedEntityName) ~ "_fk");
     static assert (columnName != null, "ManyToOne property " ~ m ~ " has no JoinColumn name");
     immutable bool isLazy = isLazyMember!(T,m);
     immutable length = getColumnLength!(T, m);
@@ -2473,10 +2485,14 @@ string getSimplePropertyDef(T, immutable string m)() {
 	immutable string propertyName = getPropertyName!(T,m);
 	static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
     static assert (!hasOneOfMemberAnnotations!(T, m, ManyToOne, OneToOne, ManyToMany), entityClassName ~ "." ~ propertyName ~ ": simple property cannot have OneToOne, ManyToOne, or ManyToMany annotation");
-    immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated);
+    immutable bool isIdPropertyName = propertyName == "id";
+    immutable bool isEmbeddableClass = hasAnnotation!(T, Embeddable);
+    immutable bool classHasKeyField = hasAnyKeyPropertyAnnotation!T;
     immutable string generatorCode = getGeneratorCode!(T, m);
-    immutable bool isId = hasMemberAnnotation!(T, m, Id) || isGenerated || generatorCode != null;
-	immutable string columnName = getColumnName!(T, m);
+    immutable bool hasKeyAnnotation = hasMemberAnnotation!(T, m, Id) || hasMemberAnnotation!(T, m, Generated) || generatorCode != null;
+    immutable bool isId = hasKeyAnnotation || (isIdPropertyName && !classHasKeyField && !isEmbeddableClass);
+    immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated) || (!hasKeyAnnotation && isId);
+    immutable string columnName = getColumnName!(T, m);
     static assert(!isGenerated || generatorCode == null, T.stringof ~ "." ~ m ~ ": You cannot mix @Generated and @Generator for the same property");
 	immutable length = getColumnLength!(T, m)();
 	immutable bool hasNull = hasMemberAnnotation!(T,m,Null);
@@ -3038,7 +3054,7 @@ unittest {
 	@Table("users")
 	static class User {
 		
-		@Id @Generated
+		//@Id @Generated
 		@Column("id_column")
 		int id;
 		
@@ -3046,17 +3062,17 @@ unittest {
 		string name;
 		
 		// no column name
-		@Column
+		//@Column
 		string flags;
 		
 		// annotated getter
 		private string login;
-		@Column
+		//@Column
 		public string getLogin() { return login; }
 		public void setLogin(string login) { this.login = login; }
 		
 		// no (), no column name
-		@Column
+		//@Column
 		int testColumn;
 	}
 	
@@ -3064,10 +3080,10 @@ unittest {
 	@Entity
 	@Table("customer")
 	static class Customer {
-		@Id @Generated
-		@Column
+		//@Id @Generated
+		//@Column
 		int id;
-		@Column
+		//@Column
 		string name;
 	}
 

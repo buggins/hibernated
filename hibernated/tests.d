@@ -26,11 +26,11 @@ import hibernated.core;
 
 version(unittest) {
     
-    @Entity
+    //@Entity
     @Table("users")
     class User {
         
-        @Generated
+        //@Generated
         long id;
         
         string name;
@@ -47,7 +47,7 @@ version(unittest) {
         void setComment(string v) { comment = v; }
         
         //@ManyToOne -- not mandatory, will be deduced
-        @JoinColumn("customer_fk")
+        //@JoinColumn("customer_fk")
         Customer customer;
         
         @ManyToMany
@@ -60,10 +60,10 @@ version(unittest) {
     }
     
     
-    @Entity
+    //@Entity
     @Table("customers")
     class Customer {
-        @Generated
+        //@Generated
         int id;
         // @Column -- not mandatory, will be deduced
         string name;
@@ -72,7 +72,7 @@ version(unittest) {
         Address address;
         
         //@ManyToOne -- not mandatory, will be deduced
-        @JoinColumn("account_type_fk")
+        //@JoinColumn("account_type_fk")
         Lazy!AccountType accountType;
         
         //        @OneToMany("customer")
@@ -102,29 +102,31 @@ version(unittest) {
         }
     }
     
-    @Entity
+    @Entity // need to have at least one annotation to import automatically from module
     class AccountType {
-        @Generated
+        //@Generated
         int id;
         string name;
     }
     
-    @Entity 
+    //@Entity 
     class Role {
-        @Generated
+        //@Generated
         int id;
         string name;
-        @ManyToMany
+        @ManyToMany 
         LazyCollection!User users;
     }
     
-    @Entity
-    @Table("t1")
+    //@Entity
+    //@Table("t1")
     class T1 {
-        @Id @Generated
+        //@Id 
+        //@Generated
         int id;
         
-        @NotNull @UniqueKey
+        //@NotNull 
+        @UniqueKey
         string name;
         
         // property column
@@ -156,7 +158,7 @@ version(unittest) {
     
     @Entity
     static class TypeTest {
-        @Generated
+        //@Generated
         int id;
         string string_field;
         String nullable_string_field;
@@ -291,7 +293,40 @@ unittest {
     assert(schema["Role"]["users"].joinTable.column2 == "user_fk");
     
     assert(schema["User"]["id"].readFunc !is null);
-    
+
+    assert(schema["T1"]["comment"].nullable);
+
+    assert(schema["TypeTest"]["id"].key);
+    assert(schema["TypeTest"]["id"].key);
+    assert(!schema["TypeTest"]["string_field"].nullable);
+    assert(schema["TypeTest"]["nullable_string_field"].nullable);
+    assert(!schema["TypeTest"]["byte_field"].nullable);
+    assert(!schema["TypeTest"]["short_field"].nullable);
+    assert(!schema["TypeTest"]["int_field"].nullable);
+    assert(!schema["TypeTest"]["long_field"].nullable);
+    assert(!schema["TypeTest"]["ubyte_field"].nullable);
+    assert(!schema["TypeTest"]["ushort_field"].nullable);
+    assert(!schema["TypeTest"]["ulong_field"].nullable);
+    assert(!schema["TypeTest"]["datetime_field"].nullable);
+    assert(!schema["TypeTest"]["date_field"].nullable);
+    assert(!schema["TypeTest"]["time_field"].nullable);
+    assert(schema["TypeTest"]["nullable_byte_field"].nullable);
+    assert(schema["TypeTest"]["nullable_short_field"].nullable);
+    assert(schema["TypeTest"]["nullable_int_field"].nullable);
+    assert(schema["TypeTest"]["nullable_long_field"].nullable);
+    assert(schema["TypeTest"]["nullable_ubyte_field"].nullable);
+    assert(schema["TypeTest"]["nullable_ushort_field"].nullable);
+    assert(schema["TypeTest"]["nullable_ulong_field"].nullable);
+    assert(schema["TypeTest"]["nullable_datetime_field"].nullable);
+    assert(schema["TypeTest"]["nullable_date_field"].nullable);
+    assert(schema["TypeTest"]["nullable_time_field"].nullable);
+    assert(!schema["TypeTest"]["float_field"].nullable);
+    assert(!schema["TypeTest"]["double_field"].nullable);
+    assert(schema["TypeTest"]["nullable_float_field"].nullable);
+    assert(schema["TypeTest"]["nullable_double_field"].nullable);
+    assert(schema["TypeTest"]["byte_array_field"].nullable);
+    assert(schema["TypeTest"]["ubyte_array_field"].nullable);
+
     auto e2 = schema.createEntity("User");
     assert(e2 !is null);
     User e2user = cast(User)e2;
@@ -563,16 +598,14 @@ version (unittest) {
     // for testing of Embeddable
     @Embeddable 
     class EMName {
-        @Column
         string firstName;
-        @Column
         string lastName;
     }
     
-    @Entity 
+    //@Entity 
     class EMUser {
-        @Id @Generated
-        @Column
+        //@Id @Generated
+        //@Column
         int id;
         
         // deduced as @Embedded automatically
@@ -580,29 +613,29 @@ version (unittest) {
     }
     
     // for testing of Embeddable
-    @Entity
+    //@Entity
     class Person {
-        @Id
+        //@Id
         int id;
         
-        @Column @NotNull
+        // @Column @NotNull        
         string firstName;
-        
-        @Column @NotNull
+        // @Column @NotNull        
         string lastName;
         
-        @OneToOne @NotNull
+        @NotNull
+        @OneToOne
         @JoinColumn("more_info_fk")
         MoreInfo moreInfo;
     }
     
     
-    @Entity
+    //@Entity
     @Table("person_info")
     class MoreInfo {
-        @Id @Generated
+        //@Id @Generated
         int id;
-        @Column 
+        // @Column 
         long flags;
         @OneToOne("moreInfo")
         Person person;
@@ -610,12 +643,12 @@ version (unittest) {
         EvenMoreInfo evenMore;
     }
     
-    @Entity
+    //@Entity
     @Table("person_info2")
     class EvenMoreInfo {
-        @Id @Generated
+        //@Id @Generated
         int id;
-        @Column 
+        //@Column 
         long flags;
         @OneToOne
         @JoinColumn("person_info_fk")
