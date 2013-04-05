@@ -96,6 +96,8 @@ version(unittest) {
         string zip;
         string city;
         string streetAddress;
+        @Transient // mark field with @Transient to avoid creating column for it
+        string someNonPersistentField;
 
         override string toString() {
             return " zip=" ~ zip ~ ", city=" ~ city ~ ", streetAddress=" ~ streetAddress;
@@ -280,7 +282,11 @@ unittest {
     assert(schema["Customer"]["address"].referencedEntity !is null);
     assert(schema["Customer"]["address"].referencedEntity["streetAddress"].columnName == "street_address");
     assert(schema["User"]["customer"].columnName !is null);
-    
+
+    assert(!schema["User"].embeddable); // test if @Embeddable is working
+    assert(schema["Address"].embeddable); // test if @Embeddable is working
+    assert(schema["Address"].length == 3); // test if @Transient is working
+
     assert(schema["Customer"]["users"].relation == RelationType.OneToMany);
     assert(schema["User"]["customer"].relation == RelationType.ManyToOne);
     assert(schema["User"]["roles"].relation == RelationType.ManyToMany);

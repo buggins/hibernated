@@ -2693,17 +2693,22 @@ string entityListDef(T ...)() {
                     //pragma(msg, "checking member" ~ (__traits(getMember, t, tt)).stringof);
                     // import class metadata if class or any of its members has hibenrated annotation
                     static if (hasHibernatedClassOrPropertyAnnotation!(__traits(getMember, t, tt))) {
-                        //pragma(msg, "member has entity level annotation: " ~ (__traits(getMember, t, tt)).stringof);
-                        immutable string def = getEntityDef!(__traits(getMember, t, tt));
-                        if (res.length > 0)
-                            res ~= ",\n";
-                        res ~= def;
+                        // class should not be marked as @Transient
+                        static if (!hasAnnotation!(__traits(getMember, t, tt), Transient)) {
+                            immutable string def = getEntityDef!(__traits(getMember, t, tt));
+                            if (res.length > 0)
+                                res ~= ",\n";
+                            res ~= def;
+                        }
                     }
                 }
             }
         } else {
             //pragma(msg, "not module");
             static if (__traits(compiles, isImplicitlyConvertible!(t, Object)) && isImplicitlyConvertible!(t, Object)) {
+
+                static assert(!hasAnnotation!(t, Transient), "Class " ~ t.stringof ~ " has @Transient annotation and cannot be used in metadata");
+
                 // will be considered as @Entity if doesn't have @Embeddable annotation
         		immutable string def = getEntityDef!t;
 
