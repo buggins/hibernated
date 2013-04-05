@@ -1775,10 +1775,9 @@ unittest {
 
     parser = new QueryParser(schema, "FROM User WHERE roles.id = 1");
     q = parser.makeSQL(dialect);
-    writeln(q.hql);
-    writeln(q.sql);
+    //writeln(q.hql);
+    //writeln(q.sql);
     assert(q.sql == "SELECT _t1.id, _t1.name, _t1.flags, _t1.comment, _t1.customer_fk FROM users AS _t1 LEFT JOIN role_users AS _t1_t2 ON _t1.id=_t1_t2.user_fk LEFT JOIN role AS _t2 ON _t1_t2.role_fk=_t2.id WHERE _t2.id = 1");
-               //    SELECT _t1.id, _t1.name, _t1.flags, _t1.get_comment, _t1.customer_fk FROM users AS _t1 LEFT JOIN role_users AS _t1_t2 ON _t1.id=_t1_t2.user_fk LEFT JOIN role AS _t2 ON _t1_t2.role_fk=_t2.id WHERE _t2.id = 1
 
     parser = new QueryParser(schema, "FROM Role WHERE users.id = 1");
     q = parser.makeSQL(dialect);

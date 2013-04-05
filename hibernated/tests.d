@@ -711,34 +711,39 @@ unittest {
         DataSource ds = createUnitTestMySQLDataSource();
         SessionFactory factory = new SessionFactoryImpl(schema, dialect, ds);
         scope(exit) factory.close();
-        Session sess = factory.openSession();
-        scope(exit) sess.close();
-        
-        auto p1 = sess.get!Person(1);
-        assert(p1.firstName == "Andrei");
-        
-        // all non-null oneToOne relations
-        auto q = sess.createQuery("FROM Person WHERE id=:Id").setParameter("Id", Variant(1));
-        Person p2 = q.uniqueResult!Person();
-        assert(p2.firstName == "Andrei");
-        assert(p2.moreInfo !is null);
-        assert(p2.moreInfo.person !is null);
-        assert(p2.moreInfo.person == p2);
-        assert(p2.moreInfo.flags == 123);
-        assert(p2.moreInfo.evenMore !is null);
-        assert(p2.moreInfo.evenMore.flags == 1);
-        assert(p2.moreInfo.evenMore.personInfo !is null);
-        assert(p2.moreInfo.evenMore.personInfo == p2.moreInfo);
-        
-        // null oneToOne relation
-        q = sess.createQuery("FROM Person WHERE id=:Id").setParameter("Id", Variant(3));
-        p2 = q.uniqueResult!Person();
-        assert(p2.firstName == "John");
-        assert(p2.moreInfo !is null);
-        assert(p2.moreInfo.person !is null);
-        assert(p2.moreInfo.person == p2);
-        assert(p2.moreInfo.flags == 345);
-        assert(p2.moreInfo.evenMore is null);
+        {
+            Session sess = factory.openSession();
+            scope(exit) sess.close();
+
+            auto p1 = sess.get!Person(1);
+            assert(p1.firstName == "Andrei");
+            
+
+            // all non-null oneToOne relations
+            auto q = sess.createQuery("FROM Person WHERE id=:Id").setParameter("Id", Variant(1));
+            Person p2 = q.uniqueResult!Person();
+            assert(p2.firstName == "Andrei");
+            assert(p2.moreInfo !is null);
+            assert(p2.moreInfo.person !is null);
+            assert(p2.moreInfo.person == p2);
+            assert(p2.moreInfo.flags == 123);
+            assert(p2.moreInfo.evenMore !is null);
+            assert(p2.moreInfo.evenMore.flags == 1);
+            assert(p2.moreInfo.evenMore.personInfo !is null);
+            assert(p2.moreInfo.evenMore.personInfo == p2.moreInfo);
+
+
+            // null oneToOne relation
+            q = sess.createQuery("FROM Person WHERE id=:Id").setParameter("Id", Variant(3));
+            p2 = q.uniqueResult!Person();
+            assert(p2.firstName == "John");
+            assert(p2.moreInfo !is null);
+            assert(p2.moreInfo.person !is null);
+            assert(p2.moreInfo.person == p2);
+            assert(p2.moreInfo.flags == 345);
+            assert(p2.moreInfo.evenMore is null);
+
+        }
         
     }
 }

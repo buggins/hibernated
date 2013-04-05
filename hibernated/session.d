@@ -307,6 +307,7 @@ class SessionImpl : Session {
     }
 
     this(SessionFactoryImpl sessionFactory, EntityMetaData metaData, Dialect dialect, DataSource connectionPool) {
+        //writeln("Creating session");
         this.sessionFactory = sessionFactory;
         this.metaData = metaData;
         this.dialect = dialect;
@@ -342,6 +343,8 @@ class SessionImpl : Session {
         _accessor.onSessionClosed();
         closed = true;
         sessionFactory.sessionClosed(this);
+        //writeln("closing connection");
+        assert(conn !is null);
         conn.close();
         return null;
     }
@@ -629,6 +632,7 @@ class SessionFactoryImpl : SessionFactory {
     }
 
     this(EntityMetaData metaData, Dialect dialect, DataSource connectionPool) {
+        //writeln("Creating session factory");
         this.metaData = metaData;
         this.dialect = dialect;
         this.connectionPool = connectionPool;
@@ -648,6 +652,7 @@ class SessionFactoryImpl : SessionFactory {
     }
 
 	override void close() {
+        //writeln("Closing session factory");
         checkClosed();
         closed = true;
 //        if (observer !is null)

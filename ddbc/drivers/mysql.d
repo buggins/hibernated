@@ -2252,11 +2252,14 @@ protected:
         authenticate(greeting);
     }
 
-    ~this()
-    {
-        if (_open != OpenState.notConnected)
-            close();
-    }
+// HibernateD: removing destructor. It's called unexpectedly. GC bug?
+//    ~this()
+//    {
+//        if (_open != OpenState.notConnected) {
+//            writeln("~connection");
+//            close();
+//        }
+//    }
 
 public:
 

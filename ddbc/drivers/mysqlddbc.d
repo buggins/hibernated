@@ -152,6 +152,7 @@ public:
 	}
 
     this(string url, string[string] params) {
+        //writeln("MySQLConnection() creating connection");
         mutex = new Mutex();
         this.url = url;
         this.params = params;
@@ -193,8 +194,11 @@ public:
             closed = false;
             setAutoCommit(true);
         } catch (Throwable e) {
+            //writeln(e.msg);
             throw new SQLException(e);
         }
+
+        //writeln("MySQLConnection() connection created");
     }
     override void close() {
 		checkClosed();
