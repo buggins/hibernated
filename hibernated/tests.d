@@ -399,12 +399,13 @@ unittest {
         foreach(t; createTables) {
             writeln(t);
         }
-        assert(db["users"].getCreateTableSQL(), "CREATE TABLE users (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags BIGINT NOT NULL, comment VARCHAR(1024) NULL, customer_fk INT NULL)");
-        assert(db["customers"].getCreateTableSQL(), "CREATE TABLE customers (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, zip VARCHAR(255) NOT NULL, city VARCHAR(255) NOT NULL, street_address VARCHAR(255) NOT NULL, account_type_fk INT NULL)");
-        assert(db["account_type"].getCreateTableSQL(), "CREATE TABLE account_type (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)");
-        assert(db["t1"].getCreateTableSQL(), "CREATE TABLE t1 (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags BIGINT NOT NULL, comment VARCHAR(255) NULL)");
-        assert(db["role"].getCreateTableSQL(), "CREATE TABLE role (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)");
-        assert(db["generator_test"].getCreateTableSQL(), "CREATE TABLE generator_test (id VARCHAR(255) NOT NULL PRIMARY KEY, name VARCHAR(255) NOT NULL)");
+        assert(db["users"].getCreateTableSQL() == "CREATE TABLE users (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags BIGINT NOT NULL, comment VARCHAR(1024) NULL, customer_fk INT NULL)");
+        assert(db["customers"].getCreateTableSQL() == "CREATE TABLE customers (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, zip VARCHAR(255) NOT NULL, city VARCHAR(255) NOT NULL, street_address VARCHAR(255) NOT NULL, account_type_fk INT NULL)");
+        assert(db["account_type"].getCreateTableSQL() == "CREATE TABLE account_type (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)");
+        assert(db["t1"].getCreateTableSQL() == "CREATE TABLE t1 (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags BIGINT NOT NULL, comment VARCHAR(255) NULL)");
+        assert(db["role"].getCreateTableSQL() == "CREATE TABLE role (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)");
+        assert(db["generator_test"].getCreateTableSQL() == "CREATE TABLE generator_test (id VARCHAR(255) NOT NULL PRIMARY KEY, name VARCHAR(255) NOT NULL)");
+        assert(db["role_users"].getCreateTableSQL() == "CREATE TABLE role_users (role_fk INT NOT NULL, user_fk BIGINT NOT NULL, PRIMARY KEY (role_fk, user_fk), UNIQUE INDEX role_users_reverse_index (user_fk, role_fk))");
 
 
         DataSource ds = createUnitTestMySQLDataSource();

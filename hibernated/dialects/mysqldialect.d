@@ -112,10 +112,11 @@ class MySQLDialect : Dialect {
     override string getColumnTypeDefinition(const PropertyInfo pi, const PropertyInfo overrideTypeFrom = null) {
         immutable Type type = overrideTypeFrom !is null ? overrideTypeFrom.columnType : pi.columnType;
         immutable SqlType sqlType = type.getSqlType();
-        string nullablility = pi.nullable ? " NULL" : " NOT NULL";
-        string pk = pi.key ? " PRIMARY KEY" : "";
-        string autoinc = pi.generated ? " AUTO_INCREMENT" : "";
-        string def = ""; // TODO
+        bool fk = pi is null;
+        string nullablility = !fk && pi.nullable ? " NULL" : " NOT NULL";
+        string pk = !fk && pi.key ? " PRIMARY KEY" : "";
+        string autoinc = !fk && pi.generated ? " AUTO_INCREMENT" : "";
+        string def = "";
         int len = 0;
         string unsigned = "";
         if (cast(NumberType)type !is null) {

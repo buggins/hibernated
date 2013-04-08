@@ -362,9 +362,9 @@ class JoinTableInfo {
     package string _column2;
     @property string column2() const { return _column2; }
     package EntityInfo _thisEntity;
-    @property const (EntityInfo) thisEntity() { return _thisEntity; }
+    @property const (EntityInfo) thisEntity() const { return _thisEntity; }
     package EntityInfo _otherEntity;
-    @property const (EntityInfo) otherEntity() { return _otherEntity; }
+    @property const (EntityInfo) otherEntity() const { return _otherEntity; }
     this(string tableName, string column1, string column2) {
         this._tableName = tableName;
         this._column1 = column1;
@@ -3261,12 +3261,32 @@ class TableInfo {
     ColumnInfo[] columns;
     ColumnInfo[string] columnNameMap;
     IndexInfo[] indexes;
+    const string pkDef;
 
     this(DBInfo schema, const EntityInfo entity, const EntityInfo entity2, const JoinTableInfo joinTable) {
         this.schema = schema;
         this.tableName = joinTable.tableName;
         this.entity = entity;
         this.entity2 = entity;
+        ColumnInfo c1;
+        ColumnInfo c2;
+        assert(joinTable.column1 !is null);
+        assert(joinTable.column2 !is null);
+        assert(entity !is null);
+        assert(entity2 !is null);
+        assert(joinTable.thisEntity !is null);
+        assert(joinTable.otherEntity !is null);
+        if (joinTable.column1 < joinTable.column2) {
+            c1 = new ColumnInfo(this, joinTable.column1, entity);
+            c2 = new ColumnInfo(this, joinTable.column2, entity2);
+        } else {
+            c2 = new ColumnInfo(this, joinTable.column1, entity);
+            c1 = new ColumnInfo(this, joinTable.column2, entity2);
+        }
+        addColumn(c1);
+        addColumn(c2);
+        pkDef = "PRIMARY KEY (" ~ schema.dialect.quoteIfNeeded(c1.columnName) ~ ", " ~ schema.dialect.quoteIfNeeded(c2.columnName) ~ "), " ~
+            "UNIQUE INDEX " ~ tableName ~ "_reverse_index (" ~ schema.dialect.quoteIfNeeded(c2.columnName) ~ ", " ~ schema.dialect.quoteIfNeeded(c1.columnName) ~ ")";
     }
 
     ColumnInfo opIndex(string columnName) {
@@ -3289,7 +3309,7 @@ class TableInfo {
                 addColumn(new ColumnInfo(this, pi));
                 if (false) //pi.unique)
                     addUniqueColumn(pi);
-            } else if (pi.joinTable !is null) {
+            } else if (pi.manyToMany) { //pi.joinTable !is null
                 addJoinTable(pi);
             }
             //            if (pi.isUnique) {
@@ -3301,10 +3321,19 @@ class TableInfo {
         this.entity = entity;
         this.entity2 = null;
         this.tableName = entity.tableName;
+        this.pkDef = null;
         appendColumns(entity);
     }
     void addJoinTable(const PropertyInfo pi) {
-        // TODO
+        assert(pi.referencedEntity !is null);
+        assert(pi.joinTable !is null);
+        TableInfo t = new TableInfo(schema, entity, pi.referencedEntity, pi.joinTable);
+        TableInfo existing = schema.find(t.tableName);
+        if (existing !is null) {
+            enforceEx!HibernatedException(t.getCreateTableSQL() == existing.getCreateTableSQL(), "JoinTable structure in " ~ entity.name ~ " and " ~ pi.referencedEntityName ~ " do not match");
+        } else {
+            schema.add(t);
+        }
     }
     void addUniqueColumn(const PropertyInfo pi) {
         // TODO
@@ -3321,6 +3350,8 @@ class TableInfo {
                 res ~= ", ";
             res ~= col.columnDefinition;
         }
+        if (pkDef !is null)
+            res ~= ", " ~ pkDef;
         return "CREATE TABLE " ~ schema.dialect.quoteIfNeeded(tableName) ~ " (" ~ res ~ ")";
     }
 }
@@ -3330,6 +3361,13 @@ class ColumnInfo {
     const PropertyInfo property;
     string columnName;
     string columnDefinition;
+    this(TableInfo table, string columnName, const EntityInfo referencedEntity) {
+        this.table = table;
+        this.property = null;
+        this.columnName = columnName;
+        this.columnDefinition = table.schema.dialect.quoteIfNeeded(columnName) ~ " " ~ 
+                table.schema.dialect.getColumnTypeDefinition(null, referencedEntity.getKeyProperty());
+    }
     this(TableInfo table, const PropertyInfo property) {
         this.table = table;
         this.property = property;
