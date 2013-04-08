@@ -37,12 +37,13 @@ version(unittest) {
         
         // property column
         private long _flags;
-        @property long flags() { return _flags; }
         @property void flags(long v) { _flags = v; }
-        
+        @property long flags() { return _flags; }
+
         // getter/setter property
         string comment;
         // @Column -- not mandatory, will be deduced
+        @Null // override default nullability of string with @Null (instead of using String)
         string getComment() { return comment; }
         void setComment(string v) { comment = v; }
         
@@ -79,7 +80,9 @@ version(unittest) {
         //        LazyCollection!User users;
         
         //@OneToMany("customer") -- not mandatory, will be deduced
-        User[] users;
+        private User[] _users;
+        @property User[] users() { return _users; }
+        @property void users(User[] value) { _users = value; }
         
         this() {
             address = new Address();
@@ -138,7 +141,7 @@ version(unittest) {
         @property void flags(long v) { _flags = v; }
         
         // getter/setter property
-        string comment;
+        private string comment;
         // @Column -- not mandatory, will be deduced
         @Null
         string getComment() { return comment; }
@@ -300,7 +303,12 @@ unittest {
     
     assert(schema["User"]["id"].readFunc !is null);
 
+    static assert(isGetterFunction!(__traits(getMember, User, "getComment"), "getComment"));
+    static assert(isGetterFunction!(__traits(getMember, T1, "getComment"), "getComment"));
+    static assert(hasMemberAnnotation!(User, "getComment", Null));
+    static assert(hasMemberAnnotation!(T1, "getComment", Null));
     assert(schema["T1"]["comment"].nullable);
+    assert(schema["User"]["comment"].nullable);
 
     assert(schema["TypeTest"]["id"].key);
     assert(schema["TypeTest"]["id"].key);

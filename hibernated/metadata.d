@@ -544,13 +544,47 @@ bool hasAnnotation(T, A)() {
 	return false;
 }
 
+bool isGetterFunction(alias overload, string methodName)() {
+    //pragma(msg, "isGetterFunction " ~ methodName ~ " " ~ typeof(overload).stringof);
+    static if (is(typeof(overload) == function)) {
+        //pragma(msg, "is function " ~ methodName ~ " " ~ typeof(overload).stringof);
+        static if (ParameterTypeTuple!(overload).length == 0) {
+            //pragma(msg, "no params " ~ methodName ~ " " ~ typeof(overload).stringof);
+            static if (functionAttributes!overload & FunctionAttribute.property) {
+                //pragma(msg, "is property");
+                //writeln("is property or starts with get or is");
+                return true;
+            }
+            static if (methodName.startsWith("get") || methodName.startsWith("get")) {
+                //pragma(msg, "is getter");
+                //writeln("is property or starts with get or is");
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 /// returns true if class member has specified anotations
 bool hasMemberAnnotation(T, string m, A)() {
-	foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
-		static if (is(typeof(a) == A) || a.stringof == A.stringof) {
-			return true;
-		}
-	}
+    static if (is(typeof(__traits(getMember, T, m)) == function)) {
+        // function: check overloads
+        foreach(overload; MemberFunctionsTuple!(T, m)) {
+            static if (isGetterFunction!(overload, m)) {
+                foreach(a; __traits(getAttributes, overload)) {
+                    static if (is(typeof(a) == A) || a.stringof == A.stringof) {
+                        return true;
+                    }
+                }
+            }
+        }
+    } else {
+    	foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
+    		static if (is(typeof(a) == A) || a.stringof == A.stringof) {
+    			return true;
+    		}
+    	}
+    }
 	return false;
 }
 
@@ -582,15 +616,26 @@ string applyDefault(string s, string defaultValue) {
 }
 
 string getColumnName(T, string m)() {
-	foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
-		static if (is(typeof(a) == Column)) {
-			return applyDefault(a.name, camelCaseToUnderscoreDelimited(getPropertyName!(T,m)));
-		}
-		static if (a.stringof == Column.stringof) {
-			return camelCaseToUnderscoreDelimited(getPropertyName!(T,m));
-		}
-	}
-    return camelCaseToUnderscoreDelimited(getPropertyName!(T,m));
+    immutable string defValue = camelCaseToUnderscoreDelimited(getPropertyName!(T,m));
+    static if (is(typeof(__traits(getMember, T, m)) == function)) {
+        // function: check overloads
+        foreach(overload; MemberFunctionsTuple!(T, m)) {
+            static if (isGetterFunction!(overload, m)) {
+                foreach(a; __traits(getAttributes, overload)) {
+                    static if (is(typeof(a) == Column)) {
+                        return applyDefault(a.name, defValue);
+                    }
+                }
+            }
+        }
+    } else {
+        foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
+            static if (is(typeof(a) == Column)) {
+                return applyDefault(a.name, defValue);
+            }
+        }
+    }
+    return defValue;
 }
 
 string getGeneratorCode(T, string m)() {
@@ -675,11 +720,24 @@ string getOneToManyReferencedPropertyName(T, string m)() {
 }
 
 int getColumnLength(T, string m)() {
-	foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
-		static if (is(typeof(a) == Column)) {
-			return a.length;
-		}
-	}
+    static if (is(typeof(__traits(getMember, T, m)) == function)) {
+        // function: check overloads
+        foreach(overload; MemberFunctionsTuple!(T, m)) {
+            static if (isGetterFunction!(overload, m)) {
+                foreach(a; __traits(getAttributes, overload)) {
+                    static if (is(typeof(a) == Column)) {
+                        return a.length;
+                    }
+                }
+            }
+        }
+    } else {
+        foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
+            static if (is(typeof(a) == Column)) {
+                return a.length;
+            }
+        }
+    }
 	return 0;
 }
 
@@ -692,10 +750,11 @@ string getPropertyName(T, string m)() {
 }
 
 enum PropertyMemberKind : int {
-	FIELD_MEMBER,    // int field;
-	GETTER_MEMBER,   // getField() + setField() or isField() and setField()
-	PROPERTY_MEMBER, // @property int field() { return _field; }
-    LAZY_MEMBER,     // Lazy!Object field;
+	FIELD_MEMBER,      // int field;
+	GETTER_MEMBER,     // getField() + setField() or isField() and setField()
+	PROPERTY_MEMBER,   // @property T field() { ... } + @property xxx field(T value) { ... }
+    LAZY_MEMBER,       // Lazy!Object field;
+    UNSUPPORTED_MEMBER,// 
 }
 
 bool hasPercentSign(immutable string str) {
@@ -738,16 +797,24 @@ static immutable string[] PropertyMemberKind_ReadCode =
         "entity.%s()",
      	"entity.%s",
         "entity.%s()",
+        "dummy"
     ];
 
 PropertyMemberKind getPropertyMemberKind(T : Object, string m)() {
 	alias typeof(__traits(getMember, T, m)) ti;
-	static if (is(ti == function)) {
-		static if (functionAttributes!ti & FunctionAttribute.property)
-			return PropertyMemberKind.PROPERTY_MEMBER;
-		else
-			return PropertyMemberKind.GETTER_MEMBER;
-	} else {
+    static if (is(ti == function)) {
+        // interate through all overloads
+        //return checkGetterOverload!(T, m);
+        foreach(overload; MemberFunctionsTuple!(T, m)) {
+            static if (ParameterTypeTuple!(overload).length == 0) {
+                static if (functionAttributes!overload & FunctionAttribute.property)
+                    return PropertyMemberKind.PROPERTY_MEMBER;
+                else static if (m.startsWith("get") || m.startsWith("is"))
+                    return PropertyMemberKind.GETTER_MEMBER;
+            }
+        }
+        return PropertyMemberKind.UNSUPPORTED_MEMBER;
+    } else {
         static if (isLazyInstance!(ti)) {
             return PropertyMemberKind.LAZY_MEMBER;
         } else {
@@ -816,12 +883,24 @@ template isObjectMember(T : Object, string m) {
 }
 
 template hasPublicMember(T : Object, string m) {
+    //pragma(msg, "hasPublicMember "~ T.stringof ~ ", " ~ m);
     static if (__traits(hasMember, T, m)) {
-        enum bool hasPublicMember = __traits(getProtection, __traits(getMember, T, m)) == "public";
+        enum bool hasPublicMember = __traits(compiles, __traits(getMember, T, m));//(__traits(getProtection, __traits(getMember, T, m)) == "public");
     } else {
         enum bool hasPublicMember = false;
     }
 }
+
+//unittest {
+//    class Foo {
+//        int id;
+//        void x();
+//    }
+//    static assert(hasPublicMember!(Foo, "id"));
+//    static assert(hasPublicMember!(Foo, "x"));
+//    static assert(!hasPublicMember!(Foo, "zzz"));
+//
+//}
 
 /// returns true if it's object field of Embeddable object type
 template isEmbeddedObjectMember(T : Object, string m) {
@@ -847,6 +926,29 @@ template hasPublicFieldWithAnnotation(T : Object, string m) {
     } else {
         enum bool hasPublicFieldWithAnnotation = false;
     }
+}
+
+/// returns true if one of overloads of member m of class T is property setter with specified value type
+bool hasWritePropretyForType(T: Object, string m, ParamType)() {
+    foreach(overload; MemberFunctionsTuple!(T, m)) {
+        static if (ParameterTypeTuple!(overload).length == 1) {
+            static if (functionAttributes!overload & FunctionAttribute.property) {
+                return is(ParameterTypeTuple!(overload)[0] == ParamType);
+            }
+        }
+    }
+    return false;
+}
+
+/// returns true if member m of class T has both property getter and setter of the same type
+bool isReadWriteProperty(T: Object, string m)() {
+    foreach(overload; MemberFunctionsTuple!(T, m)) {
+        static if (ParameterTypeTuple!(overload).length == 0) {
+            static if (functionAttributes!overload & FunctionAttribute.property)
+                return hasWritePropretyForType!(T, m, ReturnType!overload);
+        }
+    }
+    return false;
 }
 
 /// check that member m exists in class T, and it's function with single parameter of type ti
@@ -875,7 +977,7 @@ template isValidGetter(T : Object, string m) {
                 static if (isValidSetter!(T, getterNameToSetterName(m), rti)) {
                     enum bool isValidGetter = true; 
                 } else {
-                    enum bool isValidGetter = false; 
+                    enum bool isValidGetter = false;
                 }
             }
         } else {
@@ -904,7 +1006,7 @@ bool isMainMemberForProperty(T : Object, string m)() {
             // function or property
             static if (functionAttributes!ti & FunctionAttribute.property) {
                 // property
-                return false;
+                return isReadWriteProprety!(T, m);
             } else {
                 // getter function
                 // should have corresponding setter
@@ -1607,6 +1709,8 @@ string getPropertyWriteCode(T, string m)() {
     		return nullValueCode ~ "entity." ~ getterNameToSetterName(m) ~ "(" ~ datasetReader ~ ");";
         case PropertyMemberKind.PROPERTY_MEMBER:
 	        return nullValueCode ~ "entity." ~ m ~ " = " ~ datasetReader ~ ";";
+        case PropertyMemberKind.UNSUPPORTED_MEMBER:
+            assert(false, "Unsupported member kind " ~ T.stringof ~ "." ~ m ~ " " ~ typeof(__traits(getMember, T, m)).stringof);
     }
 }
 
@@ -1621,6 +1725,8 @@ string getPropertyCopyCode(T, string m)() {
             return "toentity." ~ getterNameToSetterName(m) ~ "(fromentity." ~ m ~ "());";
         case PropertyMemberKind.PROPERTY_MEMBER:
             return "toentity." ~ m ~ " = fromentity." ~ m ~ ";";
+        case PropertyMemberKind.UNSUPPORTED_MEMBER:
+            assert(false, "Unsupported member kind " ~ T.stringof ~ "." ~ m);
     }
 }
 
@@ -1805,6 +1911,8 @@ string getEmbeddedPropertyVariantWriteCode(T, string m, string className)() {
             return "entity." ~ m ~ " = (value == null ? null : value.get!(" ~ className ~ "));";
         case PropertyMemberKind.PROPERTY_MEMBER:
        		return "entity." ~ m ~ " = (value == null ? null : value.get!(" ~ className ~ "));";
+        case PropertyMemberKind.UNSUPPORTED_MEMBER:
+            assert(false, "Unsupported member kind " ~ T.stringof ~ "." ~ m);
     }
 }
 
@@ -1819,6 +1927,8 @@ string getCollectionPropertyVariantWriteCode(T, string m, string className)() {
             return "entity." ~ m ~ " = (value == null ? null : value.get!(" ~ className ~ "[]));";
         case PropertyMemberKind.PROPERTY_MEMBER:
             return "entity." ~ m ~ " = (value == null ? null : value.get!(" ~ className ~ "[]));";
+        case PropertyMemberKind.UNSUPPORTED_MEMBER:
+            assert(false, "Unsupported member kind " ~ T.stringof ~ "." ~ m);
     }
 }
 
@@ -1833,6 +1943,8 @@ string getPropertyObjectWriteCode(T, string m, string className)() {
     		return "entity." ~ m ~ " = cast(" ~ className ~ ")value;";
         case PropertyMemberKind.LAZY_MEMBER:
             return "entity." ~ m ~ " = cast(" ~ className ~ ")value;";
+        case PropertyMemberKind.UNSUPPORTED_MEMBER:
+            assert(false, "Unsupported member kind " ~ T.stringof ~ "." ~ m);
     }
 }
 
@@ -1847,6 +1959,8 @@ string getPropertyCollectionWriteCode(T, string m, string className)() {
             return "entity." ~ m ~ " = cast(" ~ className ~ "[])value;";
         case PropertyMemberKind.LAZY_MEMBER:
             return "entity." ~ m ~ " = cast(" ~ className ~ "[])value;";
+        case PropertyMemberKind.UNSUPPORTED_MEMBER:
+            assert(false, "Unsupported member kind " ~ T.stringof ~ "." ~ m);
     }
 }
 
@@ -1861,6 +1975,8 @@ string getLazyPropertyObjectWriteCode(T, string m)() {
             return "entity." ~ m ~ " = loader;";
         case PropertyMemberKind.LAZY_MEMBER:
             return "entity." ~ m ~ " = loader;";
+        case PropertyMemberKind.UNSUPPORTED_MEMBER:
+            assert(false, "Unsupported member kind " ~ T.stringof ~ "." ~ m);
     }
 }
 
@@ -1875,6 +1991,8 @@ string getLazyPropertyLoadedCode(T, string m)() {
             return "entity." ~ m ~ ".loaded";
         case PropertyMemberKind.LAZY_MEMBER:
             return "entity." ~ m ~ ".loaded";
+        case PropertyMemberKind.UNSUPPORTED_MEMBER:
+            assert(false, "Unsupported member kind " ~ T.stringof ~ "." ~ m);
     }
 }
 
@@ -3003,7 +3121,7 @@ class SchemaInfoImpl(T...) : SchemaInfo {
         return result; 
     }
 
-    override public const(EntityInfo) findEntity(string entityName) const  { 
+    override public const(EntityInfo) findEntity(string entityName) const  {
         enforceEx!MappingException((entityName in entityMap) !is null, "Cannot find entity by name " ~ entityName);
         return entityMap[entityName]; 
     }
