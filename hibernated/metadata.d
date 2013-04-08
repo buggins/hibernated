@@ -781,6 +781,37 @@ string substituteParam(immutable string fmt, immutable string value) {
 		return fmt;
 }
 
+//string substituteIntParam(immutable string fmt, immutable int value) {
+//    int percentPos = -1;
+//    for (int i=0; i<fmt.length; i++) {
+//        if (fmt[i] == '%') {
+//            percentPos = i;
+//        }
+//
+//    }
+//    if (percentPos < 0)
+//        return fmt;
+//    return fmt[0 .. percentPos] ~ "1024" ~ fmt[percentPos + 2 .. $]; //to!string(value)
+////    string res;
+////    bool skipNext = false;
+////
+////    foreach(ch; fmt) {
+////        if (ch == '%') {
+////            res ~= "1024"; //to!string(value);
+////            skipNext = true;
+////        } else if (!skipNext) {
+////            res ~= ch;
+////            skipNext = false;
+////        }
+////    }
+////    return res;
+//    // following code causes error in DMD
+////    if (hasPercentSign(fmt))
+////        return format(fmt, value);
+////    else
+////        return fmt;
+//}
+
 string substituteParamTwice(immutable string fmt, immutable string value) {
 	immutable int paramCount = cast(int)percentSignCount(fmt);
     if (paramCount == 1)
@@ -1782,8 +1813,13 @@ static immutable string[] ColumnTypeConstructorCode =
 	 "new UbyteArrayBlobType()", //UBYTE_ARRAY_TYPE, // ubyte[]
 	 ];
 
-string getColumnTypeName(T, string m)() {
-	return ColumnTypeConstructorCode[getPropertyMemberType!(T,m)()];
+string getColumnTypeName(T, string m, int length)() {
+    immutable PropertyMemberType mt = getPropertyMemberType!(T,m);
+    static if (mt == PropertyMemberType.STRING_TYPE || mt == PropertyMemberType.NULLABLE_STRING_TYPE) {
+        return "new StringType(" ~ to!string(length) ~ ")";
+    } else {
+        return ColumnTypeConstructorCode[mt];
+    }
 }
 
 static immutable string[] ColumnTypeDatasetReaderCode = 
@@ -2617,7 +2653,7 @@ string getSimplePropertyDef(T, immutable string m)() {
 	immutable bool hasNotNull = hasMemberAnnotation!(T,m,NotNull);
     immutable bool nullable = hasNull ? true : (hasNotNull ? false : isColumnTypeNullableByDefault!(T, m)); //canColumnTypeHoldNulls!(T.m)
 	immutable bool unique = hasMemberAnnotation!(T, m, UniqueKey);
-	immutable string typeName = getColumnTypeName!(T, m);
+    immutable string typeName = getColumnTypeName!(T, m, length);
 	immutable string propertyReadCode = getPropertyReadCode!(T,m);
 	immutable string datasetReadCode = getColumnTypeDatasetReadCode!(T,m);
 	immutable string propertyWriteCode = getPropertyWriteCode!(T,m);
@@ -3181,7 +3217,8 @@ class DBInfo {
         this.metaData = metaData;
 
         foreach(entity; metaData) {
-            add(new TableInfo(this, entity));
+            if (!entity.embeddable)
+                add(new TableInfo(this, entity));
         }
     }
 
@@ -3209,6 +3246,11 @@ class DBInfo {
         }
         return res;
     }
+    TableInfo opIndex(string tableName) {
+        TableInfo ti = find(tableName);
+        enforceEx!HibernatedException(ti !is null, "Table " ~ tableName ~ " is not found in schema");
+        return ti;
+    }
 }
 
 class TableInfo {
@@ -3226,6 +3268,19 @@ class TableInfo {
         this.entity = entity;
         this.entity2 = entity;
     }
+
+    ColumnInfo opIndex(string columnName) {
+        ColumnInfo ti = find(columnName);
+        enforceEx!HibernatedException(ti !is null, "Column " ~ columnName ~ " is not found in table " ~ tableName);
+        return ti;
+    }
+
+    ColumnInfo find(string columnName) {
+        if ((columnName in columnNameMap) is null)
+            return null;
+        return columnNameMap[columnName];
+    }
+
     private void appendColumns(const EntityInfo entity) {
         foreach(pi; entity) {
             if (pi.embedded) {

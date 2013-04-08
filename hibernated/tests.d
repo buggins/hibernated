@@ -44,6 +44,7 @@ version(unittest) {
         string comment;
         // @Column -- not mandatory, will be deduced
         @Null // override default nullability of string with @Null (instead of using String)
+        @Column(null, 1024) // override default length, autogenerate column name)
         string getComment() { return comment; }
         void setComment(string v) { comment = v; }
         
@@ -300,13 +301,20 @@ unittest {
     assert(schema["Role"]["users"].joinTable.tableName == "role_users");
     assert(schema["Role"]["users"].joinTable.column1 == "role_fk");
     assert(schema["Role"]["users"].joinTable.column2 == "user_fk");
-    
+
+    assert(schema["Customer"]["users"].collection);
+
     assert(schema["User"]["id"].readFunc !is null);
 
+    assert(schema["User"]["comment"].length == 1024);
     static assert(isGetterFunction!(__traits(getMember, User, "getComment"), "getComment"));
     static assert(isGetterFunction!(__traits(getMember, T1, "getComment"), "getComment"));
     static assert(hasMemberAnnotation!(User, "getComment", Null));
     static assert(hasMemberAnnotation!(T1, "getComment", Null));
+    static assert(!isMainMemberForProperty!(User, "comment"));
+    static assert(isMainMemberForProperty!(User, "getComment"));
+    static assert(isMainMemberForProperty!(Customer, "users"));
+
     assert(schema["T1"]["comment"].nullable);
     assert(schema["User"]["comment"].nullable);
 
@@ -391,6 +399,12 @@ unittest {
         foreach(t; createTables) {
             writeln(t);
         }
+        assert(db["users"].getCreateTableSQL(), "CREATE TABLE users (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags BIGINT NOT NULL, comment VARCHAR(1024) NULL, customer_fk INT NULL)");
+        assert(db["customers"].getCreateTableSQL(), "CREATE TABLE customers (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, zip VARCHAR(255) NOT NULL, city VARCHAR(255) NOT NULL, street_address VARCHAR(255) NOT NULL, account_type_fk INT NULL)");
+        assert(db["account_type"].getCreateTableSQL(), "CREATE TABLE account_type (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)");
+        assert(db["t1"].getCreateTableSQL(), "CREATE TABLE t1 (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags BIGINT NOT NULL, comment VARCHAR(255) NULL)");
+        assert(db["role"].getCreateTableSQL(), "CREATE TABLE role (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)");
+        assert(db["generator_test"].getCreateTableSQL(), "CREATE TABLE generator_test (id VARCHAR(255) NOT NULL PRIMARY KEY, name VARCHAR(255) NOT NULL)");
 
 
         DataSource ds = createUnitTestMySQLDataSource();
