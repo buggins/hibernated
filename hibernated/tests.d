@@ -223,7 +223,9 @@ version(unittest) {
          "CREATE TABLE IF NOT EXISTS person_info2 (id int not null primary key AUTO_INCREMENT, flags bigint, person_info_fk int)",
          "CREATE TABLE IF NOT EXISTS role_users (role_fk int not null, user_fk int not null, primary key (role_fk, user_fk), unique index(user_fk, role_fk))",
          "CREATE TABLE IF NOT EXISTS generator_test (id varchar(64) not null primary key, name varchar(255) not null)",
-         
+         ];
+    string[] UNIT_TEST_FILL_TABLES_SCRIPT = 
+        [
          "INSERT INTO role SET id=1, name='admin'",
          "INSERT INTO role SET id=2, name='viewer'",
          "INSERT INTO role SET id=3, name='editor'",
@@ -254,15 +256,32 @@ version(unittest) {
          "INSERT INTO role_users SET role_fk=3, user_fk=3",
          "INSERT INTO role_users SET role_fk=3, user_fk=5",
          ];
-    
-    void recreateTestSchema() {
-        DataSource connectionPool = createUnitTestMySQLDataSource();
+
+    void recreateTestSchema(bool dropTables, bool createTables, bool fillTables) {
+        DataSource connectionPool = getUnitTestDataSource();
         Connection conn = connectionPool.getConnection();
         scope(exit) conn.close();
-        unitTestExecuteBatch(conn, UNIT_TEST_DROP_TABLES_SCRIPT);
-        unitTestExecuteBatch(conn, UNIT_TEST_CREATE_TABLES_SCRIPT);
+        if (dropTables)
+            unitTestExecuteBatch(conn, UNIT_TEST_DROP_TABLES_SCRIPT);
+        if (createTables)
+            unitTestExecuteBatch(conn, UNIT_TEST_CREATE_TABLES_SCRIPT);
+        if (fillTables)
+            unitTestExecuteBatch(conn, UNIT_TEST_FILL_TABLES_SCRIPT);
     }
-    
+
+    package DataSource _unitTestConnectionPool;
+    DataSource getUnitTestDataSource() {
+        if (_unitTestConnectionPool is null)
+            _unitTestConnectionPool = createUnitTestMySQLDataSource();
+        return _unitTestConnectionPool;
+    }
+
+    void closeUnitTestDataSource() {
+//        if (!_unitTestConnectionPool is null) {
+//            _unitTestConnectionPool.close();
+//            _unitTestConnectionPool = null;
+//        }
+    }
 }
 
 
@@ -384,7 +403,7 @@ unittest {
 
 unittest {
     if (MYSQL_TESTS_ENABLED) {
-        recreateTestSchema();
+        recreateTestSchema(true, false, false);
 
         import hibernated.dialects.mysqldialect;
 
@@ -410,8 +429,19 @@ unittest {
         assert(db["role_users"].getCreateTableSQL() == "CREATE TABLE role_users (role_fk INT NOT NULL, user_fk BIGINT NOT NULL, PRIMARY KEY (role_fk, user_fk), UNIQUE INDEX role_users_reverse_index (user_fk, role_fk))");
 
 
-        DataSource ds = createUnitTestMySQLDataSource();
+        DataSource ds = getUnitTestDataSource();
         SessionFactory factory = new SessionFactoryImpl(schema, dialect, ds);
+        db = factory.getDBMetaData();
+        {
+            Connection conn = ds.getConnection();
+            scope(exit) conn.close();
+            db.updateDBSchema(conn, true, true);
+            recreateTestSchema(false, false, true);
+        }
+
+
+
+
         scope(exit) factory.close();
         {
             Session sess = factory.openSession();

@@ -62,6 +62,12 @@ abstract class Dialect {
 		}
 	}
 
+    string getDropIndexSQL(string tableName, string indexName) {
+        return "DROP INDEX " ~ quoteIfNeeded(indexName) ~ " ON " ~ quoteIfNeeded(tableName);
+    }
+    string getDropForeignKeySQL(string tableName, string indexName) {
+        return "ALTER TABLE " ~ quoteIfNeeded(tableName) ~ " DROP FOREIGN KEY " ~ quoteIfNeeded(indexName);
+    }
     string getIndexSQL(string tableName, string indexName, string[] columnNames) {
         return "CREATE INDEX " ~ quoteIfNeeded(indexName) ~ " ON " ~ quoteIfNeeded(tableName) ~ createFieldListSQL(columnNames);
     }
@@ -71,6 +77,9 @@ abstract class Dialect {
     string getForeignKeySQL(string tableName, string indexName, string[] columnNames, string referencedTableName, string[] referencedFieldNames) {
         assert(columnNames.length == referencedFieldNames.length);
         return "ALTER TABLE " ~ quoteIfNeeded(tableName) ~ " ADD CONSTRAINT " ~ quoteIfNeeded(indexName) ~ " FOREIGN KEY " ~ createFieldListSQL(columnNames) ~ " REFERENCES " ~ quoteIfNeeded(referencedTableName) ~ createFieldListSQL(referencedFieldNames);
+    }
+    string getCheckTableExistsSQL(string tableName) {
+        return "SHOW TABLES LIKE " ~ quoteSqlString(tableName);
     }
 
     /// returns comma separated quoted identifier list in () parenthesis

@@ -3304,10 +3304,78 @@ class DBInfo {
         tables ~= table;
         tableNameMap[table.tableName] = table;
     }
-    string[] getCreateTableSQL() {
+    private static bool[string] arrayToMap(string[] keys) {
+        bool[string] res;
+        if (keys !is null) {
+            foreach(key; keys)
+                res[key] = true;
+        }
+        return res;
+    }
+
+    /// drop and/or create tables and indexes in DB using specified connection
+    void updateDBSchema(Connection conn, bool dropTables, bool createTables) {
+        string[] existingTables = getExistingTables(conn);
+        string[] batch;
+        if (dropTables)
+            batch ~= getDropTableSQL(existingTables);
+        if (createTables)
+            batch ~= getCreateTableSQL(existingTables);
+        try {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            foreach(sql; batch) {
+                stmt.executeUpdate(sql);
+            }
+        } catch (Throwable e) {
+            throw new HibernatedException(e);
+        }
+    }
+
+    string[] getExistingTables(Connection conn) {
+        string[] res;
+        try {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            foreach(table; tables) {
+                string sql = dialect.getCheckTableExistsSQL(table.tableName);
+                ResultSet rs = stmt.executeQuery(sql);
+                scope(exit)rs.close();
+                if (rs.next())
+                    res ~= table.tableName;
+            }
+        } catch (Throwable e) {
+            throw new HibernatedException(e);
+        }
+        return res;
+    }
+    string[] getCreateTableSQL(string[] existingTables = null) {
+        auto map = arrayToMap(existingTables);
         string[] res;
         foreach(table; tables) {
-            res ~= table.getCreateTableSQL();
+            if (existingTables is null || (table.tableName in map) is null)
+                res ~= table.getCreateTableSQL();
+        }
+        return res;
+    }
+    string[] getCreateIndexSQL(string[] existingTables = null) {
+        auto map = arrayToMap(existingTables);
+        string[] res;
+        foreach(table; tables) {
+            if (existingTables is null || (table.tableName in map) is null)
+                res ~= table.getCreateIndexSQL();
+        }
+        return res;
+    }
+    string[] getDropTableSQL(string[] existingTables = null) {
+        auto map = arrayToMap(existingTables);
+        string[] res;
+        foreach(table; tables) {
+            if (existingTables is null || (table.tableName in map) !is null) {
+                if (hasCircularRefs)
+                    res ~= table.getDropIndexSQL();
+                res ~= table.getDropTableSQL();
+            }
         }
         return res;
     }
@@ -3315,13 +3383,6 @@ class DBInfo {
         TableInfo ti = find(tableName);
         enforceEx!HibernatedException(ti !is null, "Table " ~ tableName ~ " is not found in schema");
         return ti;
-    }
-    string[] getCreateIndexSQL() {
-        string[] res;
-        foreach(table; tables) {
-            res ~= table.getCreateIndexSQL();
-        }
-        return res;
     }
     private static TableInfo[] addTableSorted(TableInfo[] list, TableInfo table) {
         TableInfo[] head;
@@ -3484,6 +3545,18 @@ class TableInfo {
             res ~= ", " ~ pkDef;
         return "CREATE TABLE " ~ schema.dialect.quoteIfNeeded(tableName) ~ " (" ~ res ~ ")";
     }
+    string getDropTableSQL() {
+        return "DROP TABLE IF EXISTS " ~ schema.dialect.quoteIfNeeded(tableName);
+    }
+    string[] getDropIndexSQL() {
+        string[] res;
+        foreach(index; indexes) {
+            if (index.type == IndexType.ForeignKey || index.type == IndexType.UniqueForeignKey) {
+                res ~= index.getDropIndexSQL();
+            }
+        }
+        return res;
+    }
     string[] getCreateIndexSQL() {
         string[] res;
         foreach(index; indexes) {
@@ -3558,6 +3631,17 @@ class IndexInfo {
     this(TableInfo table, IndexType type) {
         this.table = table;
         this.type = type;
+    }
+    string[] getDropIndexSQL() {
+        final switch(type) {
+            case IndexType.Unique:
+            case IndexType.Index:
+                return [table.schema.dialect.getDropIndexSQL(table.tableName, indexName)];
+            case IndexType.ForeignKey:
+            case IndexType.UniqueForeignKey:
+                return [table.schema.dialect.getDropForeignKeySQL(table.tableName, indexName), 
+                        table.schema.dialect.getDropIndexSQL(table.tableName, indexName)];
+        }
     }
     string[] getCreateIndexSQL() {
         final switch(type) {
