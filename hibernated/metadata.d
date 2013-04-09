@@ -3381,11 +3381,9 @@ class TableInfo {
                 addColumn(new ColumnInfo(this, pi));
                 if (pi.simple && pi.uniqueIndex !is null) //pi.unique)
                     addUniqueColumnIndex(pi);
-            } else if (pi.manyToMany) { //pi.joinTable !is null
+            } else if (pi.manyToMany) {
                 addJoinTable(pi);
             }
-            //            if (pi.isUnique) {
-            //            }
         }
     }
     this(DBInfo schema, const EntityInfo entity) {
@@ -3435,7 +3433,7 @@ class TableInfo {
         enforceEx!HibernatedException((column.columnName in columnNameMap) is null, "duplicate column name " ~ tableName ~ "." ~ column.columnName ~ " in schema");
         columns ~= column;
         columnNameMap[column.columnName] = column;
-        if (column.property.manyToOne || column.property.oneToOne) {
+        if (column.property !is null && (column.property.manyToOne || column.property.oneToOne)) {
             addForeignKey(column.property);
         }
     }
