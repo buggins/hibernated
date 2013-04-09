@@ -689,7 +689,7 @@ string getUniqueIndexName(T, string m)() {
                 foreach(a; __traits(getAttributes, overload)) {
                     static if (is(typeof(a) == UniqueKey)) {
                         return applyDefault(a.name, defValue);
-                    } else static if (a.stringof == JoinColumn.stringof) {
+                    } else static if (a.stringof == UniqueKey.stringof) {
                         return defValue;
                     }
                 }
@@ -699,12 +699,12 @@ string getUniqueIndexName(T, string m)() {
         foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
             static if (is(typeof(a) == UniqueKey)) {
                 return applyDefault(a.name, defValue);
-            } else static if (a.stringof == JoinColumn.stringof) {
+            } else static if (a.stringof == UniqueKey.stringof) {
                 return defValue;
             }
         }
     }
-    return defValue;
+    return null;
 }
 
 string getJoinTableName(T, string m)() {
@@ -3414,7 +3414,7 @@ class TableInfo {
     }
     void addForeignKey(string thisTable, const EntityInfo otherEntity, string columnName, string uniqueIndex) {
         IndexInfo index = new IndexInfo(this, uniqueIndex is null ? IndexType.ForeignKey : IndexType.UniqueForeignKey);
-        index.indexName = "fk_" ~ thisTable ~ "_" ~ columnName;
+        index.indexName = thisTable ~ "_" ~ columnName ~ "_index";
         index.columnNames ~= columnName;
         index.referencedTable = otherEntity.tableName;
         index.referencedColumnNames ~= otherEntity.getKeyProperty().columnName;

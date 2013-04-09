@@ -396,9 +396,11 @@ unittest {
 
         DBInfo db = new DBInfo(dialect, schema);
         string[] createTables = db.getCreateTableSQL();
-        foreach(t; createTables) {
+        foreach(t; createTables)
             writeln(t);
-        }
+        string[] createIndexes = db.getCreateIndexSQL();
+        foreach(t; createIndexes)
+            writeln(t);
         assert(db["users"].getCreateTableSQL() == "CREATE TABLE users (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags BIGINT NOT NULL, comment VARCHAR(1024) NULL, customer_fk INT NULL)");
         assert(db["customers"].getCreateTableSQL() == "CREATE TABLE customers (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, zip VARCHAR(255) NOT NULL, city VARCHAR(255) NOT NULL, street_address VARCHAR(255) NOT NULL, account_type_fk INT NULL)");
         assert(db["account_type"].getCreateTableSQL() == "CREATE TABLE account_type (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)");
