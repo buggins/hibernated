@@ -37,8 +37,9 @@ version(unittest) {
         
         // property column
         private long _flags;
+        @Null // override NotNull which is inferred from long type
         @property void flags(long v) { _flags = v; }
-        @property long flags() { return _flags; }
+        @property ref long flags() { return _flags; }
 
         // getter/setter property
         string comment;
@@ -97,9 +98,9 @@ version(unittest) {
     
     @Embeddable
     class Address {
-        string zip;
-        string city;
-        string streetAddress;
+        String zip;
+        String city;
+        String streetAddress;
         @Transient // mark field with @Transient to avoid creating column for it
         string someNonPersistentField;
 
@@ -410,7 +411,7 @@ unittest {
         //writeln("metadata test 2");
         
         // Checking generated metadata
-        EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, T1, TypeTest, Address, Role, GeneratorTest);
+        EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, T1, TypeTest, Address, Role, GeneratorTest, Person, MoreInfo, EvenMoreInfo);
         Dialect dialect = new MySQLDialect();
 
         DBInfo db = new DBInfo(dialect, schema);
@@ -420,8 +421,8 @@ unittest {
         string[] createIndexes = db.getCreateIndexSQL();
         foreach(t; createIndexes)
             writeln(t);
-        assert(db["users"].getCreateTableSQL() == "CREATE TABLE users (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags BIGINT NOT NULL, comment VARCHAR(1024) NULL, customer_fk INT NULL)");
-        assert(db["customers"].getCreateTableSQL() == "CREATE TABLE customers (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, zip VARCHAR(255) NOT NULL, city VARCHAR(255) NOT NULL, street_address VARCHAR(255) NOT NULL, account_type_fk INT NULL)");
+        assert(db["users"].getCreateTableSQL() == "CREATE TABLE users (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags BIGINT NULL, comment VARCHAR(1024) NULL, customer_fk INT NULL)");
+        assert(db["customers"].getCreateTableSQL() == "CREATE TABLE customers (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, zip VARCHAR(255) NULL, city VARCHAR(255) NULL, street_address VARCHAR(255) NULL, account_type_fk INT NULL)");
         assert(db["account_type"].getCreateTableSQL() == "CREATE TABLE account_type (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)");
         assert(db["t1"].getCreateTableSQL() == "CREATE TABLE t1 (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags BIGINT NOT NULL, comment VARCHAR(255) NULL)");
         assert(db["role"].getCreateTableSQL() == "CREATE TABLE role (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)");
@@ -813,7 +814,7 @@ unittest {
         
         // Checking generated metadata
         Dialect dialect = new MySQLDialect();
-        DataSource ds = createUnitTestMySQLDataSource();
+        DataSource ds = getUnitTestDataSource();
         SessionFactory factory = new SessionFactoryImpl(schema, dialect, ds);
         scope(exit) factory.close();
         {
