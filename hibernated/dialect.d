@@ -62,6 +62,28 @@ abstract class Dialect {
 		}
 	}
 
+    string getIndexSQL(string tableName, string indexName, string[] columnNames) {
+        return "CREATE INDEX " ~ quoteIfNeeded(indexName) ~ " ON " ~ quoteIfNeeded(tableName) ~ createFieldListSQL(columnNames);
+    }
+    string getUniqueIndexSQL(string tableName, string indexName, string[] columnNames) {
+        return "CREATE UNIQUE INDEX " ~ quoteIfNeeded(indexName) ~ " ON " ~ quoteIfNeeded(tableName) ~ createFieldListSQL(columnNames);
+    }
+    string getForeignKeySQL(string tableName, string indexName, string[] columnNames, string referencedTableName, string[] referencedFieldNames) {
+        assert(columnNames.length == referencedFieldNames.length);
+        return "ALTER TABLE " ~ quoteIfNeeded(tableName) ~ " ADD CONSTRAINT " ~ quoteIfNeeded(indexName) ~ " FOREIGN KEY " ~ createFieldListSQL(columnNames) ~ " REFERENCES " ~ quoteIfNeeded(referencedTableName) ~ createFieldListSQL(referencedFieldNames);
+    }
+
+    /// returns comma separated quoted identifier list in () parenthesis
+    string createFieldListSQL(string[] fields) {
+        string res;
+        foreach(s; fields) {
+            if (res.length > 0)
+                res ~= ", ";
+            res ~= quoteIfNeeded(s);
+        }
+        return "(" ~ res ~ ")";
+    }
+
 	char getStringQuoteChar() {
 		return '\'';
 	}

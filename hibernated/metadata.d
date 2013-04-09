@@ -143,6 +143,7 @@ public:
     immutable bool key;
     immutable bool generated;
     immutable bool nullable;
+    immutable string uniqueIndex;
     immutable RelationType relation;
     immutable bool lazyLoad;
     immutable bool collection;
@@ -184,7 +185,7 @@ public:
     @property bool manyToOne() const { return relation == RelationType.ManyToOne; };
     @property bool manyToMany() const { return relation == RelationType.ManyToMany; };
 
-    this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, RelationType relation, string referencedEntityName, string referencedPropertyName, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, KeyIsSetFunc keyIsSetFunc, IsNullFunc isNullFunc, 
+    this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, string uniqueIndex, RelationType relation, string referencedEntityName, string referencedPropertyName, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, KeyIsSetFunc keyIsSetFunc, IsNullFunc isNullFunc, 
             CopyFunc copyFieldFunc, 
             GeneratorFunc generatorFunc = null,
             GetObjectFunc getObjectFunc = null, 
@@ -224,6 +225,7 @@ public:
         this.setCollectionFunc = setCollectionFunc;
         this.isLoadedFunc = isLoadedFunc;
         this._joinTable = joinTable;
+        this.uniqueIndex = uniqueIndex;
 	}
 
     package void updateJoinTable() {
@@ -652,21 +654,76 @@ string getGeneratorCode(T, string m)() {
 }
 
 string getJoinColumnName(T, string m)() {
-	foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
-		static if (is(typeof(a) == JoinColumn)) {
-			return applyDefault(a.name, camelCaseToUnderscoreDelimited(getPropertyName!(T,m)()) ~ "_fk");
-		}
-		static if (a.stringof == JoinColumn.stringof) {
-			return camelCaseToUnderscoreDelimited(getPropertyName!(T,m)()) ~ "_fk";
-		}
-	}
-	return null;
+    immutable string defValue = camelCaseToUnderscoreDelimited(getPropertyName!(T,m)()) ~ "_fk";
+    static if (is(typeof(__traits(getMember, T, m)) == function)) {
+        // function: check overloads
+        foreach(overload; MemberFunctionsTuple!(T, m)) {
+            static if (isGetterFunction!(overload, m)) {
+                foreach(a; __traits(getAttributes, overload)) {
+                    static if (is(typeof(a) == JoinColumn)) {
+                        return applyDefault(a.name, defValue);
+                    } else static if (a.stringof == JoinColumn.stringof) {
+                        return defValue;   
+                    }
+                }
+            }
+        }
+    } else {
+        foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
+            static if (is(typeof(a) == JoinColumn)) {
+                return applyDefault(a.name, defValue);
+            } else static if (a.stringof == JoinColumn.stringof) {
+                return defValue;
+            }
+        }
+    }
+    return null;
+}
+
+string getUniqueIndexName(T, string m)() {
+    immutable string defValue = camelCaseToUnderscoreDelimited(getEntityName!T) ~ "_" ~ camelCaseToUnderscoreDelimited(getPropertyName!(T,m)()) ~ "_index";
+    static if (is(typeof(__traits(getMember, T, m)) == function)) {
+        // function: check overloads
+        foreach(overload; MemberFunctionsTuple!(T, m)) {
+            static if (isGetterFunction!(overload, m)) {
+                foreach(a; __traits(getAttributes, overload)) {
+                    static if (is(typeof(a) == UniqueKey)) {
+                        return applyDefault(a.name, defValue);
+                    } else static if (a.stringof == JoinColumn.stringof) {
+                        return defValue;
+                    }
+                }
+            }
+        }
+    } else {
+        foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
+            static if (is(typeof(a) == UniqueKey)) {
+                return applyDefault(a.name, defValue);
+            } else static if (a.stringof == JoinColumn.stringof) {
+                return defValue;
+            }
+        }
+    }
+    return defValue;
 }
 
 string getJoinTableName(T, string m)() {
-    foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
-        static if (is(typeof(a) == JoinTable)) {
-            return emptyStringToNull(a.joinTableName);
+    static if (is(typeof(__traits(getMember, T, m)) == function)) {
+        // function: check overloads
+        foreach(overload; MemberFunctionsTuple!(T, m)) {
+            static if (isGetterFunction!(overload, m)) {
+                foreach(a; __traits(getAttributes, overload)) {
+                    static if (is(typeof(a) == JoinTable)) {
+                        return emptyStringToNull(a.joinTableName);
+                    }
+                }
+            }
+        }
+    } else {
+        foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
+            static if (is(typeof(a) == JoinTable)) {
+                return emptyStringToNull(a.joinTableName);
+            }
         }
     }
     return null;
@@ -2050,7 +2107,7 @@ string getOneToOnePropertyDef(T, immutable string m)() {
 	immutable bool hasNull = hasMemberAnnotation!(T,m, Null);
 	immutable bool hasNotNull = hasMemberAnnotation!(T,m, NotNull);
 	immutable bool nullable = hasNull ? true : (hasNotNull ? false : true); //canColumnTypeHoldNulls!(T.m)
-	immutable bool unique = hasMemberAnnotation!(T, m, UniqueKey);
+    immutable string unique = quoteString(getUniqueIndexName!(T, m));
 	immutable string typeName = "new EntityType(cast(immutable TypeInfo_Class)" ~ entityClassName ~ ".classinfo, \"" ~ entityClassName ~ "\")"; //getColumnTypeName!(T, m)();
 	immutable string propertyReadCode = getPropertyReadCode!(T,m);
 	immutable string datasetReadCode = null; //getColumnTypeDatasetReadCode!(T,m)();
@@ -2133,7 +2190,8 @@ string getOneToOnePropertyDef(T, immutable string m)() {
             "false, " ~ // id
 		    "false, " ~ // generated
             quoteBool(nullable) ~ ", " ~ 
-		    "RelationType.OneToOne, " ~
+            unique ~ ", " ~
+    	    "RelationType.OneToOne, " ~
             quoteString(referencedEntityName)  ~ ", " ~ 
             quoteString(referencedPropertyName)  ~ ", " ~ 
 		    readerFuncDef ~ ", " ~
@@ -2172,7 +2230,7 @@ string getManyToOnePropertyDef(T, immutable string m)() {
     immutable bool hasNull = hasMemberAnnotation!(T,m, Null);
     immutable bool hasNotNull = hasMemberAnnotation!(T,m, NotNull);
     immutable bool nullable = hasNull ? true : (hasNotNull ? false : true); //canColumnTypeHoldNulls!(T.m)
-    immutable bool unique = hasMemberAnnotation!(T, m, UniqueKey);
+    immutable string unique = quoteString(getUniqueIndexName!(T, m));
     immutable string typeName = "new EntityType(cast(immutable TypeInfo_Class)" ~ entityClassName ~ ".classinfo, \"" ~ entityClassName ~ "\")"; //getColumnTypeName!(T, m)();
     immutable string propertyReadCode = getPropertyReadCode!(T,m)();
     immutable string datasetReadCode = null; //getColumnTypeDatasetReadCode!(T,m)();
@@ -2258,6 +2316,7 @@ string getManyToOnePropertyDef(T, immutable string m)() {
             "false, " ~ // id
             "false, " ~ // generated
             quoteBool(nullable) ~ ", " ~ 
+            unique ~ ", " ~
             "RelationType.ManyToOne, " ~
             quoteString(referencedEntityName)  ~ ", " ~ 
             quoteString(referencedPropertyName)  ~ ", " ~ 
@@ -2300,7 +2359,7 @@ string getOneToManyPropertyDef(T, immutable string m)() {
     immutable bool hasNull = hasMemberAnnotation!(T,m, Null);
     immutable bool hasNotNull = hasMemberAnnotation!(T,m, NotNull);
     immutable bool nullable = hasNull ? true : (hasNotNull ? false : true); //canColumnTypeHoldNulls!(T.m)
-    immutable bool unique = hasMemberAnnotation!(T, m, UniqueKey);
+    immutable string unique = quoteString(getUniqueIndexName!(T, m));
     immutable string typeName = "new EntityType(cast(immutable TypeInfo_Class)" ~ entityClassName ~ ".classinfo, \"" ~ entityClassName ~ "\")"; //getColumnTypeName!(T, m)();
     immutable string propertyReadCode = getPropertyReadCode!(T,m)();
     immutable string datasetReadCode = null; //getColumnTypeDatasetReadCode!(T,m)();
@@ -2385,6 +2444,7 @@ string getOneToManyPropertyDef(T, immutable string m)() {
             "false"  ~ ", " ~ // id
             "false"  ~ ", " ~ // generated
             quoteBool(nullable) ~ ", " ~ 
+            unique ~ ", " ~
             "RelationType.OneToMany, " ~
             quoteString(referencedEntityName)  ~ ", " ~ 
             quoteString(referencedPropertyName)  ~ ", " ~ 
@@ -2429,7 +2489,7 @@ string getManyToManyPropertyDef(T, immutable string m)() {
     immutable bool hasNull = hasMemberAnnotation!(T,m, Null);
     immutable bool hasNotNull = hasMemberAnnotation!(T,m, NotNull);
     immutable bool nullable = hasNull ? true : (hasNotNull ? false : true); //canColumnTypeHoldNulls!(T.m)
-    immutable bool unique = hasMemberAnnotation!(T, m, UniqueKey);
+    immutable string unique = quoteString(getUniqueIndexName!(T, m));
     immutable string typeName = "new EntityType(cast(immutable TypeInfo_Class)" ~ entityClassName ~ ".classinfo, \"" ~ entityClassName ~ "\")"; //getColumnTypeName!(T, m)();
     immutable string propertyReadCode = getPropertyReadCode!(T,m);
     immutable string datasetReadCode = null; //getColumnTypeDatasetReadCode!(T,m)();
@@ -2511,6 +2571,7 @@ string getManyToManyPropertyDef(T, immutable string m)() {
             "false"  ~ ", " ~ // id
             "false"  ~ ", " ~ // generated
             quoteBool(nullable) ~ ", " ~ 
+            unique ~ ", " ~
             "RelationType.ManyToMany, " ~
             quoteString(referencedEntityName)  ~ ", " ~ 
             "null, " ~ //referencedPropertyName
@@ -2548,8 +2609,8 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
 	immutable bool hasNull = hasMemberAnnotation!(T, m, Null);
 	immutable bool hasNotNull = hasMemberAnnotation!(T, m, NotNull);
 	immutable bool nullable = hasNull ? true : (hasNotNull ? false : true); //canColumnTypeHoldNulls!(T.m)
-	immutable bool unique = hasMemberAnnotation!(T, m, UniqueKey);
-	immutable string typeName = "new EntityType(cast(immutable TypeInfo_Class)" ~ entityClassName ~ ".classinfo, \"" ~ entityClassName ~ "\")"; //getColumnTypeName!(T, m)();
+    immutable string unique = quoteString(getUniqueIndexName!(T, m));
+    immutable string typeName = "new EntityType(cast(immutable TypeInfo_Class)" ~ entityClassName ~ ".classinfo, \"" ~ entityClassName ~ "\")"; //getColumnTypeName!(T, m)();
 	immutable string propertyReadCode = getPropertyReadCode!(T,m);
 	immutable string datasetReadCode = null; //getColumnTypeDatasetReadCode!(T,m)();
 	immutable string propertyWriteCode = null; //getPropertyWriteCode!(T,m)();
@@ -2616,6 +2677,7 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
             "false, " ~ // id
 			"false, " ~ // generated
             quoteBool(nullable) ~ ", " ~ 
+            unique ~ ", " ~
 			"RelationType.Embedded, " ~
 			quoteString(referencedEntityName)  ~ ", " ~ 
 		    "null, \n" ~
@@ -2652,7 +2714,7 @@ string getSimplePropertyDef(T, immutable string m)() {
 	immutable bool hasNull = hasMemberAnnotation!(T,m,Null);
 	immutable bool hasNotNull = hasMemberAnnotation!(T,m,NotNull);
     immutable bool nullable = hasNull ? true : (hasNotNull ? false : isColumnTypeNullableByDefault!(T, m)); //canColumnTypeHoldNulls!(T.m)
-	immutable bool unique = hasMemberAnnotation!(T, m, UniqueKey);
+    immutable string unique = quoteString(getUniqueIndexName!(T, m));
     immutable string typeName = getColumnTypeName!(T, m, length);
 	immutable string propertyReadCode = getPropertyReadCode!(T,m);
 	immutable string datasetReadCode = getColumnTypeDatasetReadCode!(T,m);
@@ -2715,6 +2777,7 @@ string getSimplePropertyDef(T, immutable string m)() {
             quoteBool(isId)  ~ ", " ~ 
             quoteBool(isGenerated)  ~ ", " ~ 
             quoteBool(nullable) ~ ", " ~ 
+            unique ~ ", " ~
 			"RelationType.None, " ~ 
 			"null, " ~ 
 			"null, \n" ~
@@ -3251,6 +3314,13 @@ class DBInfo {
         enforceEx!HibernatedException(ti !is null, "Table " ~ tableName ~ " is not found in schema");
         return ti;
     }
+    string[] getCreateIndexSQL() {
+        string[] res;
+        foreach(table; tables) {
+            res ~= table.getCreateIndexSQL();
+        }
+        return res;
+    }
 }
 
 class TableInfo {
@@ -3287,6 +3357,8 @@ class TableInfo {
         addColumn(c2);
         pkDef = "PRIMARY KEY (" ~ schema.dialect.quoteIfNeeded(c1.columnName) ~ ", " ~ schema.dialect.quoteIfNeeded(c2.columnName) ~ "), " ~
             "UNIQUE INDEX " ~ tableName ~ "_reverse_index (" ~ schema.dialect.quoteIfNeeded(c2.columnName) ~ ", " ~ schema.dialect.quoteIfNeeded(c1.columnName) ~ ")";
+        addForeignKey(tableName, entity, joinTable.column1, null);
+        addForeignKey(tableName, entity2, joinTable.column2, null);
     }
 
     ColumnInfo opIndex(string columnName) {
@@ -3307,8 +3379,8 @@ class TableInfo {
                 appendColumns(pi.referencedEntity);
             } else if (pi.simple || (pi.columnName !is null)) {
                 addColumn(new ColumnInfo(this, pi));
-                if (false) //pi.unique)
-                    addUniqueColumn(pi);
+                if (pi.simple && pi.uniqueIndex !is null) //pi.unique)
+                    addUniqueColumnIndex(pi);
             } else if (pi.manyToMany) { //pi.joinTable !is null
                 addJoinTable(pi);
             }
@@ -3335,13 +3407,37 @@ class TableInfo {
             schema.add(t);
         }
     }
-    void addUniqueColumn(const PropertyInfo pi) {
-        // TODO
+    void addUniqueColumnIndex(const PropertyInfo pi) {
+        assert(pi.columnName !is null);
+        IndexInfo index = new IndexInfo(this, IndexType.Unique);
+        index.indexName = pi.uniqueIndex;
+        index.columnNames ~= pi.columnName;
+        addIndex(index);
+    }
+    void addForeignKey(string thisTable, const EntityInfo otherEntity, string columnName, string uniqueIndex) {
+        IndexInfo index = new IndexInfo(this, uniqueIndex is null ? IndexType.ForeignKey : IndexType.UniqueForeignKey);
+        index.indexName = "fk_" ~ thisTable ~ "_" ~ columnName;
+        index.columnNames ~= columnName;
+        index.referencedTable = otherEntity.tableName;
+        index.referencedColumnNames ~= otherEntity.getKeyProperty().columnName;
+        addIndex(index);
+    }
+    void addForeignKey(const PropertyInfo pi) {
+        assert(pi.columnName !is null);
+        assert(pi.manyToOne || pi.oneToOne);
+        addForeignKey(pi.entity.tableName, pi.referencedEntity, pi.columnName, pi.uniqueIndex);
+    }
+    private void addIndex(IndexInfo index) {
+        // TODO: check duplicates
+        indexes ~= index;
     }
     void addColumn(ColumnInfo column) {
         enforceEx!HibernatedException((column.columnName in columnNameMap) is null, "duplicate column name " ~ tableName ~ "." ~ column.columnName ~ " in schema");
         columns ~= column;
         columnNameMap[column.columnName] = column;
+        if (column.property.manyToOne || column.property.oneToOne) {
+            addForeignKey(column.property);
+        }
     }
     string getCreateTableSQL() {
         string res;
@@ -3353,6 +3449,13 @@ class TableInfo {
         if (pkDef !is null)
             res ~= ", " ~ pkDef;
         return "CREATE TABLE " ~ schema.dialect.quoteIfNeeded(tableName) ~ " (" ~ res ~ ")";
+    }
+    string[] getCreateIndexSQL() {
+        string[] res;
+        foreach(index; indexes) {
+            res ~= index.getCreateIndexSQL();
+        }
+        return res;
     }
 }
 
@@ -3386,13 +3489,34 @@ class ColumnInfo {
 enum IndexType {
     Index,
     Unique,
-    ForeignKey
+    ForeignKey,
+    UniqueForeignKey
 }
 
 class IndexInfo {
     TableInfo table;
     IndexType type;
     string indexName;
+    string[] columnNames;
+    string referencedTable;
+    string[] referencedColumnNames;
+    this(TableInfo table, IndexType type) {
+        this.table = table;
+        this.type = type;
+    }
+    string[] getCreateIndexSQL() {
+        final switch(type) {
+            case IndexType.Unique:
+                return [table.schema.dialect.getUniqueIndexSQL(table.tableName, indexName, columnNames)];
+            case IndexType.Index:
+                return [table.schema.dialect.getIndexSQL(table.tableName, indexName, columnNames)];
+            case IndexType.ForeignKey:
+                return [table.schema.dialect.getForeignKeySQL(table.tableName, indexName, columnNames, referencedTable, referencedColumnNames)];
+            case IndexType.UniqueForeignKey:
+                return [table.schema.dialect.getUniqueIndexSQL(table.tableName, indexName, columnNames), 
+                        table.schema.dialect.getForeignKeySQL(table.tableName, indexName, columnNames, referencedTable, referencedColumnNames)];
+        }
+    }
 }
 
 unittest {
@@ -3436,7 +3560,7 @@ unittest {
 
 
 	EntityInfo entity = new EntityInfo("user", "users",  false, [
-	                                                             new PropertyInfo("id", "id", new NumberType(10,false,SqlType.INTEGER), 0, true, true, false, RelationType.None, null, null, null, null, null, null, null, null, null)
+	                                                             new PropertyInfo("id", "id", new NumberType(10,false,SqlType.INTEGER), 0, true, true, false, null, RelationType.None, null, null, null, null, null, null, null, null, null)
 	                                                     ], null);
 
 	assert(entity.properties.length == 1);
@@ -3446,11 +3570,11 @@ unittest {
 //	immutable string infos = entityListDef!(User, Customer)();
 
 	EntityInfo ei = new EntityInfo("User", "users", false, [
-                                                            new PropertyInfo("id", "id_column", new NumberType(10,false,SqlType.INTEGER), 0, true, true, false, RelationType.None, null, null, null, null, null, null, null, null, null),
-                                                            new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, RelationType.None, null, null, null, null, null, null, null, null, null),
-                                                            new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null, null, null),
-                                                            new PropertyInfo("login", "login", new StringType(), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null, null, null),
-                                                            new PropertyInfo("testColumn", "testcolumn", new NumberType(10,false,SqlType.INTEGER), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null, null, null)], null);
+                                                            new PropertyInfo("id", "id_column", new NumberType(10,false,SqlType.INTEGER), 0, true, true, false, null, RelationType.None, null, null, null, null, null, null, null, null, null),
+                                                            new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, null, RelationType.None, null, null, null, null, null, null, null, null, null),
+                                                            new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, null, RelationType.None, null, null, null, null, null, null, null, null, null),
+                                                            new PropertyInfo("login", "login", new StringType(), 0, false, false, true, null, RelationType.None, null, null, null, null, null, null, null, null, null),
+                                                            new PropertyInfo("testColumn", "testcolumn", new NumberType(10,false,SqlType.INTEGER), 0, false, false, true, null, RelationType.None, null, null, null, null, null, null, null, null, null)], null);
 
 	//void function(User, DataSetReader, int) readFunc = function(User entity, DataSetReader reader, int index) { };
 
@@ -3461,15 +3585,15 @@ unittest {
 
 	EntityInfo[] entities3 =  [
 	                           new EntityInfo("User", "users", false, [
-	                                        new PropertyInfo("id", "id_column", new NumberType(10,false,SqlType.INTEGER), 0, true, true, false, RelationType.None, null, null, null, null, null, null, null, null, null),
-	                                        new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, RelationType.None, null, null, null, null, null, null, null, null, null),
-	                                        new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null, null, null),
-	                                        new PropertyInfo("login", "login", new StringType(), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null, null, null),
-	                                        new PropertyInfo("testColumn", "testcolumn", new NumberType(10,false,SqlType.INTEGER), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null, null, null)], null)
+                                            new PropertyInfo("id", "id_column", new NumberType(10,false,SqlType.INTEGER), 0, true, true, false, null, RelationType.None, null, null, null, null, null, null, null, null, null),
+                                            new PropertyInfo("name", "name_column", new StringType(), 0, false, false, false, null, RelationType.None, null, null, null, null, null, null, null, null, null),
+                                            new PropertyInfo("flags", "flags", new StringType(), 0, false, false, true, null, RelationType.None, null, null, null, null, null, null, null, null, null),
+                                            new PropertyInfo("login", "login", new StringType(), 0, false, false, true, null, RelationType.None, null, null, null, null, null, null, null, null, null),
+                                            new PropertyInfo("testColumn", "testcolumn", new NumberType(10,false,SqlType.INTEGER), 0, false, false, true, null, RelationType.None, null, null, null, null, null, null, null, null, null)], null)
 	                                                                 ,
 	                           new EntityInfo("Customer", "customer", false, [
-	                                               new PropertyInfo("id", "id", new NumberType(10,false,SqlType.INTEGER), 0, true, true, true, RelationType.None, null, null, null, null, null, null, null, null, null),
-                                                   new PropertyInfo("name", "name", new StringType(), 0, false, false, true, RelationType.None, null, null, null, null, null, null, null, null, null)], null)
+                                                   new PropertyInfo("id", "id", new NumberType(10,false,SqlType.INTEGER), 0, true, true, true, null, RelationType.None, null, null, null, null, null, null, null, null, null),
+                                                   new PropertyInfo("name", "name", new StringType(), 0, false, false, true, null, RelationType.None, null, null, null, null, null, null, null, null, null)], null)
 	                                                                 ];
 
 
