@@ -325,15 +325,27 @@ public:
 class SQLITEPreparedStatement : SQLITEStatement, PreparedStatement {
     string query;
     int paramCount;
+
+    sqlite3_stmt * stmt;
+
+    bool done;
+
     ResultSetMetaData metadata;
     ParameterMetaData paramMetadata;
     this(SQLITEConnection conn, string query) {
         super(conn);
         this.query = query;
-        throw new SQLException("Not implemented");
-        //      cmd = new Command(conn.getConnection(), query);
-        //      cmd.prepare();
-        //      paramCount = cmd.getParamCount();
+
+        int res = sqlite3_prepare_v2(
+            conn.getConnection(),            /* Database handle */
+            toStringz(query),       /* SQL statement, UTF-8 encoded */
+            cast(int)query.length,              /* Maximum length of zSql in bytes. */
+            &stmt,  /* OUT: Statement handle */
+            null     /* OUT: Pointer to unused portion of zSql */
+            );
+        paramMetadata = createParamMetadata();
+        metadata = createMetadata();
+        enforceEx!SQLException(res == SQLITE_OK, "Error #" ~ to!string(res) ~ " while preparing statement " ~ query);
     }
     void checkIndex(int index) {
         if (index < 1 || index > paramCount)
@@ -345,58 +357,106 @@ class SQLITEPreparedStatement : SQLITEStatement, PreparedStatement {
         //      return cmd.param(cast(ushort)(index - 1));
     }
 public:
+    SqlType sqliteToSqlType(int t) {
+        switch(t) {
+            case SQLITE_INTEGER: return SqlType.BIGINT;
+            case SQLITE_FLOAT: return SqlType.DOUBLE;
+            case SQLITE_TEXT: return SqlType.VARCHAR;
+            case SQLITE_BLOB: return SqlType.BLOB;
+            case SQLITE_NULL: return SqlType.NULL;
+            default:
+                return SqlType.BLOB;
+        }
+    }
+
+    ResultSetMetaData createMetadata() {
+        int fieldCount = sqlite3_column_count(stmt);
+        ColumnMetadataItem[] list = new ColumnMetadataItem[fieldCount];
+        for(int i = 0; i < fieldCount; i++) {
+            ColumnMetadataItem item = new ColumnMetadataItem();
+            item.label = copyCString(sqlite3_column_origin_name(stmt, i));
+            item.name = copyCString(sqlite3_column_name(stmt, i));
+            item.schemaName = copyCString(sqlite3_column_database_name(stmt, i));
+            item.tableName = copyCString(sqlite3_column_table_name(stmt, i));
+            item.type = sqliteToSqlType(sqlite3_column_type(stmt, i));
+            list[i] = item;
+        }
+        return new ResultSetMetaDataImpl(list);
+    }
+
+    ParameterMetaData createParamMetadata() {
+        int fieldCount = sqlite3_bind_parameter_count(stmt);
+        ParameterMetaDataItem[] res = new ParameterMetaDataItem[fieldCount];
+        for(int i = 0; i < fieldCount; i++) {
+            ParameterMetaDataItem item = new ParameterMetaDataItem();
+            item.type = SqlType.VARCHAR;
+            res[i] = item;
+        }
+        paramCount = fieldCount;
+        return new ParameterMetaDataImpl(res);
+    }
+
+    override void close() {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
+
+        closeResultSet();
+        int res = sqlite3_finalize(stmt);
+        enforceEx!SQLException(res == SQLITE_OK, "Error #" ~ to!string(res) ~ " while closing prepared statement " ~ query);
+        closed = true;
+    }
+
     
     /// Retrieves a ResultSetMetaData object that contains information about the columns of the ResultSet object that will be returned when this PreparedStatement object is executed.
     override ResultSetMetaData getMetaData() {
-        throw new SQLException("Not implemented");
-        //      checkClosed();
-        //      lock();
-        //      scope(exit) unlock();
-        //      if (metadata is null)
-        //          metadata = createMetadata(cmd.getPreparedHeaders().getFieldDescriptions());
-        //      return metadata;
+        checkClosed();
+        lock();
+        scope(exit) unlock();
+        return metadata;
     }
     
     /// Retrieves the number, types and properties of this PreparedStatement object's parameters.
     override ParameterMetaData getParameterMetaData() {
-        throw new SQLException("Not implemented");
-        //      checkClosed();
-        //      lock();
-        //      scope(exit) unlock();
-        //      if (paramMetadata is null)
-        //          paramMetadata = createMetadata(cmd.getPreparedHeaders().getParamDescriptions());
-        //      return paramMetadata;
-    }
-    
-    override int executeUpdate() {
-        throw new SQLException("Not implemented");
-        //      checkClosed();
-        //      lock();
-        //      scope(exit) unlock();
-        //      ulong rowsAffected = 0;
-        //      cmd.execPrepared(rowsAffected);
-        //      return cast(int)rowsAffected;
+        checkClosed();
+        lock();
+        scope(exit) unlock();
+        return paramMetadata;
     }
     
     override int executeUpdate(out Variant insertId) {
-        throw new SQLException("Not implemented");
-        //      checkClosed();
-        //      lock();
-        //      scope(exit) unlock();
-        //      ulong rowsAffected = 0;
-        //      cmd.execPrepared(rowsAffected);
-        //      insertId = cmd.lastInsertID;
-        //      return cast(int)rowsAffected;
+        //throw new SQLException("Not implemented");
+        checkClosed();
+        lock();
+        scope(exit) unlock();
+        int rowsAffected = 0;
+        int res = sqlite3_step(stmt);
+        if (res == SQLITE_DONE) {
+            insertId = Variant(sqlite3_last_insert_rowid(conn.getConnection()));
+            rowsAffected = sqlite3_changes(conn.getConnection());
+            done = true;
+        } else if (res == SQLITE_ROW) {
+            // row is available
+            rowsAffected = -1;
+        } else {
+            enforceEx!SQLException(false, "Error #" ~ to!string(res) ~ " while trying to execute prepared statement: " ~ copyCString(sqlite3_errmsg(conn.getConnection())));
+        }
+        return rowsAffected;
+    }
+    
+    override int executeUpdate() {
+        Variant insertId;
+        return executeUpdate(insertId);
     }
     
     override ddbc.core.ResultSet executeQuery() {
-        throw new SQLException("Not implemented");
-        //      checkClosed();
-        //      lock();
-        //      scope(exit) unlock();
-        //      rs = cmd.execPreparedResult();
-        //      resultSet = new SQLITEResultSet(this, rs, getMetaData());
-        //      return resultSet;
+        int res = executeUpdate();
+        enforceEx!SQLException(res == -1, "Query doesn't return result set");
+        checkClosed();
+        lock();
+        scope(exit) unlock();
+        resultSet = new SQLITEResultSet(this, stmt, getMetaData());
+        return resultSet;
     }
     
     override void clearParameters() {
@@ -583,7 +643,7 @@ public:
 
 class SQLITEResultSet : ResultSetImpl {
     private SQLITEStatement stmt;
-    private ddbc.drivers.mysql.ResultSet rs;
+    private sqlite3_stmt * rs;
     ResultSetMetaData metadata;
     private bool closed;
     private int currentRowIndex;
@@ -596,10 +656,10 @@ class SQLITEResultSet : ResultSetImpl {
         checkClosed();
         enforceEx!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
         enforceEx!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
-        lastIsNull = rs[currentRowIndex].isNull(columnIndex - 1);
+        lastIsNull = false; //rs[currentRowIndex].isNull(columnIndex - 1);
         Variant res;
-        if (!lastIsNull)
-            res = rs[currentRowIndex][columnIndex - 1];
+//        if (!lastIsNull)
+//            res = rs[currentRowIndex][columnIndex - 1];
         return res;
     }
     
@@ -618,15 +678,15 @@ public:
         stmt.unlock();
     }
     
-    this(SQLITEStatement stmt, ddbc.drivers.mysql.ResultSet resultSet, ResultSetMetaData metadata) {
+    this(SQLITEStatement stmt, sqlite3_stmt * rs, ResultSetMetaData metadata) {
         this.stmt = stmt;
-        this.rs = resultSet;
+        this.rs = rs;
         this.metadata = metadata;
         closed = false;
-        rowCount = cast(int)rs.length;
-        currentRowIndex = -1;
-        columnMap = rs.getColNameMap();
-        columnCount = cast(int)rs.getColNames().length;
+//        rowCount = cast(int)rs.length;
+//        currentRowIndex = -1;
+//        columnMap = rs.getColNameMap();
+//        columnCount = cast(int)rs.getColNames().length;
     }
     
     void onStatementClosed() {
@@ -931,7 +991,7 @@ public:
         scope(exit) unlock();
         enforceEx!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
         enforceEx!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
-        return rs[currentRowIndex].isNull(columnIndex - 1);
+        return false; //rs[currentRowIndex].isNull(columnIndex - 1);
     }
     
     //Retrieves the Statement object that produced this ResultSet object.
@@ -989,6 +1049,25 @@ class SQLITEDriver : Driver {
     }
 }
 
+string copyCString(const char* c, int actualLength = -1) {
+    const(char)* a = c;
+    if(a is null)
+        return null;
+    
+    string ret;
+    if(actualLength == -1)
+    while(*a) {
+        ret ~= *a;
+        a++;
+    }
+    else {
+        ret = a[0..actualLength].idup;
+    }
+    
+    return ret;
+}
+
+
 unittest {
     if (SQLITE_TESTS_ENABLED) {
         
@@ -1000,3 +1079,4 @@ unittest {
         scope(exit) conn.close();
     }
 }
+

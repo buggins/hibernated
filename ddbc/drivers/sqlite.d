@@ -614,7 +614,7 @@ int sqlite3_overload_function (sqlite3* database, char* zFuncName, int nArg);
 /**
 *
 */
-int sqlite3_prepare (sqlite3* database, char* zSql, int nBytes, sqlite3_stmt** stmt, char** zTail);
+int sqlite3_prepare (sqlite3* database, const char* zSql, int nBytes, sqlite3_stmt** stmt, const char** zTail);
 
 /**
 *
@@ -624,7 +624,7 @@ int sqlite3_prepare16 (sqlite3* database, void* zSql, int nBytes, sqlite3_stmt**
 /**
 *
 */
-int sqlite3_prepare_v2 (sqlite3* database, char* zSql, int nBytes, sqlite3_stmt** stmt, char** zTail);
+int sqlite3_prepare_v2 (sqlite3* database, const char* zSql, int nBytes, sqlite3_stmt** stmt, const char** zTail);
 
 /**
 *
