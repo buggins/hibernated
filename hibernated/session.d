@@ -33,9 +33,14 @@ const TRACE_REFS = false;
 
 /// Factory to create HibernateD Sessions - similar to org.hibernate.SessionFactory
 interface SessionFactory {
+    /// close all active sessions
 	void close();
+    /// check if session factory is closed
 	bool isClosed();
+    /// creates new session
 	Session openSession();
+    /// retrieve information about tables and indexes for schema
+    DBInfo getDBMetaData();
 }
 
 /// Session - main interface to load and persist entities -- similar to org.hibernate.Session
@@ -622,6 +627,15 @@ class SessionFactoryImpl : SessionFactory {
     DataSource connectionPool;
 
     SessionImpl[] activeSessions;
+
+
+    DBInfo _dbInfo;
+    override public DBInfo getDBMetaData() {
+        if (_dbInfo is null)
+            _dbInfo = new DBInfo(dialect, metaData);
+        return _dbInfo;
+    }
+    
 
     void sessionClosed(SessionImpl session) {
         foreach(i, item; activeSessions) {

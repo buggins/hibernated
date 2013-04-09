@@ -2973,7 +2973,7 @@ string entityListDef(T ...)() {
 
 abstract class SchemaInfo : EntityMetaData {
 
-	override @property size_t length() const {
+    override @property size_t length() const {
 		return getEntityCount();
 	}
     override const(EntityInfo) opIndex(int index) const {
@@ -3270,10 +3270,11 @@ class SchemaInfoImpl(T...) : SchemaInfo {
     }
 }
 
-
+/// information about DB structure generated from HibernateD entity metadata
 class DBInfo {
     Dialect dialect;
     EntityMetaData metaData;
+    bool hasCircularRefs;
 
     this(Dialect dialect, EntityMetaData metaData) {
         this.dialect = dialect;
@@ -3283,6 +3284,7 @@ class DBInfo {
             if (!entity.embeddable)
                 add(new TableInfo(this, entity));
         }
+        sortTables();
     }
 
     TableInfo[] tables;
@@ -3321,8 +3323,42 @@ class DBInfo {
         }
         return res;
     }
+    private static TableInfo[] addTableSorted(TableInfo[] list, TableInfo table) {
+        TableInfo[] head;
+        TableInfo[] tail;
+        if (list.length == 0) {
+            // trivial
+            return [table];
+        } else {
+            foreach(ti; list) {
+                if (ti.references(table))
+                    tail ~= ti;
+                else
+                    head ~= ti;
+            }
+            return head ~ [table] ~ tail;
+        }
+    }
+    private void sortTables() {
+        TableInfo[] list;
+        foreach(table; tables) {
+            list = addTableSorted(list, table);
+        }
+        tables = list;
+        hasCircularRefs = hasCircularReferences();
+        if (hasCircularRefs)
+            writeln("has circular references");
+    }
+    private bool hasCircularReferences() {
+        for (int i=0; i<tables.length; i++)
+            for (int j=i + 1; j<tables.length; j++)
+                if (tables[i].references(tables[j]))
+                    return true;
+        return false;
+    }
 }
 
+/// information about table in DB
 class TableInfo {
     DBInfo schema;
     string tableName;
@@ -3454,6 +3490,27 @@ class TableInfo {
             res ~= index.getCreateIndexSQL();
         }
         return res;
+    }
+    bool references(ref bool[string] visitedTables, TableInfo other) {
+        visitedTables[tableName] = true;
+        foreach(index; indexes) {
+            if (index.type == IndexType.ForeignKey || index.type == IndexType.UniqueForeignKey) {
+                if (index.referencedTable == other.tableName)
+                    return true;
+                if ((index.referencedTable in visitedTables) is null) {
+                    // not yet visited
+                    TableInfo t = schema.find(index.referencedTable);
+                    enforceEx!HibernatedException(t !is null, "Table " ~ index.referencedTable ~ " referenced in index " ~ index.indexName ~ " is not found in schema");
+                    if (t.references(visitedTables, other))
+                        return true;
+                }
+            }
+        }
+        return false;
+    }
+    bool references(TableInfo other) {
+        bool[string] visitedTables;
+        return references(visitedTables, other);
     }
 }
 
