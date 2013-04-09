@@ -11,10 +11,8 @@
  * JDBC documentation can be found here:
  * $(LINK http://docs.oracle.com/javase/1.5.0/docs/api/java/sql/package-summary.html)$(BR)
  *
- * This module contains implementation of PGSQL Driver which uses patched version of 
- * MYSQLN (native D implementation of PGSQL connector, written by Steve Teale)
+ * This module contains implementation of PostgreSQL Driver
  * 
- * Current version of driver implements only unidirectional readonly resultset, which with fetching full result to memory on creation. 
  *
  * You can find usage examples in unittest{} sections.
  *

@@ -23,11 +23,11 @@ extern(System):
 version (Windows) {
     pragma (lib, "sqlite3.lib");
 } else version (linux) {
-    pragma (lib, "libsqlite.so");
+    pragma (lib, "sqlite3");
 } else version (Posix) {
-    pragma (lib, "libsqlite.so");
+    pragma (lib, "libsqlite3.so");
 } else version (darwin) {
-    pragma (lib, "libsqlite.so");
+    pragma (lib, "libsqlite3.so");
 } else {
     pragma (msg, "You will need to manually link in the SQLite library.");
 }
@@ -599,7 +599,7 @@ char* sqlite3_vmprintf (char* string, va_list args);
 /**
 *
 */
-int sqlite3_open (char* filename, sqlite3** database);
+int sqlite3_open (const char* filename, sqlite3** database);
 
 /**
 *
