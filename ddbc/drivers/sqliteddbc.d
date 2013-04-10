@@ -95,7 +95,11 @@ version(USE_SQLITE) {
         }
         
     public:
-        
+
+        private string getError() {
+            return copyCString(sqlite3_errmsg(conn));
+        }
+
         void lock() {
             mutex.lock();
         }
@@ -124,7 +128,7 @@ version(USE_SQLITE) {
             writeln("trying to connect");
             int res = sqlite3_open(toStringz(filename), &conn);
             if(res != SQLITE_OK)
-                throw new SQLException("SQLITE Error " ~ to!string(res) ~ " while trying to open DB " ~ filename);
+                throw new SQLException("SQLITE Error " ~ to!string(res) ~ " while trying to open DB " ~ filename ~ " : " ~ getError());
             assert(conn !is null);
             closed = false;
             setAutoCommit(true);
@@ -139,7 +143,7 @@ version(USE_SQLITE) {
             closeUnclosedStatements();
             int res = sqlite3_close(conn);
             if (res != SQLITE_OK)
-                throw new SQLException("SQLITE Error " ~ to!string(res) ~ " while trying to close DB " ~ filename);
+                throw new SQLException("SQLITE Error " ~ to!string(res) ~ " while trying to close DB " ~ filename ~ " : " ~ getError());
             closed = true;
         }
         
@@ -245,42 +249,6 @@ version(USE_SQLITE) {
             this.conn = conn;
         }
         
-    //    ResultSetMetaData createMetadata(PGresult * res) {
-    //        int rows = PQntuples(res);
-    //        int fieldCount = PQnfields(res);
-    //        ColumnMetadataItem[] list = new ColumnMetadataItem[fieldCount];
-    //        for(int i = 0; i < fieldCount; i++) {
-    //            ColumnMetadataItem item = new ColumnMetadataItem();
-    //            //item.schemaName = field.db;
-    //            item.name = copyCString(PQfname(res, i));
-    //            //item.tableName = copyCString(PQfname(res, i));
-    //            int fmt = PQfformat(res, i);
-    //            ulong t = PQftype(res, i);
-    //            item.label = copyCString(PQfname(res, i));
-    //            //item.precision = field.length;
-    //            //item.scale = field.scale;
-    //            //item.isNullable = !field.notNull;
-    //            //item.isSigned = !field.unsigned;
-    //            //item.type = fromSQLITEType(field.type);
-    //            //          // TODO: fill more params
-    //            list[i] = item;
-    //        }
-    //        return new ResultSetMetaDataImpl(list);
-    //    }
-        //  ParameterMetaData createMetadata(ParamDescription[] fields) {
-        //      ParameterMetaDataItem[] res = new ParameterMetaDataItem[fields.length];
-        //      foreach(i, field; fields) {
-        //          ParameterMetaDataItem item = new ParameterMetaDataItem();
-        //          item.precision = field.length;
-        //          item.scale = field.scale;
-        //          item.isNullable = !field.notNull;
-        //          item.isSigned = !field.unsigned;
-        //          item.type = fromSQLITEType(field.type);
-        //          // TODO: fill more params
-        //          res[i] = item;
-        //      }
-        //      return new ParameterMetaDataImpl(res);
-        //  }
     public:
         SQLITEConnection getConnection() {
             checkClosed();
@@ -357,7 +325,7 @@ version(USE_SQLITE) {
                 &stmt,  /* OUT: Statement handle */
                 null     /* OUT: Pointer to unused portion of zSql */
                 );
-            enforceEx!SQLException(res == SQLITE_OK, "Error #" ~ to!string(res) ~ " while preparing statement " ~ query);
+            enforceEx!SQLException(res == SQLITE_OK, "Error #" ~ to!string(res) ~ " while preparing statement " ~ query ~ " : " ~ conn.getError());
             paramMetadata = createParamMetadata();
             paramCount = paramMetadata.getParameterCount();
             metadata = createMetadata();
@@ -442,7 +410,7 @@ version(USE_SQLITE) {
 
             closeResultSet();
             int res = sqlite3_finalize(stmt);
-            enforceEx!SQLException(res == SQLITE_OK, "Error #" ~ to!string(res) ~ " while closing prepared statement " ~ query);
+            enforceEx!SQLException(res == SQLITE_OK, "Error #" ~ to!string(res) ~ " while closing prepared statement " ~ query ~ " : " ~ conn.getError());
             closed = true;
         }
 
@@ -480,7 +448,7 @@ version(USE_SQLITE) {
                 // row is available
                 rowsAffected = -1;
             } else {
-                enforceEx!SQLException(false, "Error #" ~ to!string(res) ~ " while trying to execute prepared statement: " ~ copyCString(sqlite3_errmsg(conn.getConnection())));
+                enforceEx!SQLException(false, "Error #" ~ to!string(res) ~ " while trying to execute prepared statement: "  ~ " : " ~ conn.getError());
             }
             return rowsAffected;
         }

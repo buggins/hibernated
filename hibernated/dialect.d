@@ -81,7 +81,9 @@ abstract class Dialect {
     string getCheckTableExistsSQL(string tableName) {
         return "SHOW TABLES LIKE " ~ quoteSqlString(tableName);
     }
-
+    string getUniqueIndexItemSQL(string indexName, string[] columnNames) {
+        return "UNIQUE INDEX " ~ quoteIfNeeded(indexName) ~ " " ~ createFieldListSQL(columnNames);
+    }
     /// returns comma separated quoted identifier list in () parenthesis
     string createFieldListSQL(string[] fields) {
         string res;
