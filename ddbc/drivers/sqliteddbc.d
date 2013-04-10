@@ -125,7 +125,7 @@ version(USE_SQLITE) {
             if (url.startsWith("sqlite::"))
                 url = url[8 .. $];
             this.filename = url;
-            writeln("trying to connect");
+            //writeln("trying to connect");
             int res = sqlite3_open(toStringz(filename), &conn);
             if(res != SQLITE_OK)
                 throw new SQLException("SQLITE Error " ~ to!string(res) ~ " while trying to open DB " ~ filename ~ " : " ~ getError());
@@ -952,25 +952,25 @@ version(USE_SQLITE) {
             
             import std.conv;
             DataSource ds = createUnitTestSQLITEDataSource();
-            writeln("trying to open connection");        
+            //writeln("trying to open connection");        
             auto conn = ds.getConnection();
-            writeln("connection is opened");        
+            //writeln("connection is opened");        
             assert(conn !is null);
             scope(exit) conn.close();
             {
-                writeln("dropping table");
+                //writeln("dropping table");
                 Statement stmt = conn.createStatement();
                 scope(exit) stmt.close();
                 stmt.executeUpdate("DROP TABLE IF EXISTS t1");
             }
             {
-                writeln("creating table");
+                //writeln("creating table");
                 Statement stmt = conn.createStatement();
                 scope(exit) stmt.close();
                 stmt.executeUpdate("CREATE TABLE IF NOT EXISTS t1 (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL, flags int null)");
             }
             {
-                writeln("populating table");
+                //writeln("populating table");
                 PreparedStatement stmt = conn.prepareStatement("INSERT INTO t1 (name) VALUES ('test1'), ('test2')");
                 scope(exit) stmt.close();
                 Variant id = 0;
@@ -978,7 +978,7 @@ version(USE_SQLITE) {
                 assert(id.get!long > 0);
             }
             {
-                writeln("reading table");
+                //writeln("reading table");
                 Statement stmt = conn.createStatement();
                 scope(exit) stmt.close();
                 ResultSet rs = stmt.executeQuery("SELECT id, name, flags FROM t1");
@@ -987,16 +987,16 @@ version(USE_SQLITE) {
                 assert(rs.getMetaData().getColumnName(2) == "name");
                 assert(rs.getMetaData().getColumnName(3) == "flags");
                 scope(exit) rs.close();
-                writeln("id" ~ "\t" ~ "name");
+                //writeln("id" ~ "\t" ~ "name");
                 while (rs.next()) {
                     long id = rs.getLong(1);
                     string name = rs.getString(2);
                     assert(rs.isNull(3));
-                    writeln("" ~ to!string(id) ~ "\t" ~ name);
+                    //writeln("" ~ to!string(id) ~ "\t" ~ name);
                 }
             }
             {
-                writeln("reading table with parameter id=1");
+                //writeln("reading table with parameter id=1");
                 PreparedStatement stmt = conn.prepareStatement("SELECT id, name, flags FROM t1 WHERE id = ?");
                 scope(exit) stmt.close();
                 assert(stmt.getMetaData().getColumnCount() == 3);
@@ -1007,24 +1007,24 @@ version(USE_SQLITE) {
                 {
                     ResultSet rs = stmt.executeQuery();
                     scope(exit) rs.close();
-                    writeln("id" ~ "\t" ~ "name");
+                    //writeln("id" ~ "\t" ~ "name");
                     while (rs.next()) {
                         long id = rs.getLong(1);
                         string name = rs.getString(2);
                         assert(rs.isNull(3));
-                        writeln("" ~ to!string(id) ~ "\t" ~ name);
+                        //writeln("" ~ to!string(id) ~ "\t" ~ name);
                     }
                 }
-                writeln("changing parameter id=2");
+                //writeln("changing parameter id=2");
                 stmt.setLong(1, 2);
                 {
                     ResultSet rs = stmt.executeQuery();
                     scope(exit) rs.close();
-                    writeln("id" ~ "\t" ~ "name");
+                    //writeln("id" ~ "\t" ~ "name");
                     while (rs.next()) {
                         long id = rs.getLong(1);
                         string name = rs.getString(2);
-                        writeln("" ~ to!string(id) ~ "\t" ~ name);
+                        //writeln("" ~ to!string(id) ~ "\t" ~ name);
                     }
                 }
             }
