@@ -30,8 +30,9 @@ import std.variant;
 import core.sync.mutex;
 import ddbc.common;
 import ddbc.core;
-import ddbc.drivers.sqlite;
+//import ddbc.drivers.sqlite;
 import ddbc.drivers.utils;
+import etc.c.sqlite3;
 
 version(USE_SQLITE) {
 
@@ -345,9 +346,20 @@ version(USE_SQLITE) {
                 &stmt,  /* OUT: Statement handle */
                 null     /* OUT: Pointer to unused portion of zSql */
                 );
-            paramMetadata = createParamMetadata();
-            metadata = createMetadata();
             enforceEx!SQLException(res == SQLITE_OK, "Error #" ~ to!string(res) ~ " while preparing statement " ~ query);
+            paramMetadata = createParamMetadata();
+            paramCount = paramMetadata.getParameterCount();
+            metadata = createMetadata();
+            resetParams();
+        }
+        bool[] paramIsSet;
+        void resetParams() {
+            paramIsSet = new bool[paramCount];
+        }
+        void allParamsSet() {
+            for(int i = 0; i < paramCount; i++) {
+                enforceEx!SQLException(!paramIsSet[i], "Parameter " ~ to!string(i) ~ " is not set");
+            }
         }
         void checkIndex(int index) {
             if (index < 1 || index > paramCount)
@@ -363,7 +375,7 @@ version(USE_SQLITE) {
             switch(t) {
                 case SQLITE_INTEGER: return SqlType.BIGINT;
                 case SQLITE_FLOAT: return SqlType.DOUBLE;
-                case SQLITE_TEXT: return SqlType.VARCHAR;
+                case SQLITE3_TEXT: return SqlType.VARCHAR;
                 case SQLITE_BLOB: return SqlType.BLOB;
                 case SQLITE_NULL: return SqlType.NULL;
                 default:
@@ -431,6 +443,7 @@ version(USE_SQLITE) {
             checkClosed();
             lock();
             scope(exit) unlock();
+            allParamsSet();
             int rowsAffected = 0;
             int res = sqlite3_step(stmt);
             if (res == SQLITE_DONE) {
@@ -455,6 +468,7 @@ version(USE_SQLITE) {
             checkClosed();
             lock();
             scope(exit) unlock();
+            allParamsSet();
             enforceEx!SQLException(metadata.getColumnCount() > 0, "Query doesn't return result set");
             resultSet = new SQLITEResultSet(this, stmt, getMetaData());
             return resultSet;
@@ -470,175 +484,125 @@ version(USE_SQLITE) {
         }
         
         override void setFloat(int parameterIndex, float x) {
-            throw new SQLException("Not implemented");
-            //      checkClosed();
-            //      lock();
-            //      scope(exit) unlock();
-            //      checkIndex(parameterIndex);
-            //      cmd.param(parameterIndex-1) = x;
+            setDouble(parameterIndex, x);
         }
         override void setDouble(int parameterIndex, double x){
-            throw new SQLException("Not implemented");
-            //      checkClosed();
-            //      lock();
-            //      scope(exit) unlock();
-            //      checkIndex(parameterIndex);
-            //      cmd.param(parameterIndex-1) = x;
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            checkIndex(parameterIndex);
+            sqlite3_bind_double(stmt, parameterIndex, x);
+            paramIsSet[parameterIndex - 1] = true;
         }
         override void setBoolean(int parameterIndex, bool x) {
-            throw new SQLException("Not implemented");
-            //      checkClosed();
-            //      lock();
-            //      scope(exit) unlock();
-            //      checkIndex(parameterIndex);
-            //      cmd.param(parameterIndex-1) = x;
+            setLong(parameterIndex, x ? 1 : 0);
         }
         override void setLong(int parameterIndex, long x) {
-            throw new SQLException("Not implemented");
-            //      checkClosed();
-            //      lock();
-            //      scope(exit) unlock();
-            //      checkIndex(parameterIndex);
-            //      cmd.param(parameterIndex-1) = x;
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            checkIndex(parameterIndex);
+            sqlite3_bind_int64(stmt, parameterIndex, x);
+            paramIsSet[parameterIndex - 1] = true;
         }
         override void setUlong(int parameterIndex, ulong x) {
-            throw new SQLException("Not implemented");
-            //      checkClosed();
-            //      lock();
-            //      scope(exit) unlock();
-            //      checkIndex(parameterIndex);
-            //      cmd.param(parameterIndex-1) = x;
+            setLong(parameterIndex, cast(long)x);
         }
         override void setInt(int parameterIndex, int x) {
-            throw new SQLException("Not implemented");
-            //      checkClosed();
-            //      lock();
-            //      scope(exit) unlock();
-            //      checkIndex(parameterIndex);
-            //      cmd.param(parameterIndex-1) = x;
+            setLong(parameterIndex, cast(long)x);
         }
         override void setUint(int parameterIndex, uint x) {
-            throw new SQLException("Not implemented");
-            //      checkClosed();
-            //      lock();
-            //      scope(exit) unlock();
-            //      checkIndex(parameterIndex);
-            //      cmd.param(parameterIndex-1) = x;
+            setLong(parameterIndex, cast(long)x);
         }
         override void setShort(int parameterIndex, short x) {
-            throw new SQLException("Not implemented");
-            //      checkClosed();
-            //      lock();
-            //      scope(exit) unlock();
-            //      checkIndex(parameterIndex);
-            //      cmd.param(parameterIndex-1) = x;
+            setLong(parameterIndex, cast(long)x);
         }
         override void setUshort(int parameterIndex, ushort x) {
-            throw new SQLException("Not implemented");
-            //      checkClosed();
-            //      lock();
-            //      scope(exit) unlock();
-            //      checkIndex(parameterIndex);
-            //      cmd.param(parameterIndex-1) = x;
+            setLong(parameterIndex, cast(long)x);
         }
         override void setByte(int parameterIndex, byte x) {
-            throw new SQLException("Not implemented");
-            //      checkClosed();
-            //      lock();
-            //      scope(exit) unlock();
-            //      checkIndex(parameterIndex);
-            //      cmd.param(parameterIndex-1) = x;
+            setLong(parameterIndex, cast(long)x);
         }
         override void setUbyte(int parameterIndex, ubyte x) {
-            throw new SQLException("Not implemented");
-            //      checkClosed();
-            //      lock();
-            //      scope(exit) unlock();
-            //      checkIndex(parameterIndex);
-            //      cmd.param(parameterIndex-1) = x;
+            setLong(parameterIndex, cast(long)x);
         }
         override void setBytes(int parameterIndex, byte[] x) {
-            throw new SQLException("Not implemented");
-            //      checkClosed();
-            //      lock();
-            //      scope(exit) unlock();
-            //      checkIndex(parameterIndex);
-            //      if (x == null)
-            //          setNull(parameterIndex);
-            //      else
-            //          cmd.param(parameterIndex-1) = x;
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            checkIndex(parameterIndex);
+            if (x is null) {
+                setNull(parameterIndex);
+                return;
+            }
+            sqlite3_bind_blob(stmt, parameterIndex, cast(const char *)x.ptr, x.length, SQLITE_TRANSIENT);
+            paramIsSet[parameterIndex - 1] = true;
         }
         override void setUbytes(int parameterIndex, ubyte[] x) {
-            throw new SQLException("Not implemented");
-            //      checkClosed();
-            //      lock();
-            //      scope(exit) unlock();
-            //      checkIndex(parameterIndex);
-            //      if (x == null)
-            //          setNull(parameterIndex);
-            //      else
-            //          cmd.param(parameterIndex-1) = x;
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            checkIndex(parameterIndex);
+            if (x is null) {
+                setNull(parameterIndex);
+                return;
+            }
+            sqlite3_bind_blob(stmt, parameterIndex, cast(const char *)x.ptr, x.length, SQLITE_TRANSIENT);
+            paramIsSet[parameterIndex - 1] = true;
         }
         override void setString(int parameterIndex, string x) {
-            throw new SQLException("Not implemented");
-            //      checkClosed();
-            //      lock();
-            //      scope(exit) unlock();
-            //      checkIndex(parameterIndex);
-            //      if (x == null)
-            //          setNull(parameterIndex);
-            //      else
-            //          cmd.param(parameterIndex-1) = x;
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            checkIndex(parameterIndex);
+            if (x is null) {
+                setNull(parameterIndex);
+                return;
+            }
+            sqlite3_bind_text(stmt, parameterIndex, cast(const char *)x.ptr, x.length, SQLITE_TRANSIENT);
+            paramIsSet[parameterIndex - 1] = true;
         }
         override void setDateTime(int parameterIndex, DateTime x) {
-            throw new SQLException("Not implemented");
-            //      checkClosed();
-            //      lock();
-            //      scope(exit) unlock();
-            //      checkIndex(parameterIndex);
-            //      cmd.param(parameterIndex-1) = x;
+            setString(parameterIndex, x.stringof);
         }
         override void setDate(int parameterIndex, Date x) {
-            throw new SQLException("Not implemented");
-            //      checkClosed();
-            //      lock();
-            //      scope(exit) unlock();
-            //      checkIndex(parameterIndex);
-            //      cmd.param(parameterIndex-1) = x;
+            setString(parameterIndex, x.stringof);
         }
         override void setTime(int parameterIndex, TimeOfDay x) {
-            throw new SQLException("Not implemented");
-            //      checkClosed();
-            //      lock();
-            //      scope(exit) unlock();
-            //      checkIndex(parameterIndex);
-            //      cmd.param(parameterIndex-1) = x;
+            setString(parameterIndex, x.stringof);
         }
         override void setVariant(int parameterIndex, Variant x) {
-            throw new SQLException("Not implemented");
-            //      checkClosed();
-            //      lock();
-            //      scope(exit) unlock();
-            //      checkIndex(parameterIndex);
-            //      if (x == null)
-            //          setNull(parameterIndex);
-            //      else
-            //          cmd.param(parameterIndex-1) = x;
+            if (x == null)
+                setNull(parameterIndex);
+            else if (x.convertsTo!long)
+                setLong(parameterIndex, x.get!long);
+            else if (x.convertsTo!ulong)
+                setLong(parameterIndex, x.get!ulong);
+            else if (x.convertsTo!double)
+                setDouble(parameterIndex, x.get!double);
+            else if (x.convertsTo!(byte[]))
+                setBytes(parameterIndex, x.get!(byte[]));
+            else if (x.convertsTo!(ubyte[]))
+                setUbytes(parameterIndex, x.get!(ubyte[]));
+            else if (x.convertsTo!DateTime)
+                setDateTime(parameterIndex, x.get!DateTime);
+            else if (x.convertsTo!Date)
+                setDate(parameterIndex, x.get!Date);
+            else if (x.convertsTo!TimeOfDay)
+                setTime(parameterIndex, x.get!TimeOfDay);
+            else
+                setString(parameterIndex, x.toString);
         }
         override void setNull(int parameterIndex) {
-            throw new SQLException("Not implemented");
-            //      checkClosed();
-            //      lock();
-            //      scope(exit) unlock();
-            //      checkIndex(parameterIndex);
-            //      cmd.setNullParam(parameterIndex-1);
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            checkIndex(parameterIndex);
+            sqlite3_bind_null(stmt, parameterIndex);
+            paramIsSet[parameterIndex - 1] = true;
         }
         override void setNull(int parameterIndex, int sqlType) {
-            throw new SQLException("Not implemented");
-            //      checkClosed();
-            //      lock();
-            //      scope(exit) unlock();
-            //      setNull(parameterIndex);
+            setNull(parameterIndex);
         }
     }
 
@@ -902,7 +866,7 @@ version(USE_SQLITE) {
                 case SQLITE_FLOAT:
                     v = getDouble(columnIndex);
                     break;
-                case SQLITE_TEXT:
+                case SQLITE3_TEXT:
                     v = getString(columnIndex);
                     break;
                 case SQLITE_BLOB:
