@@ -346,6 +346,7 @@ version(USE_SQLITE) {
         sqlite3_stmt * stmt;
 
         bool done;
+        bool preparing;
 
         ResultSetMetaData metadata;
         ParameterMetaData paramMetadata;
@@ -365,19 +366,33 @@ version(USE_SQLITE) {
             paramCount = paramMetadata.getParameterCount();
             metadata = createMetadata();
             resetParams();
+            preparing = true;
         }
         bool[] paramIsSet;
         void resetParams() {
             paramIsSet = new bool[paramCount];
         }
-        void allParamsSet() {
+        // before execution of query
+        private void allParamsSet() {
             for(int i = 0; i < paramCount; i++) {
                 enforceEx!SQLException(paramIsSet[i], "Parameter " ~ to!string(i + 1) ~ " is not set");
             }
+            if (preparing) {
+                preparing = false;
+            } else {
+                closeResultSet();
+                sqlite3_reset(stmt);
+            }
         }
-        void checkIndex(int index) {
+        // before setting any parameter
+        private void checkIndex(int index) {
             if (index < 1 || index > paramCount)
                 throw new SQLException("Parameter index " ~ to!string(index) ~ " is out of range");
+            if (!preparing) {
+                closeResultSet();
+                sqlite3_reset(stmt);
+                preparing = true;
+            }
         }
         ref Variant getParam(int index) {
             throw new SQLException("Not implemented");
@@ -451,13 +466,14 @@ version(USE_SQLITE) {
             scope(exit) unlock();
             return paramMetadata;
         }
-        
+
         override int executeUpdate(out Variant insertId) {
             //throw new SQLException("Not implemented");
             checkClosed();
             lock();
             scope(exit) unlock();
             allParamsSet();
+
             int rowsAffected = 0;
             int res = sqlite3_step(stmt);
             if (res == SQLITE_DONE) {
@@ -1009,7 +1025,7 @@ version(USE_SQLITE) {
                 }
             }
             {
-                writeln("reading table with parameter");
+                writeln("reading table with parameter id=1");
                 PreparedStatement stmt = conn.prepareStatement("SELECT id, name, flags FROM t1 WHERE id = ?");
                 scope(exit) stmt.close();
                 assert(stmt.getMetaData().getColumnCount() == 3);
@@ -1017,14 +1033,28 @@ version(USE_SQLITE) {
                 assert(stmt.getMetaData().getColumnName(2) == "name");
                 assert(stmt.getMetaData().getColumnName(3) == "flags");
                 stmt.setLong(1, 1);
-                ResultSet rs = stmt.executeQuery();
-                scope(exit) rs.close();
-                writeln("id" ~ "\t" ~ "name");
-                while (rs.next()) {
-                    long id = rs.getLong(1);
-                    string name = rs.getString(2);
-                    assert(rs.isNull(3));
-                    writeln("" ~ to!string(id) ~ "\t" ~ name);
+                {
+                    ResultSet rs = stmt.executeQuery();
+                    scope(exit) rs.close();
+                    writeln("id" ~ "\t" ~ "name");
+                    while (rs.next()) {
+                        long id = rs.getLong(1);
+                        string name = rs.getString(2);
+                        assert(rs.isNull(3));
+                        writeln("" ~ to!string(id) ~ "\t" ~ name);
+                    }
+                }
+                writeln("changing parameter id=2");
+                stmt.setLong(1, 2);
+                {
+                    ResultSet rs = stmt.executeQuery();
+                    scope(exit) rs.close();
+                    writeln("id" ~ "\t" ~ "name");
+                    while (rs.next()) {
+                        long id = rs.getLong(1);
+                        string name = rs.getString(2);
+                        writeln("" ~ to!string(id) ~ "\t" ~ name);
+                    }
                 }
             }
         }
