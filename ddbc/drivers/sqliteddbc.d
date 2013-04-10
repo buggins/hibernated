@@ -31,6 +31,9 @@ import core.sync.mutex;
 import ddbc.common;
 import ddbc.core;
 import ddbc.drivers.sqlite;
+import ddbc.drivers.utils;
+
+version(USE_SQLITE) {
 
 version(unittest) {
     /*
@@ -50,7 +53,6 @@ version(unittest) {
         }
     }
 }
-
 
 class SQLITEConnection : ddbc.core.Connection {
 private:
@@ -1049,34 +1051,21 @@ class SQLITEDriver : Driver {
     }
 }
 
-string copyCString(const char* c, int actualLength = -1) {
-    const(char)* a = c;
-    if(a is null)
-        return null;
-    
-    string ret;
-    if(actualLength == -1)
-    while(*a) {
-        ret ~= *a;
-        a++;
-    }
-    else {
-        ret = a[0..actualLength].idup;
-    }
-    
-    return ret;
-}
-
-
 unittest {
     if (SQLITE_TESTS_ENABLED) {
         
         import std.conv;
         DataSource ds = createUnitTestSQLITEDataSource();
-        
+        writeln("trying to open connection");        
         auto conn = ds.getConnection();
+        writeln("connection is opened");        
         assert(conn !is null);
         scope(exit) conn.close();
     }
 }
 
+} else { // version(USE_SQLITE)
+    version(unittest) {
+        immutable bool SQLITE_TESTS_ENABLED = false;
+    }
+}

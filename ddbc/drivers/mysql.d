@@ -68,6 +68,8 @@ import std.string;
 import std.traits;
 import std.variant;
 
+version(USE_MYSQL) {
+
 /**
  * An exception type to distinguish exceptions thrown by this module.
  */
@@ -4828,3 +4830,5 @@ unittest
     assert(pa[0].db == "mysqld" && pa[0].name == "insert2" && pa[0].type == "PROCEDURE");
 }
 +/
+
+}

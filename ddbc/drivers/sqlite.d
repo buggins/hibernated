@@ -18,6 +18,8 @@
 */
 module ddbc.drivers.sqlite;
 
+version(USE_SQLITE) {
+
 extern(System):
 
 version (Windows) {
@@ -830,3 +832,5 @@ void* sqlite3_value_text16le (sqlite3_value* value);
 *
 */
 int sqlite3_value_type (sqlite3_value* value);
+
+}

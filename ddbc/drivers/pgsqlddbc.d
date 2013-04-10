@@ -30,8 +30,12 @@ import std.stdio;
 import std.string;
 import std.variant;
 import core.sync.mutex;
+
 import ddbc.common;
 import ddbc.core;
+import ddbc.drivers.utils;
+
+version(USE_PGSQL) {
 
 pragma(lib, "pq");
 
@@ -1065,77 +1069,8 @@ class PGSQLDriver : Driver {
 	}
 }
 
-
-// C interface of libpq is taken from https://github.com/adamdruppe/misc-stuff-including-D-programming-language-web-stuff/blob/master/postgres.d
-
-string copyCString(const char* c, int actualLength = -1) {
-	const(char)* a = c;
-	if(a is null)
-		return null;
-	
-	string ret;
-	if(actualLength == -1)
-	while(*a) {
-		ret ~= *a;
-		a++;
-	}
-	else {
-		ret = a[0..actualLength].idup;
-	}
-	
-	return ret;
-}
-
-extern(C) {
-	struct PGconn {};
-	struct PGresult {};
-	
-	void PQfinish(PGconn*);
-	PGconn* PQconnectdb(const char*);
-	PGconn *PQconnectdbParams(const char **keywords, const char **values, int expand_dbname);
-
-	int PQstatus(PGconn*); // FIXME check return value
-	
-	const (char*) PQerrorMessage(PGconn*);
-	
-	PGresult* PQexec(PGconn*, const char*);
-	void PQclear(PGresult*);
-
-	
-	int PQresultStatus(PGresult*); // FIXME check return value
-	char *PQcmdTuples(PGresult *res);
-
-	int PQnfields(PGresult*); // number of fields in a result
-	const(char*) PQfname(PGresult*, int); // name of field
-	
-	int PQntuples(PGresult*); // number of rows in result
-	const(char*) PQgetvalue(PGresult*, int row, int column);
-	
-	size_t PQescapeString (char *to, const char *from, size_t length);
-	
-	enum int CONNECTION_OK = 0;
-	enum int PGRES_COMMAND_OK = 1;
-	enum int PGRES_TUPLES_OK = 2;
-	
-	int PQgetlength(const PGresult *res,
-	                int row_number,
-	                int column_number);
-	int PQgetisnull(const PGresult *res,
-	                int row_number,
-	                int column_number);
-
-	alias ulong Oid;
-
-	Oid PQftype(const PGresult *res,
-	            int column_number);
-	Oid PQoidValue(const PGresult *res);
-
-	int PQfformat(const PGresult *res,
-	              int column_number);
-}
-
 unittest {
-	if (PGSQL_TESTS_ENABLED) {
+	static if (PGSQL_TESTS_ENABLED) {
 		
 		import std.conv;
 		DataSource ds = createUnitTestPGSQLDataSource();
@@ -1144,4 +1079,8 @@ unittest {
 		assert(conn !is null);
 		scope(exit) conn.close();
 	}
+}
+
+} else { // version(USE_PGSQL)
+    immutable bool PGSQL_TESTS_ENABLED = false;
 }

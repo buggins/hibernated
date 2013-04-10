@@ -36,6 +36,8 @@ import ddbc.common;
 import ddbc.core;
 import ddbc.drivers.mysql;
 
+version(USE_MYSQL) {
+
 version(unittest) {
     /*
         To allow unit tests using MySQL server,
@@ -48,7 +50,7 @@ version(unittest) {
         mysql> CREATE DATABASE testdb;
      */
     /// change to false to disable tests on real MySQL server
-    immutable bool MYSQL_TESTS_ENABLED = true;
+    immutable bool MYSQL_TESTS_ENABLED = false;
     /// change parameters if necessary
     const string MYSQL_UNITTEST_HOST = "localhost";
     const int    MYSQL_UNITTEST_PORT = 3306;
@@ -1188,7 +1190,7 @@ class MySQLDriver : Driver {
 }
 
 unittest {
-    if (MYSQL_TESTS_ENABLED) {
+    static if (MYSQL_TESTS_ENABLED) {
 
         import std.conv;
 
@@ -1287,4 +1289,10 @@ unittest {
 		assert(newId2.get!ulong > 0);
 
 	}
+}
+
+} else { // version(USE_MYSQL)
+    version(unittest) {
+        immutable bool MYSQL_TESTS_ENABLED = false;
+    }
 }

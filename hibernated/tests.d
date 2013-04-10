@@ -198,6 +198,8 @@ version(unittest) {
     }
     
     import ddbc.drivers.mysqlddbc;
+    import ddbc.drivers.pgsqlddbc;
+    import ddbc.drivers.sqliteddbc;
     import ddbc.common;
     
     
@@ -260,6 +262,8 @@ version(unittest) {
 
     void recreateTestSchema(bool dropTables, bool createTables, bool fillTables) {
         DataSource connectionPool = getUnitTestDataSource();
+        if (connectionPool is null)
+            return; // DB tests disabled
         Connection conn = connectionPool.getConnection();
         scope(exit) conn.close();
         if (dropTables)
@@ -270,10 +274,20 @@ version(unittest) {
             unitTestExecuteBatch(conn, UNIT_TEST_FILL_TABLES_SCRIPT);
     }
 
+    immutable bool DB_TESTS_ENABLED = SQLITE_TESTS_ENABLED || MYSQL_TESTS_ENABLED || PGSQL_TESTS_ENABLED;
+
     package DataSource _unitTestConnectionPool;
+    /// will return null if DB tests are disabled
     DataSource getUnitTestDataSource() {
-        if (_unitTestConnectionPool is null)
-            _unitTestConnectionPool = createUnitTestMySQLDataSource();
+        if (_unitTestConnectionPool is null) {
+            static if (MYSQL_TESTS_ENABLED) {
+                _unitTestConnectionPool = createUnitTestMySQLDataSource();
+            } else static if (SQLITE_TESTS_ENABLED) {
+                _unitTestConnectionPool = createUnitTestSQLITEDataSource();
+            } else static if (PGSQL_TESTS_ENABLED) {
+                _unitTestConnectionPool = createUnitTestPGSQLDataSource();
+            }
+        }
         return _unitTestConnectionPool;
     }
 
@@ -431,6 +445,8 @@ unittest {
 
 
         DataSource ds = getUnitTestDataSource();
+        if (ds is null)
+            return; // DB tests disabled
         SessionFactory factory = new SessionFactoryImpl(schema, dialect, ds);
         db = factory.getDBMetaData();
         {
@@ -815,6 +831,8 @@ unittest {
         // Checking generated metadata
         Dialect dialect = new MySQLDialect();
         DataSource ds = getUnitTestDataSource();
+        if (ds is null)
+            return; // DB tests disabled
         SessionFactory factory = new SessionFactoryImpl(schema, dialect, ds);
         scope(exit) factory.close();
         {
