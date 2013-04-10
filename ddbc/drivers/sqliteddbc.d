@@ -20,21 +20,35 @@
  */
 module ddbc.drivers.sqliteddbc;
 
-import std.algorithm;
-import std.conv;
-import std.datetime;
-import std.exception;
-import std.stdio;
-import std.string;
-import std.variant;
-import core.sync.mutex;
-import ddbc.common;
-import ddbc.core;
-//import ddbc.drivers.sqlite;
-import ddbc.drivers.utils;
-import etc.c.sqlite3;
 
 version(USE_SQLITE) {
+
+    import std.algorithm;
+    import std.conv;
+    import std.datetime;
+    import std.exception;
+    import std.stdio;
+    import std.string;
+    import std.variant;
+    import core.sync.mutex;
+    import ddbc.common;
+    import ddbc.core;
+    //import ddbc.drivers.sqlite;
+    import ddbc.drivers.utils;
+    import etc.c.sqlite3;
+
+
+    version (Windows) {
+        pragma (lib, "sqlite3.lib");
+    } else version (linux) {
+        pragma (lib, "sqlite3");
+    } else version (Posix) {
+        pragma (lib, "libsqlite3.so");
+    } else version (darwin) {
+        pragma (lib, "libsqlite3.so");
+    } else {
+        pragma (msg, "You will need to manually link in the SQLite library.");
+    } 
 
     version(unittest) {
         /*
@@ -358,7 +372,7 @@ version(USE_SQLITE) {
         }
         void allParamsSet() {
             for(int i = 0; i < paramCount; i++) {
-                enforceEx!SQLException(!paramIsSet[i], "Parameter " ~ to!string(i) ~ " is not set");
+                enforceEx!SQLException(paramIsSet[i], "Parameter " ~ to!string(i + 1) ~ " is not set");
             }
         }
         void checkIndex(int index) {
@@ -984,6 +998,25 @@ version(USE_SQLITE) {
                 assert(stmt.getMetaData().getColumnName(1) == "id");
                 assert(stmt.getMetaData().getColumnName(2) == "name");
                 assert(stmt.getMetaData().getColumnName(3) == "flags");
+                ResultSet rs = stmt.executeQuery();
+                scope(exit) rs.close();
+                writeln("id" ~ "\t" ~ "name");
+                while (rs.next()) {
+                    long id = rs.getLong(1);
+                    string name = rs.getString(2);
+                    assert(rs.isNull(3));
+                    writeln("" ~ to!string(id) ~ "\t" ~ name);
+                }
+            }
+            {
+                writeln("reading table with parameter");
+                PreparedStatement stmt = conn.prepareStatement("SELECT id, name, flags FROM t1 WHERE id = ?");
+                scope(exit) stmt.close();
+                assert(stmt.getMetaData().getColumnCount() == 3);
+                assert(stmt.getMetaData().getColumnName(1) == "id");
+                assert(stmt.getMetaData().getColumnName(2) == "name");
+                assert(stmt.getMetaData().getColumnName(3) == "flags");
+                stmt.setLong(1, 1);
                 ResultSet rs = stmt.executeQuery();
                 scope(exit) rs.close();
                 writeln("id" ~ "\t" ~ "name");
