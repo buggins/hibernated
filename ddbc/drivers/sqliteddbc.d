@@ -561,7 +561,7 @@ version(USE_SQLITE) {
                 setNull(parameterIndex);
                 return;
             }
-            sqlite3_bind_blob(stmt, parameterIndex, cast(const char *)x.ptr, x.length, SQLITE_TRANSIENT);
+            sqlite3_bind_blob(stmt, parameterIndex, cast(const (void *))x.ptr, cast(int)x.length, SQLITE_TRANSIENT);
             paramIsSet[parameterIndex - 1] = true;
         }
         override void setUbytes(int parameterIndex, ubyte[] x) {
@@ -573,7 +573,7 @@ version(USE_SQLITE) {
                 setNull(parameterIndex);
                 return;
             }
-            sqlite3_bind_blob(stmt, parameterIndex, cast(const char *)x.ptr, x.length, SQLITE_TRANSIENT);
+            sqlite3_bind_blob(stmt, parameterIndex, cast(const char *)x.ptr, cast(int)x.length, SQLITE_TRANSIENT);
             paramIsSet[parameterIndex - 1] = true;
         }
         override void setString(int parameterIndex, string x) {
@@ -585,7 +585,7 @@ version(USE_SQLITE) {
                 setNull(parameterIndex);
                 return;
             }
-            sqlite3_bind_text(stmt, parameterIndex, cast(const char *)x.ptr, x.length, SQLITE_TRANSIENT);
+            sqlite3_bind_text(stmt, parameterIndex, cast(const char *)x.ptr, cast(int)x.length, SQLITE_TRANSIENT);
             paramIsSet[parameterIndex - 1] = true;
         }
         override void setDateTime(int parameterIndex, DateTime x) {
