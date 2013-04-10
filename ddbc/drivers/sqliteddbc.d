@@ -198,7 +198,8 @@ version(USE_SQLITE) {
             
             Statement stmt = createStatement();
             scope(exit) stmt.close();
-            stmt.executeUpdate("ROLLBACK");
+            //TODO:
+            //stmt.executeUpdate("ROLLBACK");
         }
         override bool getAutoCommit() {
             return autocommit;
@@ -212,7 +213,8 @@ version(USE_SQLITE) {
             
             Statement stmt = createStatement();
             scope(exit) stmt.close();
-            stmt.executeUpdate("SET autocommit = " ~ (autoCommit ? "ON" : "OFF"));
+            //TODO:
+            //stmt.executeUpdate("SET autocommit = " ~ (autoCommit ? "ON" : "OFF"));
             this.autocommit = autoCommit;
         }
     }
@@ -284,17 +286,26 @@ version(USE_SQLITE) {
             checkClosed();
             return conn;
         }
-        
+
+        private PreparedStatement _currentStatement;
+        private ResultSet _currentResultSet;
+
+        private void closePreparedStatement() {
+            if (_currentResultSet !is null) {
+                _currentResultSet.close();
+                _currentResultSet = null;
+            }
+            if (_currentStatement !is null) {
+                _currentStatement.close();
+                _currentStatement = null;
+            }
+        }
+
         override ddbc.core.ResultSet executeQuery(string query) {
-            throw new SQLException("Not implemented");
-            checkClosed();
-            lock();
-            scope(exit) unlock();
-            
-            //      cmd = new Command(conn.getConnection(), query);
-            //      rs = cmd.execSQLResult();
-            //      resultSet = new SQLITEResultSet(this, rs, createMetadata(cmd.getResultHeaders().getFieldDescriptions()));
-            //      return resultSet;
+            closePreparedStatement();
+            _currentStatement = conn.prepareStatement(query);
+            _currentResultSet = _currentStatement.executeQuery();
+            return _currentResultSet;
         }
         
     //    string getError() {
@@ -307,35 +318,20 @@ version(USE_SQLITE) {
         }
         
         override int executeUpdate(string query, out Variant insertId) {
-            checkClosed();
-            lock();
-            scope(exit) unlock();
-
-            // TODO:
-
-            return 0;
+            closePreparedStatement();
+            _currentStatement = conn.prepareStatement(query);
+            return _currentStatement.executeUpdate(insertId);
         }
         
         override void close() {
             checkClosed();
             lock();
             scope(exit) unlock();
-            closeResultSet();
+            closePreparedStatement();
             closed = true;
         }
         
         void closeResultSet() {
-            //throw new SQLException("Not implemented");
-            //      if (cmd == null) {
-            //          return;
-            //      }
-            //      cmd.releaseStatement();
-            //      delete cmd;
-            //      cmd = null;
-            //      if (resultSet !is null) {
-            //          resultSet.onStatementClosed();
-            //          resultSet = null;
-            //      }
         }
     }
 
@@ -718,6 +714,8 @@ version(USE_SQLITE) {
         }
         
         override void close() {
+            if (closed)
+                return;
             checkClosed();
             lock();
             scope(exit) unlock();
@@ -988,15 +986,15 @@ version(USE_SQLITE) {
             scope(exit) conn.close();
             {
                 writeln("dropping table");
-                PreparedStatement stmt = conn.prepareStatement("DROP TABLE IF EXISTS t1");
+                Statement stmt = conn.createStatement();
                 scope(exit) stmt.close();
-                stmt.executeUpdate();
+                stmt.executeUpdate("DROP TABLE IF EXISTS t1");
             }
             {
                 writeln("creating table");
-                PreparedStatement stmt = conn.prepareStatement("CREATE TABLE IF NOT EXISTS t1 (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL, flags int null)");
+                Statement stmt = conn.createStatement();
                 scope(exit) stmt.close();
-                stmt.executeUpdate();
+                stmt.executeUpdate("CREATE TABLE IF NOT EXISTS t1 (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL, flags int null)");
             }
             {
                 writeln("populating table");
@@ -1008,13 +1006,13 @@ version(USE_SQLITE) {
             }
             {
                 writeln("reading table");
-                PreparedStatement stmt = conn.prepareStatement("SELECT id, name, flags FROM t1");
+                Statement stmt = conn.createStatement();
                 scope(exit) stmt.close();
-                assert(stmt.getMetaData().getColumnCount() == 3);
-                assert(stmt.getMetaData().getColumnName(1) == "id");
-                assert(stmt.getMetaData().getColumnName(2) == "name");
-                assert(stmt.getMetaData().getColumnName(3) == "flags");
-                ResultSet rs = stmt.executeQuery();
+                ResultSet rs = stmt.executeQuery("SELECT id, name, flags FROM t1");
+                assert(rs.getMetaData().getColumnCount() == 3);
+                assert(rs.getMetaData().getColumnName(1) == "id");
+                assert(rs.getMetaData().getColumnName(2) == "name");
+                assert(rs.getMetaData().getColumnName(3) == "flags");
                 scope(exit) rs.close();
                 writeln("id" ~ "\t" ~ "name");
                 while (rs.next()) {
