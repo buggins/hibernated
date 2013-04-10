@@ -589,13 +589,13 @@ version(USE_SQLITE) {
             paramIsSet[parameterIndex - 1] = true;
         }
         override void setDateTime(int parameterIndex, DateTime x) {
-            setString(parameterIndex, x.stringof);
+            setString(parameterIndex, x.toISOString());
         }
         override void setDate(int parameterIndex, Date x) {
-            setString(parameterIndex, x.stringof);
+            setString(parameterIndex, x.toISOString());
         }
         override void setTime(int parameterIndex, TimeOfDay x) {
-            setString(parameterIndex, x.stringof);
+            setString(parameterIndex, x.toISOString());
         }
         override void setVariant(int parameterIndex, Variant x) {
             if (x == null)
@@ -645,16 +645,6 @@ version(USE_SQLITE) {
 
         private bool _last;
         private bool _first;
-
-        Variant getValue(int columnIndex) {
-            checkClosed();
-            enforceEx!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
-            lastIsNull = false; //rs[currentRowIndex].isNull(columnIndex - 1);
-            Variant res;
-    //        if (!lastIsNull)
-    //            res = rs[currentRowIndex][columnIndex - 1];
-            return res;
-        }
 
         // checks index, updates lastIsNull, returns column type
         int checkIndex(int columnIndex) {
@@ -860,23 +850,38 @@ version(USE_SQLITE) {
                 res[i] = bytes[i];
             return cast(string)res;
         }
-        override std.datetime.DateTime getDateTime(int columnIndex) {
+        override DateTime getDateTime(int columnIndex) {
             string s = getString(columnIndex);
-            std.datetime.DateTime dt;
-            // TODO: convert
-            return dt;
+            DateTime dt;
+            if (s is null)
+                return dt;
+            try {
+                return DateTime.fromISOString(s);
+            } catch (Throwable e) {
+                throw new SQLException("Cannot convert string to DateTime - " ~ s);
+            }
         }
-        override std.datetime.Date getDate(int columnIndex) {
+        override Date getDate(int columnIndex) {
             string s = getString(columnIndex);
-            std.datetime.Date dt;
-            // TODO: convert
-            return dt;
+            Date dt;
+            if (s is null)
+                return dt;
+            try {
+                return Date.fromISOString(s);
+            } catch (Throwable e) {
+                throw new SQLException("Cannot convert string to DateTime - " ~ s);
+            }
         }
-        override std.datetime.TimeOfDay getTime(int columnIndex) {
+        override TimeOfDay getTime(int columnIndex) {
             string s = getString(columnIndex);
-            std.datetime.TimeOfDay dt;
-            // TODO: convert
-            return dt;
+            TimeOfDay dt;
+            if (s is null)
+                return dt;
+            try {
+                return TimeOfDay.fromISOString(s);
+            } catch (Throwable e) {
+                throw new SQLException("Cannot convert string to DateTime - " ~ s);
+            }
         }
         
         override Variant getVariant(int columnIndex) {
