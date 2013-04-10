@@ -50,7 +50,7 @@ version(unittest) {
         mysql> CREATE DATABASE testdb;
      */
     /// change to false to disable tests on real MySQL server
-    immutable bool MYSQL_TESTS_ENABLED = false;
+    immutable bool MYSQL_TESTS_ENABLED = true;
     /// change parameters if necessary
     const string MYSQL_UNITTEST_HOST = "localhost";
     const int    MYSQL_UNITTEST_PORT = 3306;

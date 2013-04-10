@@ -305,6 +305,8 @@ version(unittest) {
         } else static if (PGSQL_TESTS_ENABLED) {
             // TODO: implement PGSQLDialect
             return new MySQLDialect();
+        } else {
+            return null; // disabled
         }
     }
 

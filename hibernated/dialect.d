@@ -395,3 +395,12 @@ abstract class Dialect {
 +/
 }
 
+
+
+version (USE_MYSQL) {
+} else version (USE_SQLITE) {
+} else version (USE_PGSQL) {
+} else {
+    pragma(msg, "No DB type version definition specified. Add one or more versions to command line: USE_MYSQL, USE_PGSQL, USE_SQLITE");
+}
+
