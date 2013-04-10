@@ -452,11 +452,10 @@ version(USE_SQLITE) {
         }
         
         override ddbc.core.ResultSet executeQuery() {
-            int res = executeUpdate();
-            enforceEx!SQLException(res == -1, "Query doesn't return result set");
             checkClosed();
             lock();
             scope(exit) unlock();
+            enforceEx!SQLException(metadata.getColumnCount() > 0, "Query doesn't return result set");
             resultSet = new SQLITEResultSet(this, stmt, getMetaData());
             return resultSet;
         }
@@ -758,7 +757,7 @@ version(USE_SQLITE) {
             if (_first) {
                 _first = false;
                 //writeln("next() first time invocation, columnCount=" ~ to!string(columnCount));
-                return columnCount > 0;
+                //return columnCount > 0;
             }
 
             int res = sqlite3_step(rs);
@@ -1001,7 +1000,7 @@ version(USE_SQLITE) {
             }
             {
                 writeln("creating table");
-                PreparedStatement stmt = conn.prepareStatement("CREATE TABLE IF NOT EXISTS t1 (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL)");
+                PreparedStatement stmt = conn.prepareStatement("CREATE TABLE IF NOT EXISTS t1 (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL, flags int null)");
                 scope(exit) stmt.close();
                 stmt.executeUpdate();
             }
@@ -1015,14 +1014,19 @@ version(USE_SQLITE) {
             }
             {
                 writeln("reading table");
-                PreparedStatement stmt = conn.prepareStatement("SELECT id, name FROM t1");
+                PreparedStatement stmt = conn.prepareStatement("SELECT id, name, flags FROM t1");
                 scope(exit) stmt.close();
+                assert(stmt.getMetaData().getColumnCount() == 3);
+                assert(stmt.getMetaData().getColumnName(1) == "id");
+                assert(stmt.getMetaData().getColumnName(2) == "name");
+                assert(stmt.getMetaData().getColumnName(3) == "flags");
                 ResultSet rs = stmt.executeQuery();
                 scope(exit) rs.close();
                 writeln("id" ~ "\t" ~ "name");
                 while (rs.next()) {
                     long id = rs.getLong(1);
                     string name = rs.getString(2);
+                    assert(rs.isNull(3));
                     writeln("" ~ to!string(id) ~ "\t" ~ name);
                 }
             }
