@@ -99,6 +99,20 @@ version(USE_PGSQL) {
         Oid PQftable(const PGresult *res,
                      int column_number);
 
+        PGresult *PQprepare(PGconn *conn,
+                            const char *stmtName,
+                            const char *query,
+                            int nParams,
+                            const Oid *paramTypes);
+
+        PGresult *PQexecPrepared(PGconn *conn,
+                                 const char *stmtName,
+                                 int nParams,
+                                 const char * *paramValues,
+                                 const int *paramLengths,
+                                 const int *paramFormats,
+                                 int resultFormat);
+
         const int BOOLOID = 16;
         const int BYTEAOID = 17;
         const int CHAROID = 18;

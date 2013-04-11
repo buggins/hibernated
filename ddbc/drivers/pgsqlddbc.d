@@ -314,20 +314,19 @@ version(USE_PGSQL) {
     		}
     		return new ResultSetMetaDataImpl(list);
     	}
-    //	ParameterMetaData createMetadata(ParamDescription[] fields) {
-    //		ParameterMetaDataItem[] res = new ParameterMetaDataItem[fields.length];
-    //		foreach(i, field; fields) {
-    //			ParameterMetaDataItem item = new ParameterMetaDataItem();
-    //			item.precision = field.length;
-    //			item.scale = field.scale;
-    //			item.isNullable = !field.notNull;
-    //			item.isSigned = !field.unsigned;
-    //			item.type = fromPGSQLType(field.type);
-    //			// TODO: fill more params
-    //			res[i] = item;
-    //		}
-    //		return new ParameterMetaDataImpl(res);
-    //	}
+    	ParameterMetaData createParameterMetadata(int paramCount) {
+            ParameterMetaDataItem[] res = new ParameterMetaDataItem[paramCount];
+            for(int i = 0; i < paramCount; i++) {
+    			ParameterMetaDataItem item = new ParameterMetaDataItem();
+    			item.precision = 0;
+    			item.scale = 0;
+    			item.isNullable = true;
+    			item.isSigned = true;
+    			item.type = SqlType.VARCHAR;
+    			res[i] = item;
+    		}
+    		return new ParameterMetaDataImpl(res);
+    	}
     public:
     	PGSQLConnection getConnection() {
     		checkClosed();
@@ -353,11 +352,11 @@ version(USE_PGSQL) {
                         int len = PQgetlength(res, row, col);
                         const char * value = PQgetvalue(res, row, col);
                         int t = types[col];
-                        writeln("[" ~ to!string(row) ~ "][" ~ to!string(col) ~ "] type = " ~ to!string(t) ~ " len = " ~ to!string(len));
+                        //writeln("[" ~ to!string(row) ~ "][" ~ to!string(col) ~ "] type = " ~ to!string(t) ~ " len = " ~ to!string(len));
                         if (fmts[col] == 0) {
                             // text
                             string s = copyCString(value, len);
-                            writeln("text: " ~ s);
+                            //writeln("text: " ~ s);
                             switch(t) {
                                 case INT4OID:
                                     v[col] = parse!int(s);
@@ -391,7 +390,7 @@ version(USE_PGSQL) {
                             }
                         } else {
                             // binary
-                            writeln("binary:");
+                            //writeln("binary:");
                             byte[] b = new byte[len];
                             for (int i=0; i<len; i++)
                                 b[i] = value[i];
@@ -475,39 +474,102 @@ version(USE_PGSQL) {
     	}
     }
 
+    ulong preparedStatementIndex = 1;
+
     class PGSQLPreparedStatement : PGSQLStatement, PreparedStatement {
     	string query;
     	int paramCount;
     	ResultSetMetaData metadata;
     	ParameterMetaData paramMetadata;
+        string stmtName;
+        bool[] paramIsSet;
+        string[] paramValue;
+        PGresult * rs;
+
+        string convertParams(string query) {
+            string res;
+            int count = 0;
+            bool insideString = false;
+            char lastChar = 0;
+            foreach(ch; query) {
+                if (ch == '\'') {
+                    if (insideString) {
+                        if (lastChar != '\\')
+                            insideString = false;
+                    } else {
+                        insideString = true;
+                    }
+                    res ~= ch;
+                } else if (ch == '?') {
+                    if (!insideString) {
+                        count++;
+                        res ~= "$" ~ to!string(count);
+                    } else {
+                        res ~= ch;
+                    }
+                }
+                lastChar = ch;
+            }
+            paramCount = count;
+            return res;
+        }
+
     	this(PGSQLConnection conn, string query) {
     		super(conn);
-    		this.query = query;
-    		throw new SQLException("Not implemented");
-    //		cmd = new Command(conn.getConnection(), query);
-    //		cmd.prepare();
-    //		paramCount = cmd.getParamCount();
-    	}
+            query = convertParams(query);
+            this.query = query;
+            paramMetadata = createParameterMetadata(paramCount);
+            stmtName = "ddbcstmt" ~ to!string(preparedStatementIndex);
+            paramIsSet = new bool[paramCount];
+            paramValue = new string[paramCount];
+            rs = PQprepare(conn.getConnection(),
+                                toStringz(stmtName),
+                                toStringz(query),
+                                paramCount,
+                                null);
+            enforceEx!SQLException(rs !is null, "Error while preparing statement " ~ query);
+            metadata = createMetadata(rs);
+        }
     	void checkIndex(int index) {
     		if (index < 1 || index > paramCount)
     			throw new SQLException("Parameter index " ~ to!string(index) ~ " is out of range");
     	}
-    	ref Variant getParam(int index) {
-    		throw new SQLException("Not implemented");
-    //		checkIndex(index);
-    //		return cmd.param(cast(ushort)(index - 1));
+    	void setParam(int index, string value) {
+    		checkIndex(index);
+    		paramValue[index - 1] = value;
+            paramIsSet[index - 1] = true;
     	}
+
+        PGresult * exec() {
+            const (char) * [] values = new const(char)*[paramCount];
+            int[] lengths = new int[paramCount];
+            int[] formats = new int[paramCount];
+            for (int i=0; i<paramCount; i++) {
+                if (paramValue[i] is null)
+                    values[i] = null;
+                else
+                    values[i] = toStringz(paramValue[i]);
+                lengths[i] = paramValue[i].length;
+            }
+            PGresult * res = PQexecPrepared(conn.getConnection(),
+                                 toStringz(stmtName),
+                                 paramCount,
+                                 cast(const char * *)values.ptr,
+                                 cast(const int *)lengths.ptr,
+                                 cast(const int *)formats.ptr,
+                                 0);
+            enforceEx!SQLException(res !is null, "Error while executing prepared statement " ~ query);
+            return res;
+        }
+
     public:
     	
     	/// Retrieves a ResultSetMetaData object that contains information about the columns of the ResultSet object that will be returned when this PreparedStatement object is executed.
     	override ResultSetMetaData getMetaData() {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		if (metadata is null)
-    //			metadata = createMetadata(cmd.getPreparedHeaders().getFieldDescriptions());
-    //		return metadata;
+    		checkClosed();
+    		lock();
+    		scope(exit) unlock();
+    		return metadata;
     	}
     	
     	/// Retrieves the number, types and properties of this PreparedStatement object's parameters.
@@ -532,25 +594,34 @@ version(USE_PGSQL) {
     	}
     	
     	override int executeUpdate(out Variant insertId) {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		ulong rowsAffected = 0;
-    //		cmd.execPrepared(rowsAffected);
-    //		insertId = cmd.lastInsertID;
-    //		return cast(int)rowsAffected;
-    	}
+    		checkClosed();
+    		lock();
+    		scope(exit) unlock();
+            PGresult * res = exec();
+            enforceEx!SQLException(res !is null, "Failed to execute statement " ~ query);
+            auto status = PQresultStatus(res);
+            enforceEx!SQLException(status == PGRES_COMMAND_OK || status == PGRES_TUPLES_OK, getError());
+            scope(exit) PQclear(res);
+            
+            string rowsAffected = copyCString(PQcmdTuples(res));
+            auto lastid = PQoidValue(res);
+            int affected = rowsAffected.length > 0 ? to!int(rowsAffected) : 0;
+            insertId = Variant(lastid);
+            return affected;
+        }
     	
     	override ddbc.core.ResultSet executeQuery() {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		rs = cmd.execPreparedResult();
-    //		resultSet = new PGSQLResultSet(this, rs, getMetaData());
-    //		return resultSet;
-    	}
+    		checkClosed();
+    		lock();
+    		scope(exit) unlock();
+            PGresult * res = exec();
+            int rows = PQntuples(res);
+            int fieldCount = PQnfields(res);
+            Variant[][] data;
+            fillData(res, data);
+            resultSet = new PGSQLResultSet(this, data, metadata);
+            return resultSet;
+        }
     	
     	override void clearParameters() {
     		throw new SQLException("Not implemented");
@@ -1157,15 +1228,15 @@ version(USE_PGSQL) {
                 scope(exit) stmt.close();
                 stmt.executeUpdate("CREATE TABLE IF NOT EXISTS t1 (id SERIAL, name VARCHAR(255) NOT NULL, flags int null)");
                 writeln("populating table");
-                stmt.executeUpdate("INSERT INTO t1 (name) VALUES ('test1'), ('test2')");
+                //stmt.executeUpdate("INSERT INTO t1 (name) VALUES ('test1'), ('test2')");
             }
-//            {
-//                PreparedStatement stmt = conn.prepareStatement("INSERT INTO t1 (name) VALUES ('test1'), ('test2')");
-//                scope(exit) stmt.close();
-//                Variant id = 0;
-//                assert(stmt.executeUpdate(id) == 2);
-//                assert(id.get!long > 0);
-//            }
+            {
+                PreparedStatement stmt = conn.prepareStatement("INSERT INTO t1 (name) VALUES ('test1'), ('test2')");
+                scope(exit) stmt.close();
+                Variant id = 0;
+                assert(stmt.executeUpdate(id) == 2);
+                assert(id.get!long > 0);
+            }
             {
                 writeln("reading table");
                 Statement stmt = conn.createStatement();
@@ -1182,6 +1253,57 @@ version(USE_PGSQL) {
                     string name = rs.getString(2);
                     assert(rs.isNull(3));
                     writeln("" ~ to!string(id) ~ "\t" ~ name);
+                }
+            }
+            {
+                //writeln("reading table");
+                Statement stmt = conn.createStatement();
+                scope(exit) stmt.close();
+                ResultSet rs = stmt.executeQuery("SELECT id, name, flags FROM t1");
+                assert(rs.getMetaData().getColumnCount() == 3);
+                assert(rs.getMetaData().getColumnName(1) == "id");
+                assert(rs.getMetaData().getColumnName(2) == "name");
+                assert(rs.getMetaData().getColumnName(3) == "flags");
+                scope(exit) rs.close();
+                //writeln("id" ~ "\t" ~ "name");
+                while (rs.next()) {
+                    long id = rs.getLong(1);
+                    string name = rs.getString(2);
+                    assert(rs.isNull(3));
+                    //writeln("" ~ to!string(id) ~ "\t" ~ name);
+                }
+            }
+            {
+                //writeln("reading table with parameter id=1");
+                PreparedStatement stmt = conn.prepareStatement("SELECT id, name, flags FROM t1 WHERE id = ?");
+                scope(exit) stmt.close();
+                assert(stmt.getMetaData().getColumnCount() == 3);
+                assert(stmt.getMetaData().getColumnName(1) == "id");
+                assert(stmt.getMetaData().getColumnName(2) == "name");
+                assert(stmt.getMetaData().getColumnName(3) == "flags");
+                stmt.setLong(1, 1);
+                {
+                    ResultSet rs = stmt.executeQuery();
+                    scope(exit) rs.close();
+                    //writeln("id" ~ "\t" ~ "name");
+                    while (rs.next()) {
+                        long id = rs.getLong(1);
+                        string name = rs.getString(2);
+                        assert(rs.isNull(3));
+                        //writeln("" ~ to!string(id) ~ "\t" ~ name);
+                    }
+                }
+                //writeln("changing parameter id=2");
+                stmt.setLong(1, 2);
+                {
+                    ResultSet rs = stmt.executeQuery();
+                    scope(exit) rs.close();
+                    //writeln("id" ~ "\t" ~ "name");
+                    while (rs.next()) {
+                        long id = rs.getLong(1);
+                        string name = rs.getString(2);
+                        //writeln("" ~ to!string(id) ~ "\t" ~ name);
+                    }
                 }
             }
         }
