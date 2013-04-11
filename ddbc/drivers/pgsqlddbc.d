@@ -39,9 +39,6 @@ version(USE_PGSQL) {
     import ddbc.drivers.pgsql;
     import ddbc.drivers.utils;
 
-    pragma(lib, "pq");
-
-
     version(unittest) {
     	/*
             To allow unit tests using PostgreSQL server,

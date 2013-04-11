@@ -34,8 +34,8 @@ version(USE_PGSQL) {
     
     
     version (Windows) {
-        //pragma (lib, "libpq.lib");
-        pragma (lib, "pq");
+        pragma (lib, "libpq.lib");
+        //pragma (lib, "pq");
     } else version (linux) {
         pragma (lib, "pq");
     } else version (Posix) {
@@ -43,7 +43,7 @@ version(USE_PGSQL) {
     } else version (darwin) {
         pragma (lib, "pq");
     } else {
-        pragma (msg, "You will need to manually link in the SQLite library.");
+        pragma (msg, "You will need to manually link in the LIBPQ library.");
     } 
 
     // C interface of libpq is taken from https://github.com/adamdruppe/misc-stuff-including-D-programming-language-web-stuff/blob/master/postgres.d
