@@ -434,6 +434,18 @@ version(USE_PGSQL) {
     		return executeUpdate(query, dummy);
     	}
 
+        void readInsertId(PGresult * res, ref Variant insertId) {
+            int rows = PQntuples(res);
+            int fieldCount = PQnfields(res);
+            //writeln("readInsertId - rows " ~ to!string(rows) ~ " " ~ to!string(fieldCount));
+            if (rows == 1 && fieldCount == 1) {
+                int len = PQgetlength(res, 0, 0);
+                const char * value = PQgetvalue(res, 0, 0);
+                string s = copyCString(value, len);
+                insertId = parse!long(s);
+            }
+        }
+
     	override int executeUpdate(string query, out Variant insertId) {
     		checkClosed();
     		lock();
@@ -445,9 +457,12 @@ version(USE_PGSQL) {
     		scope(exit) PQclear(res);
     		
     		string rowsAffected = copyCString(PQcmdTuples(res));
-    		auto lastid = PQoidValue(res);
-    		int affected = rowsAffected.length > 0 ? to!int(rowsAffected) : 0;
-    		insertId = Variant(lastid);
+
+            readInsertId(res, insertId);
+//    		auto lastid = PQoidValue(res);
+//            writeln("lastId = " ~ to!string(lastid));
+            int affected = rowsAffected.length > 0 ? to!int(rowsAffected) : 0;
+//    		insertId = Variant(cast(long)lastid);
     		return affected;
     	}
 
@@ -484,7 +499,7 @@ version(USE_PGSQL) {
         string stmtName;
         bool[] paramIsSet;
         string[] paramValue;
-        PGresult * rs;
+        //PGresult * rs;
 
         string convertParams(string query) {
             string res;
@@ -507,6 +522,8 @@ version(USE_PGSQL) {
                     } else {
                         res ~= ch;
                     }
+                } else {
+                    res ~= ch;
                 }
                 lastChar = ch;
             }
@@ -522,18 +539,29 @@ version(USE_PGSQL) {
             stmtName = "ddbcstmt" ~ to!string(preparedStatementIndex);
             paramIsSet = new bool[paramCount];
             paramValue = new string[paramCount];
-            rs = PQprepare(conn.getConnection(),
-                                toStringz(stmtName),
-                                toStringz(query),
-                                paramCount,
-                                null);
-            enforceEx!SQLException(rs !is null, "Error while preparing statement " ~ query);
-            metadata = createMetadata(rs);
+//            rs = PQprepare(conn.getConnection(),
+//                                toStringz(stmtName),
+//                                toStringz(query),
+//                                paramCount,
+//                                null);
+//            enforceEx!SQLException(rs !is null, "Error while preparing statement " ~ query);
+//            auto status = PQresultStatus(rs);
+            writeln("prepare paramCount = " ~ to!string(paramCount));
+//            enforceEx!SQLException(status == PGRES_COMMAND_OK || status == PGRES_TUPLES_OK, "Error while preparing statement " ~ query ~ " : " ~ getError(rs));
+//            metadata = createMetadata(rs);
+            //scope(exit) PQclear(rs);
+        }
+        string getError(PGresult * res) {
+            return copyCString(PQresultErrorMessage(res));
         }
     	void checkIndex(int index) {
     		if (index < 1 || index > paramCount)
     			throw new SQLException("Parameter index " ~ to!string(index) ~ " is out of range");
     	}
+        void checkParams() {
+            foreach(i, b; paramIsSet)
+                enforceEx!SQLException(b, "Parameter " ~ to!string(i) ~ " is not set");
+        }
     	void setParam(int index, string value) {
     		checkIndex(index);
     		paramValue[index - 1] = value;
@@ -541,6 +569,7 @@ version(USE_PGSQL) {
     	}
 
         PGresult * exec() {
+            checkParams();
             const (char) * [] values = new const(char)*[paramCount];
             int[] lengths = new int[paramCount];
             int[] formats = new int[paramCount];
@@ -549,21 +578,39 @@ version(USE_PGSQL) {
                     values[i] = null;
                 else
                     values[i] = toStringz(paramValue[i]);
-                lengths[i] = paramValue[i].length;
+                lengths[i] = cast(int)paramValue[i].length;
             }
-            PGresult * res = PQexecPrepared(conn.getConnection(),
-                                 toStringz(stmtName),
+//            PGresult * res = PQexecPrepared(conn.getConnection(),
+//                                            toStringz(stmtName),
+//                                            paramCount,
+//                                            cast(const char * *)values.ptr,
+//                                            cast(const int *)lengths.ptr,
+//                                            cast(const int *)formats.ptr,
+//                                            0);
+            PGresult * res = PQexecParams(conn.getConnection(),
+                                 toStringz(query),
                                  paramCount,
+                                 null,
                                  cast(const char * *)values.ptr,
                                  cast(const int *)lengths.ptr,
                                  cast(const int *)formats.ptr,
                                  0);
             enforceEx!SQLException(res !is null, "Error while executing prepared statement " ~ query);
+            metadata = createMetadata(res);
             return res;
         }
 
     public:
     	
+        override void close() {
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            //PQclear(rs);
+            closeResultSet();
+            closed = true;
+        }
+
     	/// Retrieves a ResultSetMetaData object that contains information about the columns of the ResultSet object that will be returned when this PreparedStatement object is executed.
     	override ResultSetMetaData getMetaData() {
     		checkClosed();
@@ -574,23 +621,16 @@ version(USE_PGSQL) {
     	
     	/// Retrieves the number, types and properties of this PreparedStatement object's parameters.
     	override ParameterMetaData getParameterMetaData() {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		if (paramMetadata is null)
-    //			paramMetadata = createMetadata(cmd.getPreparedHeaders().getParamDescriptions());
-    //		return paramMetadata;
+    		//throw new SQLException("Not implemented");
+    		checkClosed();
+    		lock();
+    		scope(exit) unlock();
+    		return paramMetadata;
     	}
     	
     	override int executeUpdate() {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		ulong rowsAffected = 0;
-    //		cmd.execPrepared(rowsAffected);
-    //		return cast(int)rowsAffected;
+            Variant dummy;
+            return executeUpdate(dummy);
     	}
     	
     	override int executeUpdate(out Variant insertId) {
@@ -598,15 +638,16 @@ version(USE_PGSQL) {
     		lock();
     		scope(exit) unlock();
             PGresult * res = exec();
-            enforceEx!SQLException(res !is null, "Failed to execute statement " ~ query);
-            auto status = PQresultStatus(res);
-            enforceEx!SQLException(status == PGRES_COMMAND_OK || status == PGRES_TUPLES_OK, getError());
             scope(exit) PQclear(res);
-            
+            auto status = PQresultStatus(res);
+            enforceEx!SQLException(status == PGRES_COMMAND_OK || status == PGRES_TUPLES_OK, getError(res));
+
             string rowsAffected = copyCString(PQcmdTuples(res));
-            auto lastid = PQoidValue(res);
+            //auto lastid = PQoidValue(res);
+            readInsertId(res, insertId);
+            //writeln("lastId = " ~ to!string(lastid));
             int affected = rowsAffected.length > 0 ? to!int(rowsAffected) : 0;
-            insertId = Variant(lastid);
+            //insertId = Variant(cast(long)lastid);
             return affected;
         }
     	
@@ -615,6 +656,7 @@ version(USE_PGSQL) {
     		lock();
     		scope(exit) unlock();
             PGresult * res = exec();
+            scope(exit) PQclear(res);
             int rows = PQntuples(res);
             int fieldCount = PQnfields(res);
             Variant[][] data;
@@ -657,70 +699,63 @@ version(USE_PGSQL) {
     //		cmd.param(parameterIndex-1) = x;
     	}
     	override void setLong(int parameterIndex, long x) {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		checkIndex(parameterIndex);
-    //		cmd.param(parameterIndex-1) = x;
+    		checkClosed();
+    		lock();
+    		scope(exit) unlock();
+            setParam(parameterIndex, to!string(x));
     	}
-    	override void setUlong(int parameterIndex, ulong x) {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		checkIndex(parameterIndex);
-    //		cmd.param(parameterIndex-1) = x;
-    	}
-    	override void setInt(int parameterIndex, int x) {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		checkIndex(parameterIndex);
-    //		cmd.param(parameterIndex-1) = x;
-    	}
-    	override void setUint(int parameterIndex, uint x) {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		checkIndex(parameterIndex);
-    //		cmd.param(parameterIndex-1) = x;
-    	}
-    	override void setShort(int parameterIndex, short x) {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		checkIndex(parameterIndex);
-    //		cmd.param(parameterIndex-1) = x;
-    	}
-    	override void setUshort(int parameterIndex, ushort x) {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		checkIndex(parameterIndex);
-    //		cmd.param(parameterIndex-1) = x;
-    	}
-    	override void setByte(int parameterIndex, byte x) {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		checkIndex(parameterIndex);
-    //		cmd.param(parameterIndex-1) = x;
-    	}
-    	override void setUbyte(int parameterIndex, ubyte x) {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		checkIndex(parameterIndex);
-    //		cmd.param(parameterIndex-1) = x;
-    	}
-    	override void setBytes(int parameterIndex, byte[] x) {
+
+        override void setUlong(int parameterIndex, ulong x) {
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            setParam(parameterIndex, to!string(x));
+        }
+
+        override void setInt(int parameterIndex, int x) {
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            setParam(parameterIndex, to!string(x));
+        }
+
+        override void setUint(int parameterIndex, uint x) {
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            setParam(parameterIndex, to!string(x));
+        }
+
+        override void setShort(int parameterIndex, short x) {
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            setParam(parameterIndex, to!string(x));
+        }
+
+        override void setUshort(int parameterIndex, ushort x) {
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            setParam(parameterIndex, to!string(x));
+        }
+  
+        override void setByte(int parameterIndex, byte x) {
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            setParam(parameterIndex, to!string(x));
+        }
+ 
+        override void setUbyte(int parameterIndex, ubyte x) {
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            checkIndex(parameterIndex);
+            setParam(parameterIndex, to!string(x));
+        }
+   
+        override void setBytes(int parameterIndex, byte[] x) {
     		throw new SQLException("Not implemented");
     //		checkClosed();
     //		lock();
@@ -743,16 +778,11 @@ version(USE_PGSQL) {
     //			cmd.param(parameterIndex-1) = x;
     	}
     	override void setString(int parameterIndex, string x) {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		checkIndex(parameterIndex);
-    //		if (x == null)
-    //			setNull(parameterIndex);
-    //		else
-    //			cmd.param(parameterIndex-1) = x;
-    	}
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            setParam(parameterIndex, x);
+        }
     	override void setDateTime(int parameterIndex, DateTime x) {
     		throw new SQLException("Not implemented");
     //		checkClosed();
@@ -778,31 +808,23 @@ version(USE_PGSQL) {
     //		cmd.param(parameterIndex-1) = x;
     	}
     	override void setVariant(int parameterIndex, Variant x) {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		checkIndex(parameterIndex);
-    //		if (x == null)
-    //			setNull(parameterIndex);
-    //		else
-    //			cmd.param(parameterIndex-1) = x;
-    	}
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            setParam(parameterIndex, x.toString);
+        }
     	override void setNull(int parameterIndex) {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		checkIndex(parameterIndex);
-    //		cmd.setNullParam(parameterIndex-1);
-    	}
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            setParam(parameterIndex, null);
+        }
     	override void setNull(int parameterIndex, int sqlType) {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		setNull(parameterIndex);
-    	}
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            setParam(parameterIndex, null);
+        }
     }
 
     class PGSQLResultSet : ResultSetImpl {
@@ -1004,7 +1026,7 @@ version(USE_PGSQL) {
     		if (v.convertsTo!(uint))
     			return v.get!(uint);
     		if (v.convertsTo!(ulong))
-    			return to!int(v.get!(ulong));
+    			return to!uint(v.get!(ulong));
     		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to uint");
     	}
     	override long getLong(int columnIndex) {
@@ -1228,13 +1250,15 @@ version(USE_PGSQL) {
                 scope(exit) stmt.close();
                 stmt.executeUpdate("CREATE TABLE IF NOT EXISTS t1 (id SERIAL, name VARCHAR(255) NOT NULL, flags int null)");
                 writeln("populating table");
-                //stmt.executeUpdate("INSERT INTO t1 (name) VALUES ('test1'), ('test2')");
+                Variant id = 0;
+                assert(stmt.executeUpdate("INSERT INTO t1 (name) VALUES ('test1') returning id", id) == 1);
+                assert(id.get!long > 0);
             }
             {
-                PreparedStatement stmt = conn.prepareStatement("INSERT INTO t1 (name) VALUES ('test1'), ('test2')");
+                PreparedStatement stmt = conn.prepareStatement("INSERT INTO t1 (name) VALUES ('test2') returning id");
                 scope(exit) stmt.close();
                 Variant id = 0;
-                assert(stmt.executeUpdate(id) == 2);
+                assert(stmt.executeUpdate(id) == 1);
                 assert(id.get!long > 0);
             }
             {
@@ -1256,7 +1280,7 @@ version(USE_PGSQL) {
                 }
             }
             {
-                //writeln("reading table");
+                writeln("reading table");
                 Statement stmt = conn.createStatement();
                 scope(exit) stmt.close();
                 ResultSet rs = stmt.executeQuery("SELECT id, name, flags FROM t1");
@@ -1265,44 +1289,50 @@ version(USE_PGSQL) {
                 assert(rs.getMetaData().getColumnName(2) == "name");
                 assert(rs.getMetaData().getColumnName(3) == "flags");
                 scope(exit) rs.close();
-                //writeln("id" ~ "\t" ~ "name");
+                writeln("id" ~ "\t" ~ "name");
                 while (rs.next()) {
+                    //writeln("calling getLong");
                     long id = rs.getLong(1);
+                    //writeln("done getLong");
                     string name = rs.getString(2);
                     assert(rs.isNull(3));
-                    //writeln("" ~ to!string(id) ~ "\t" ~ name);
+                    writeln("" ~ to!string(id) ~ "\t" ~ name);
                 }
             }
             {
-                //writeln("reading table with parameter id=1");
+                writeln("reading table with parameter id=1");
                 PreparedStatement stmt = conn.prepareStatement("SELECT id, name, flags FROM t1 WHERE id = ?");
                 scope(exit) stmt.close();
-                assert(stmt.getMetaData().getColumnCount() == 3);
-                assert(stmt.getMetaData().getColumnName(1) == "id");
-                assert(stmt.getMetaData().getColumnName(2) == "name");
-                assert(stmt.getMetaData().getColumnName(3) == "flags");
+//                assert(stmt.getMetaData().getColumnCount() == 3);
+//                assert(stmt.getMetaData().getColumnName(1) == "id");
+//                assert(stmt.getMetaData().getColumnName(2) == "name");
+//                assert(stmt.getMetaData().getColumnName(3) == "flags");
+                //writeln("calling setLong");
                 stmt.setLong(1, 1);
+                //writeln("done setLong");
                 {
                     ResultSet rs = stmt.executeQuery();
                     scope(exit) rs.close();
-                    //writeln("id" ~ "\t" ~ "name");
+                    writeln("id" ~ "\t" ~ "name");
                     while (rs.next()) {
                         long id = rs.getLong(1);
                         string name = rs.getString(2);
                         assert(rs.isNull(3));
-                        //writeln("" ~ to!string(id) ~ "\t" ~ name);
+                        writeln("" ~ to!string(id) ~ "\t" ~ name);
                     }
                 }
-                //writeln("changing parameter id=2");
+                writeln("changing parameter id=2");
+                //writeln("calling setLong");
                 stmt.setLong(1, 2);
+                //writeln("done setLong");
                 {
                     ResultSet rs = stmt.executeQuery();
                     scope(exit) rs.close();
-                    //writeln("id" ~ "\t" ~ "name");
+                    writeln("id" ~ "\t" ~ "name");
                     while (rs.next()) {
                         long id = rs.getLong(1);
                         string name = rs.getString(2);
-                        //writeln("" ~ to!string(id) ~ "\t" ~ name);
+                        writeln("" ~ to!string(id) ~ "\t" ~ name);
                     }
                 }
             }

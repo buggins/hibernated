@@ -79,6 +79,13 @@ version(USE_PGSQL) {
         enum int CONNECTION_OK = 0;
         enum int PGRES_COMMAND_OK = 1;
         enum int PGRES_TUPLES_OK = 2;
+        enum int PGRES_COPY_OUT = 3;             /* Copy Out data transfer in progress */
+        enum int PGRES_COPY_IN = 4;              /* Copy In data transfer in progress */
+        enum int PGRES_BAD_RESPONSE = 5;         /* an unexpected response was recv'd from the backend */
+        enum int PGRES_NONFATAL_ERROR = 6;       /* notice or warning message */
+        enum int PGRES_FATAL_ERROR = 7;          /* query failed */
+        enum int PGRES_COPY_BOTH = 8;            /* Copy In/Out data transfer in progress */
+        enum int PGRES_SINGLE_TUPLE = 9;          /* single tuple from larger resultset */
         
         int PQgetlength(const PGresult *res,
                         int row_number,
@@ -112,6 +119,17 @@ version(USE_PGSQL) {
                                  const int *paramLengths,
                                  const int *paramFormats,
                                  int resultFormat);
+
+        PGresult *PQexecParams(PGconn *conn,
+                               const char *command,
+                               int nParams,
+                               const Oid *paramTypes,
+                               const char * *paramValues,
+                               const int *paramLengths,
+                               const int *paramFormats,
+                               int resultFormat);
+
+        char *PQresultErrorMessage(const PGresult *res);
 
         const int BOOLOID = 16;
         const int BYTEAOID = 17;
