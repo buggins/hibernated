@@ -300,7 +300,7 @@ version(USE_PGSQL) {
     			ColumnMetadataItem item = new ColumnMetadataItem();
     			//item.schemaName = field.db;
     			item.name = copyCString(PQfname(res, i));
-    			//item.tableName = copyCString(PQfname(res, i));
+                //item.tableName = copyCString(PQftable(res, i));
     			int fmt = PQfformat(res, i);
     			ulong t = PQftype(res, i);
     			item.label = copyCString(PQfname(res, i));
@@ -334,8 +334,77 @@ version(USE_PGSQL) {
     		return conn;
     	}
 
+        private void fillData(PGresult * res, ref Variant[][] data) {
+            int rows = PQntuples(res);
+            int fieldCount = PQnfields(res);
+            int[] fmts = new int[fieldCount];
+            int[] types = new int[fieldCount];
+            for (int col = 0; col < fieldCount; col++) {
+                fmts[col] = PQfformat(res, col);
+                types[col] = cast(int)PQftype(res, col);
+            }
+            for (int row = 0; row < rows; row++) {
+                Variant[] v = new Variant[fieldCount];
+                for (int col = 0; col < fieldCount; col++) {
+                    int n = PQgetisnull(res, row, col);
+                    if (n != 0) {
+                        v[col] = null;
+                    } else {
+                        int len = PQgetlength(res, row, col);
+                        const char * value = PQgetvalue(res, row, col);
+                        int t = types[col];
+                        writeln("[" ~ to!string(row) ~ "][" ~ to!string(col) ~ "] type = " ~ to!string(t) ~ " len = " ~ to!string(len));
+                        if (fmts[col] == 0) {
+                            // text
+                            string s = copyCString(value, len);
+                            writeln("text: " ~ s);
+                            switch(t) {
+                                case INT4OID:
+                                    v[col] = parse!int(s);
+                                    break;
+                                case BOOLOID:
+                                    v[col] = s == "true" ? true : (s == "false" ? false : parse!int(s) != 0);
+                                    break;
+                                case CHAROID:
+                                    v[col] = cast(char)(s.length > 0 ? s[0] : 0);
+                                    break;
+                                case INT8OID:
+                                    v[col] = parse!long(s);
+                                    break;
+                                case INT2OID:
+                                    v[col] = parse!short(s);
+                                    break;
+                                case FLOAT4OID:
+                                    v[col] = parse!float(s);
+                                    break;
+                                case FLOAT8OID:
+                                    v[col] = parse!double(s);
+                                    break;
+                                case VARCHAROID:
+                                case TEXTOID:
+                                    v[col] = s;
+                                    break;
+                                case BYTEAOID:
+                                case NAMEOID:
+                                default:
+                                    throw new SQLException("Unsupported column type " ~ to!string(t));
+                            }
+                        } else {
+                            // binary
+                            writeln("binary:");
+                            byte[] b = new byte[len];
+                            for (int i=0; i<len; i++)
+                                b[i] = value[i];
+                            v[col] = b;
+                        }
+                    }
+                }
+                data ~= v;
+            }
+        }
+
     	override ddbc.core.ResultSet executeQuery(string query) {
-    		throw new SQLException("Not implemented");
+    		//throw new SQLException("Not implemented");
     		checkClosed();
     		lock();
     		scope(exit) unlock();
@@ -348,8 +417,13 @@ version(USE_PGSQL) {
 
     //		cmd = new Command(conn.getConnection(), query);
     //		rs = cmd.execSQLResult();
-    //		resultSet = new PGSQLResultSet(this, rs, createMetadata(cmd.getResultHeaders().getFieldDescriptions()));
-    //		return resultSet;
+            auto metadata = createMetadata(res);
+            int rows = PQntuples(res);
+            int fieldCount = PQnfields(res);
+            Variant[][] data;
+            fillData(res, data);
+            resultSet = new PGSQLResultSet(this, data, metadata);
+    		return resultSet;
     	}
 
     	string getError() {
@@ -662,7 +736,7 @@ version(USE_PGSQL) {
 
     class PGSQLResultSet : ResultSetImpl {
     	private PGSQLStatement stmt;
-    	private ddbc.drivers.mysql.ResultSet rs;
+        private Variant[][] data;
     	ResultSetMetaData metadata;
     	private bool closed;
     	private int currentRowIndex;
@@ -675,10 +749,8 @@ version(USE_PGSQL) {
     		checkClosed();
     		enforceEx!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
     		enforceEx!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
-    		lastIsNull = rs[currentRowIndex].isNull(columnIndex - 1);
-    		Variant res;
-    		if (!lastIsNull)
-    			res = rs[currentRowIndex][columnIndex - 1];
+    		Variant res = data[currentRowIndex][columnIndex - 1];
+            lastIsNull = (res == null);
     		return res;
     	}
     	
@@ -697,29 +769,25 @@ version(USE_PGSQL) {
     		stmt.unlock();
     	}
     	
-    	this(PGSQLStatement stmt, ddbc.drivers.mysql.ResultSet resultSet, ResultSetMetaData metadata) {
+    	this(PGSQLStatement stmt, Variant[][] data, ResultSetMetaData metadata) {
     		this.stmt = stmt;
-    		this.rs = resultSet;
+    		this.data = data;
     		this.metadata = metadata;
     		closed = false;
-    		rowCount = cast(int)rs.length;
+    		rowCount = cast(int)data.length;
     		currentRowIndex = -1;
-    		columnMap = rs.getColNameMap();
-    		columnCount = cast(int)rs.getColNames().length;
-    	}
+    		columnCount = metadata.getColumnCount();
+            for (int i=0; i<columnCount; i++) {
+                columnMap[metadata.getColumnName(i + 1)] = i;
+            }
+            writeln("created result set: " ~ to!string(rowCount) ~ " rows, " ~ to!string(columnCount) ~ " cols");
+        }
     	
     	void onStatementClosed() {
     		closed = true;
     	}
-    	string decodeTextBlob(ubyte[] data) {
-    		char[] res = new char[data.length];
-    		foreach (i, ch; data) {
-    			res[i] = cast(char)ch;
-    		}
-    		return to!string(res);
-    	}
-    	
-    	// ResultSet interface implementation
+
+        // ResultSet interface implementation
     	
     	//Retrieves the number, types and properties of this ResultSet object's columns
     	override ResultSetMetaData getMetaData() {
@@ -943,11 +1011,11 @@ version(USE_PGSQL) {
     		Variant v = getValue(columnIndex);
     		if (lastIsNull)
     			return null;
-    		if (v.convertsTo!(ubyte[])) {
-    			// assume blob encoding is utf-8
-    			// TODO: check field encoding
-    			return decodeTextBlob(v.get!(ubyte[]));
-    		}
+//    		if (v.convertsTo!(ubyte[])) {
+//    			// assume blob encoding is utf-8
+//    			// TODO: check field encoding
+//    			return decodeTextBlob(v.get!(ubyte[]));
+//    		}
     		return v.toString();
     	}
     	override std.datetime.DateTime getDateTime(int columnIndex) {
@@ -1010,7 +1078,7 @@ version(USE_PGSQL) {
     		scope(exit) unlock();
     		enforceEx!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
     		enforceEx!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
-    		return rs[currentRowIndex].isNull(columnIndex - 1);
+    		return data[currentRowIndex][columnIndex - 1] == null;
     	}
     	
     	//Retrieves the Statement object that produced this ResultSet object.
@@ -1077,7 +1145,46 @@ version(USE_PGSQL) {
     		auto conn = ds.getConnection();
     		assert(conn !is null);
     		scope(exit) conn.close();
-    	}
+            {
+                writeln("dropping table");
+                Statement stmt = conn.createStatement();
+                scope(exit) stmt.close();
+                stmt.executeUpdate("DROP TABLE IF EXISTS t1");
+            }
+            {
+                writeln("creating table");
+                Statement stmt = conn.createStatement();
+                scope(exit) stmt.close();
+                stmt.executeUpdate("CREATE TABLE IF NOT EXISTS t1 (id SERIAL, name VARCHAR(255) NOT NULL, flags int null)");
+                writeln("populating table");
+                stmt.executeUpdate("INSERT INTO t1 (name) VALUES ('test1'), ('test2')");
+            }
+//            {
+//                PreparedStatement stmt = conn.prepareStatement("INSERT INTO t1 (name) VALUES ('test1'), ('test2')");
+//                scope(exit) stmt.close();
+//                Variant id = 0;
+//                assert(stmt.executeUpdate(id) == 2);
+//                assert(id.get!long > 0);
+//            }
+            {
+                writeln("reading table");
+                Statement stmt = conn.createStatement();
+                scope(exit) stmt.close();
+                ResultSet rs = stmt.executeQuery("SELECT id, name, flags FROM t1");
+                assert(rs.getMetaData().getColumnCount() == 3);
+                assert(rs.getMetaData().getColumnName(1) == "id");
+                assert(rs.getMetaData().getColumnName(2) == "name");
+                assert(rs.getMetaData().getColumnName(3) == "flags");
+                scope(exit) rs.close();
+                writeln("id" ~ "\t" ~ "name");
+                while (rs.next()) {
+                    long id = rs.getLong(1);
+                    string name = rs.getString(2);
+                    assert(rs.isNull(3));
+                    writeln("" ~ to!string(id) ~ "\t" ~ name);
+                }
+            }
+        }
     }
 
 } else { // version(USE_PGSQL)
