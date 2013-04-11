@@ -95,7 +95,11 @@ version(USE_SQLITE) {
         }
         
     public:
-        
+
+        private string getError() {
+            return copyCString(sqlite3_errmsg(conn));
+        }
+
         void lock() {
             mutex.lock();
         }
@@ -121,10 +125,10 @@ version(USE_SQLITE) {
             if (url.startsWith("sqlite::"))
                 url = url[8 .. $];
             this.filename = url;
-            writeln("trying to connect");
+            //writeln("trying to connect");
             int res = sqlite3_open(toStringz(filename), &conn);
             if(res != SQLITE_OK)
-                throw new SQLException("SQLITE Error " ~ to!string(res) ~ " while trying to open DB " ~ filename);
+                throw new SQLException("SQLITE Error " ~ to!string(res) ~ " while trying to open DB " ~ filename ~ " : " ~ getError());
             assert(conn !is null);
             closed = false;
             setAutoCommit(true);
@@ -139,7 +143,7 @@ version(USE_SQLITE) {
             closeUnclosedStatements();
             int res = sqlite3_close(conn);
             if (res != SQLITE_OK)
-                throw new SQLException("SQLITE Error " ~ to!string(res) ~ " while trying to close DB " ~ filename);
+                throw new SQLException("SQLITE Error " ~ to!string(res) ~ " while trying to close DB " ~ filename ~ " : " ~ getError());
             closed = true;
         }
         
@@ -245,42 +249,6 @@ version(USE_SQLITE) {
             this.conn = conn;
         }
         
-    //    ResultSetMetaData createMetadata(PGresult * res) {
-    //        int rows = PQntuples(res);
-    //        int fieldCount = PQnfields(res);
-    //        ColumnMetadataItem[] list = new ColumnMetadataItem[fieldCount];
-    //        for(int i = 0; i < fieldCount; i++) {
-    //            ColumnMetadataItem item = new ColumnMetadataItem();
-    //            //item.schemaName = field.db;
-    //            item.name = copyCString(PQfname(res, i));
-    //            //item.tableName = copyCString(PQfname(res, i));
-    //            int fmt = PQfformat(res, i);
-    //            ulong t = PQftype(res, i);
-    //            item.label = copyCString(PQfname(res, i));
-    //            //item.precision = field.length;
-    //            //item.scale = field.scale;
-    //            //item.isNullable = !field.notNull;
-    //            //item.isSigned = !field.unsigned;
-    //            //item.type = fromSQLITEType(field.type);
-    //            //          // TODO: fill more params
-    //            list[i] = item;
-    //        }
-    //        return new ResultSetMetaDataImpl(list);
-    //    }
-        //  ParameterMetaData createMetadata(ParamDescription[] fields) {
-        //      ParameterMetaDataItem[] res = new ParameterMetaDataItem[fields.length];
-        //      foreach(i, field; fields) {
-        //          ParameterMetaDataItem item = new ParameterMetaDataItem();
-        //          item.precision = field.length;
-        //          item.scale = field.scale;
-        //          item.isNullable = !field.notNull;
-        //          item.isSigned = !field.unsigned;
-        //          item.type = fromSQLITEType(field.type);
-        //          // TODO: fill more params
-        //          res[i] = item;
-        //      }
-        //      return new ParameterMetaDataImpl(res);
-        //  }
     public:
         SQLITEConnection getConnection() {
             checkClosed();
@@ -357,7 +325,7 @@ version(USE_SQLITE) {
                 &stmt,  /* OUT: Statement handle */
                 null     /* OUT: Pointer to unused portion of zSql */
                 );
-            enforceEx!SQLException(res == SQLITE_OK, "Error #" ~ to!string(res) ~ " while preparing statement " ~ query);
+            enforceEx!SQLException(res == SQLITE_OK, "Error #" ~ to!string(res) ~ " while preparing statement " ~ query ~ " : " ~ conn.getError());
             paramMetadata = createParamMetadata();
             paramCount = paramMetadata.getParameterCount();
             metadata = createMetadata();
@@ -442,7 +410,7 @@ version(USE_SQLITE) {
 
             closeResultSet();
             int res = sqlite3_finalize(stmt);
-            enforceEx!SQLException(res == SQLITE_OK, "Error #" ~ to!string(res) ~ " while closing prepared statement " ~ query);
+            enforceEx!SQLException(res == SQLITE_OK, "Error #" ~ to!string(res) ~ " while closing prepared statement " ~ query ~ " : " ~ conn.getError());
             closed = true;
         }
 
@@ -480,7 +448,7 @@ version(USE_SQLITE) {
                 // row is available
                 rowsAffected = -1;
             } else {
-                enforceEx!SQLException(false, "Error #" ~ to!string(res) ~ " while trying to execute prepared statement: " ~ copyCString(sqlite3_errmsg(conn.getConnection())));
+                enforceEx!SQLException(false, "Error #" ~ to!string(res) ~ " while trying to execute prepared statement: "  ~ " : " ~ conn.getError());
             }
             return rowsAffected;
         }
@@ -561,7 +529,7 @@ version(USE_SQLITE) {
                 setNull(parameterIndex);
                 return;
             }
-            sqlite3_bind_blob(stmt, parameterIndex, cast(const char *)x.ptr, x.length, SQLITE_TRANSIENT);
+            sqlite3_bind_blob(stmt, parameterIndex, cast(const (void *))x.ptr, cast(int)x.length, SQLITE_TRANSIENT);
             paramIsSet[parameterIndex - 1] = true;
         }
         override void setUbytes(int parameterIndex, ubyte[] x) {
@@ -573,7 +541,7 @@ version(USE_SQLITE) {
                 setNull(parameterIndex);
                 return;
             }
-            sqlite3_bind_blob(stmt, parameterIndex, cast(const char *)x.ptr, x.length, SQLITE_TRANSIENT);
+            sqlite3_bind_blob(stmt, parameterIndex, cast(const char *)x.ptr, cast(int)x.length, SQLITE_TRANSIENT);
             paramIsSet[parameterIndex - 1] = true;
         }
         override void setString(int parameterIndex, string x) {
@@ -585,17 +553,17 @@ version(USE_SQLITE) {
                 setNull(parameterIndex);
                 return;
             }
-            sqlite3_bind_text(stmt, parameterIndex, cast(const char *)x.ptr, x.length, SQLITE_TRANSIENT);
+            sqlite3_bind_text(stmt, parameterIndex, cast(const char *)x.ptr, cast(int)x.length, SQLITE_TRANSIENT);
             paramIsSet[parameterIndex - 1] = true;
         }
         override void setDateTime(int parameterIndex, DateTime x) {
-            setString(parameterIndex, x.stringof);
+            setString(parameterIndex, x.toISOString());
         }
         override void setDate(int parameterIndex, Date x) {
-            setString(parameterIndex, x.stringof);
+            setString(parameterIndex, x.toISOString());
         }
         override void setTime(int parameterIndex, TimeOfDay x) {
-            setString(parameterIndex, x.stringof);
+            setString(parameterIndex, x.toISOString());
         }
         override void setVariant(int parameterIndex, Variant x) {
             if (x == null)
@@ -645,16 +613,6 @@ version(USE_SQLITE) {
 
         private bool _last;
         private bool _first;
-
-        Variant getValue(int columnIndex) {
-            checkClosed();
-            enforceEx!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
-            lastIsNull = false; //rs[currentRowIndex].isNull(columnIndex - 1);
-            Variant res;
-    //        if (!lastIsNull)
-    //            res = rs[currentRowIndex][columnIndex - 1];
-            return res;
-        }
 
         // checks index, updates lastIsNull, returns column type
         int checkIndex(int columnIndex) {
@@ -860,23 +818,38 @@ version(USE_SQLITE) {
                 res[i] = bytes[i];
             return cast(string)res;
         }
-        override std.datetime.DateTime getDateTime(int columnIndex) {
+        override DateTime getDateTime(int columnIndex) {
             string s = getString(columnIndex);
-            std.datetime.DateTime dt;
-            // TODO: convert
-            return dt;
+            DateTime dt;
+            if (s is null)
+                return dt;
+            try {
+                return DateTime.fromISOString(s);
+            } catch (Throwable e) {
+                throw new SQLException("Cannot convert string to DateTime - " ~ s);
+            }
         }
-        override std.datetime.Date getDate(int columnIndex) {
+        override Date getDate(int columnIndex) {
             string s = getString(columnIndex);
-            std.datetime.Date dt;
-            // TODO: convert
-            return dt;
+            Date dt;
+            if (s is null)
+                return dt;
+            try {
+                return Date.fromISOString(s);
+            } catch (Throwable e) {
+                throw new SQLException("Cannot convert string to DateTime - " ~ s);
+            }
         }
-        override std.datetime.TimeOfDay getTime(int columnIndex) {
+        override TimeOfDay getTime(int columnIndex) {
             string s = getString(columnIndex);
-            std.datetime.TimeOfDay dt;
-            // TODO: convert
-            return dt;
+            TimeOfDay dt;
+            if (s is null)
+                return dt;
+            try {
+                return TimeOfDay.fromISOString(s);
+            } catch (Throwable e) {
+                throw new SQLException("Cannot convert string to DateTime - " ~ s);
+            }
         }
         
         override Variant getVariant(int columnIndex) {
@@ -979,25 +952,25 @@ version(USE_SQLITE) {
             
             import std.conv;
             DataSource ds = createUnitTestSQLITEDataSource();
-            writeln("trying to open connection");        
+            //writeln("trying to open connection");        
             auto conn = ds.getConnection();
-            writeln("connection is opened");        
+            //writeln("connection is opened");        
             assert(conn !is null);
             scope(exit) conn.close();
             {
-                writeln("dropping table");
+                //writeln("dropping table");
                 Statement stmt = conn.createStatement();
                 scope(exit) stmt.close();
                 stmt.executeUpdate("DROP TABLE IF EXISTS t1");
             }
             {
-                writeln("creating table");
+                //writeln("creating table");
                 Statement stmt = conn.createStatement();
                 scope(exit) stmt.close();
                 stmt.executeUpdate("CREATE TABLE IF NOT EXISTS t1 (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL, flags int null)");
             }
             {
-                writeln("populating table");
+                //writeln("populating table");
                 PreparedStatement stmt = conn.prepareStatement("INSERT INTO t1 (name) VALUES ('test1'), ('test2')");
                 scope(exit) stmt.close();
                 Variant id = 0;
@@ -1005,7 +978,7 @@ version(USE_SQLITE) {
                 assert(id.get!long > 0);
             }
             {
-                writeln("reading table");
+                //writeln("reading table");
                 Statement stmt = conn.createStatement();
                 scope(exit) stmt.close();
                 ResultSet rs = stmt.executeQuery("SELECT id, name, flags FROM t1");
@@ -1014,16 +987,16 @@ version(USE_SQLITE) {
                 assert(rs.getMetaData().getColumnName(2) == "name");
                 assert(rs.getMetaData().getColumnName(3) == "flags");
                 scope(exit) rs.close();
-                writeln("id" ~ "\t" ~ "name");
+                //writeln("id" ~ "\t" ~ "name");
                 while (rs.next()) {
                     long id = rs.getLong(1);
                     string name = rs.getString(2);
                     assert(rs.isNull(3));
-                    writeln("" ~ to!string(id) ~ "\t" ~ name);
+                    //writeln("" ~ to!string(id) ~ "\t" ~ name);
                 }
             }
             {
-                writeln("reading table with parameter id=1");
+                //writeln("reading table with parameter id=1");
                 PreparedStatement stmt = conn.prepareStatement("SELECT id, name, flags FROM t1 WHERE id = ?");
                 scope(exit) stmt.close();
                 assert(stmt.getMetaData().getColumnCount() == 3);
@@ -1034,24 +1007,24 @@ version(USE_SQLITE) {
                 {
                     ResultSet rs = stmt.executeQuery();
                     scope(exit) rs.close();
-                    writeln("id" ~ "\t" ~ "name");
+                    //writeln("id" ~ "\t" ~ "name");
                     while (rs.next()) {
                         long id = rs.getLong(1);
                         string name = rs.getString(2);
                         assert(rs.isNull(3));
-                        writeln("" ~ to!string(id) ~ "\t" ~ name);
+                        //writeln("" ~ to!string(id) ~ "\t" ~ name);
                     }
                 }
-                writeln("changing parameter id=2");
+                //writeln("changing parameter id=2");
                 stmt.setLong(1, 2);
                 {
                     ResultSet rs = stmt.executeQuery();
                     scope(exit) rs.close();
-                    writeln("id" ~ "\t" ~ "name");
+                    //writeln("id" ~ "\t" ~ "name");
                     while (rs.next()) {
                         long id = rs.getLong(1);
                         string name = rs.getString(2);
-                        writeln("" ~ to!string(id) ~ "\t" ~ name);
+                        //writeln("" ~ to!string(id) ~ "\t" ~ name);
                     }
                 }
             }

@@ -81,7 +81,9 @@ abstract class Dialect {
     string getCheckTableExistsSQL(string tableName) {
         return "SHOW TABLES LIKE " ~ quoteSqlString(tableName);
     }
-
+    string getUniqueIndexItemSQL(string indexName, string[] columnNames) {
+        return "UNIQUE INDEX " ~ quoteIfNeeded(indexName) ~ " " ~ createFieldListSQL(columnNames);
+    }
     /// returns comma separated quoted identifier list in () parenthesis
     string createFieldListSQL(string[] fields) {
         string res;
@@ -391,5 +393,14 @@ abstract class Dialect {
     ///Does the LIMIT clause take a "maximum" row number instead of a total number of returned rows? This is easiest understood via an example.
     bool    useMaxForLimit();
 +/
+}
+
+
+
+version (USE_MYSQL) {
+} else version (USE_SQLITE) {
+} else version (USE_PGSQL) {
+} else {
+    pragma(msg, "No DB type version definition specified. Add one or more versions to command line: USE_MYSQL, USE_PGSQL, USE_SQLITE");
 }
 

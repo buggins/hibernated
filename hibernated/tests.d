@@ -201,7 +201,9 @@ version(unittest) {
     import ddbc.drivers.pgsqlddbc;
     import ddbc.drivers.sqliteddbc;
     import ddbc.common;
-    
+    import hibernated.dialects.mysqldialect;
+    import hibernated.dialects.sqlitedialect;
+
     
     string[] UNIT_TEST_DROP_TABLES_SCRIPT = 
         [
@@ -229,35 +231,35 @@ version(unittest) {
          ];
     string[] UNIT_TEST_FILL_TABLES_SCRIPT = 
         [
-         "INSERT INTO role SET id=1, name='admin'",
-         "INSERT INTO role SET id=2, name='viewer'",
-         "INSERT INTO role SET id=3, name='editor'",
-         "INSERT INTO account_type SET id=1, name='Type1'",
-         "INSERT INTO account_type SET id=2, name='Type2'",
-         "INSERT INTO customers SET id=1, name='customer 1', zip='12345', account_type_fk=1",
-         "INSERT INTO customers SET id=2, name='customer 2', zip='54321'",
-         "INSERT INTO customers SET id=3, name='customer 3', street_address='Baker Street, 24', account_type_fk=2",
-         "INSERT INTO users SET id=1, name='user 1', flags=11,   comment='comments for user 1', customer_fk=1",
-         "INSERT INTO users SET id=2, name='user 2', flags=22,   comment='this user belongs to customer 1', customer_fk=1",
-         "INSERT INTO users SET id=3, name='user 3', flags=NULL, comment='this user belongs to customer 2', customer_fk=2",
-         "INSERT INTO users SET id=4, name='user 4', flags=44,   comment=NULL, customer_fk=3",
-         "INSERT INTO users SET id=5, name='test user 5', flags=55,   comment='this user belongs to customer 3, too', customer_fk=3",
-         "INSERT INTO users SET id=6, name='test user 6', flags=66,   comment='for checking of Nullable!long reading', customer_fk=null",
-         "INSERT INTO person_info SET id=3, flags=123",
-         "INSERT INTO person_info SET id=4, flags=234",
-         "INSERT INTO person_info SET id=5, flags=345",
-         "INSERT INTO person_info2 SET id=10, flags=1, person_info_fk=3",
-         "INSERT INTO person_info2 SET id=11, flags=2, person_info_fk=4",
-         "INSERT INTO person SET id=1, first_name='Andrei', last_name='Alexandrescu', more_info_fk=3",
-         "INSERT INTO person SET id=2, first_name='Walter', last_name='Bright', more_info_fk=4",
-         "INSERT INTO person SET id=3, first_name='John', last_name='Smith', more_info_fk=5",
-         "INSERT INTO role_users SET role_fk=1, user_fk=1",
-         "INSERT INTO role_users SET role_fk=2, user_fk=1",
-         "INSERT INTO role_users SET role_fk=2, user_fk=2",
-         "INSERT INTO role_users SET role_fk=2, user_fk=3",
-         "INSERT INTO role_users SET role_fk=3, user_fk=2",
-         "INSERT INTO role_users SET role_fk=3, user_fk=3",
-         "INSERT INTO role_users SET role_fk=3, user_fk=5",
+         "INSERT INTO role (id, name) VALUES (1, 'admin')",
+         "INSERT INTO role (id, name) VALUES (2, 'viewer')",
+         "INSERT INTO role (id, name) VALUES (3, 'editor')",
+         "INSERT INTO account_type (id, name) VALUES (1, 'Type1')",
+         "INSERT INTO account_type (id, name) VALUES (2, 'Type2')",
+         "INSERT INTO customers (id, name, zip, account_type_fk) VALUES (1, 'customer 1', '12345', 1)",
+         "INSERT INTO customers (id, name, zip) VALUES (2, 'customer 2', '54321')",
+         "INSERT INTO customers (id, name, street_address, account_type_fk) VALUES (3, 'customer 3', 'Baker Street, 24', 2)",
+         "INSERT INTO users (id, name, flags, comment, customer_fk) VALUES (1, 'user 1', 11, 'comments for user 1', 1)",
+         "INSERT INTO users (id, name, flags, comment, customer_fk) VALUES (2, 'user 2', 22, 'this user belongs to customer 1', 1)",
+         "INSERT INTO users (id, name, flags, comment, customer_fk) VALUES (3, 'user 3', NULL, 'this user belongs to customer 2', 2)",
+         "INSERT INTO users (id, name, flags, comment, customer_fk) VALUES (4, 'user 4', 44,   NULL, 3)",
+         "INSERT INTO users (id, name, flags, comment, customer_fk) VALUES (5, 'test user 5', 55, 'this user belongs to customer 3, too', 3)",
+         "INSERT INTO users (id, name, flags, comment, customer_fk) VALUES (6, 'test user 6', 66, 'for checking of Nullable!long reading', null)",
+         "INSERT INTO person_info (id, flags) VALUES (3, 123)",
+         "INSERT INTO person_info (id, flags) VALUES (4, 234)",
+         "INSERT INTO person_info (id, flags) VALUES (5, 345)",
+         "INSERT INTO person_info2 (id, flags, person_info_fk) VALUES (10, 1, 3)",
+         "INSERT INTO person_info2 (id, flags, person_info_fk) VALUES (11, 2, 4)",
+         "INSERT INTO person (id, first_name, last_name, more_info_fk) VALUES (1, 'Andrei', 'Alexandrescu', 3)",
+         "INSERT INTO person (id, first_name, last_name, more_info_fk) VALUES (2, 'Walter', 'Bright', 4)",
+         "INSERT INTO person (id, first_name, last_name, more_info_fk) VALUES (3, 'John', 'Smith', 5)",
+         "INSERT INTO role_users (role_fk, user_fk) VALUES (1, 1)",
+         "INSERT INTO role_users (role_fk, user_fk) VALUES (2, 1)",
+         "INSERT INTO role_users (role_fk, user_fk) VALUES (2, 2)",
+         "INSERT INTO role_users (role_fk, user_fk) VALUES (2, 3)",
+         "INSERT INTO role_users (role_fk, user_fk) VALUES (3, 2)",
+         "INSERT INTO role_users (role_fk, user_fk) VALUES (3, 3)",
+         "INSERT INTO role_users (role_fk, user_fk) VALUES (3, 5)",
          ];
 
     void recreateTestSchema(bool dropTables, bool createTables, bool fillTables) {
@@ -276,19 +278,36 @@ version(unittest) {
 
     immutable bool DB_TESTS_ENABLED = SQLITE_TESTS_ENABLED || MYSQL_TESTS_ENABLED || PGSQL_TESTS_ENABLED;
 
+
     package DataSource _unitTestConnectionPool;
     /// will return null if DB tests are disabled
     DataSource getUnitTestDataSource() {
         if (_unitTestConnectionPool is null) {
             static if (MYSQL_TESTS_ENABLED) {
+                pragma(msg, "Will use MySQL for unit tests");
                 _unitTestConnectionPool = createUnitTestMySQLDataSource();
             } else static if (SQLITE_TESTS_ENABLED) {
+                pragma(msg, "Will use SQLite for unit tests");
                 _unitTestConnectionPool = createUnitTestSQLITEDataSource();
             } else static if (PGSQL_TESTS_ENABLED) {
+                pragma(msg, "Will use PGSQL for unit tests");
                 _unitTestConnectionPool = createUnitTestPGSQLDataSource();
             }
         }
         return _unitTestConnectionPool;
+    }
+    Dialect getUnitTestDialect() {
+
+        static if (MYSQL_TESTS_ENABLED) {
+            return new MySQLDialect();
+        } else static if (SQLITE_TESTS_ENABLED) {
+            return new SQLiteDialect();
+        } else static if (PGSQL_TESTS_ENABLED) {
+            // TODO: implement PGSQLDialect
+            return new MySQLDialect();
+        } else {
+            return null; // disabled
+        }
     }
 
     void closeUnitTestDataSource() {
@@ -417,31 +436,42 @@ unittest {
 }
 
 unittest {
-    if (MYSQL_TESTS_ENABLED) {
+    if (DB_TESTS_ENABLED) {
         recreateTestSchema(true, false, false);
 
-        import hibernated.dialects.mysqldialect;
 
         //writeln("metadata test 2");
         
         // Checking generated metadata
         EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, T1, TypeTest, Address, Role, GeneratorTest, Person, MoreInfo, EvenMoreInfo);
-        Dialect dialect = new MySQLDialect();
+        Dialect dialect = getUnitTestDialect();
 
         DBInfo db = new DBInfo(dialect, schema);
         string[] createTables = db.getCreateTableSQL();
-        foreach(t; createTables)
-            writeln(t);
+//        foreach(t; createTables)
+//            writeln(t);
         string[] createIndexes = db.getCreateIndexSQL();
-        foreach(t; createIndexes)
-            writeln(t);
-        assert(db["users"].getCreateTableSQL() == "CREATE TABLE users (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags BIGINT NULL, comment VARCHAR(1024) NULL, customer_fk INT NULL)");
-        assert(db["customers"].getCreateTableSQL() == "CREATE TABLE customers (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, zip VARCHAR(255) NULL, city VARCHAR(255) NULL, street_address VARCHAR(255) NULL, account_type_fk INT NULL)");
-        assert(db["account_type"].getCreateTableSQL() == "CREATE TABLE account_type (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)");
-        assert(db["t1"].getCreateTableSQL() == "CREATE TABLE t1 (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags BIGINT NOT NULL, comment VARCHAR(255) NULL)");
-        assert(db["role"].getCreateTableSQL() == "CREATE TABLE role (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)");
-        assert(db["generator_test"].getCreateTableSQL() == "CREATE TABLE generator_test (id VARCHAR(255) NOT NULL PRIMARY KEY, name VARCHAR(255) NOT NULL)");
-        assert(db["role_users"].getCreateTableSQL() == "CREATE TABLE role_users (role_fk INT NOT NULL, user_fk BIGINT NOT NULL, PRIMARY KEY (role_fk, user_fk), UNIQUE INDEX role_users_reverse_index (user_fk, role_fk))");
+//        foreach(t; createIndexes)
+//            writeln(t);
+        static if (MYSQL_TESTS_ENABLED) {
+            assert(db["users"].getCreateTableSQL() == "CREATE TABLE users (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags BIGINT NULL, comment VARCHAR(1024) NULL, customer_fk INT NULL)");
+            assert(db["customers"].getCreateTableSQL() == "CREATE TABLE customers (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, zip VARCHAR(255) NULL, city VARCHAR(255) NULL, street_address VARCHAR(255) NULL, account_type_fk INT NULL)");
+            assert(db["account_type"].getCreateTableSQL() == "CREATE TABLE account_type (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)");
+            assert(db["t1"].getCreateTableSQL() == "CREATE TABLE t1 (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags BIGINT NOT NULL, comment VARCHAR(255) NULL)");
+            assert(db["role"].getCreateTableSQL() == "CREATE TABLE role (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)");
+            assert(db["generator_test"].getCreateTableSQL() == "CREATE TABLE generator_test (id VARCHAR(255) NOT NULL PRIMARY KEY, name VARCHAR(255) NOT NULL)");
+            assert(db["role_users"].getCreateTableSQL() == "CREATE TABLE role_users (role_fk INT NOT NULL, user_fk BIGINT NOT NULL, PRIMARY KEY (role_fk, user_fk), UNIQUE INDEX role_users_reverse_index (user_fk, role_fk))");
+        } else static if (SQLITE_TESTS_ENABLED) {
+            assert(db["users"].getCreateTableSQL() == "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, flags INT NULL, comment TEXT NULL, customer_fk INT NULL)");
+            assert(db["customers"].getCreateTableSQL() == "CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL, zip TEXT NULL, city TEXT NULL, street_address TEXT NULL, account_type_fk INT NULL)");
+            assert(db["account_type"].getCreateTableSQL() == "CREATE TABLE account_type (id INTEGER PRIMARY KEY, name TEXT NOT NULL)");
+            assert(db["t1"].getCreateTableSQL() == "CREATE TABLE t1 (id INTEGER PRIMARY KEY, name TEXT NOT NULL, flags INT NOT NULL, comment TEXT NULL)");
+            assert(db["role"].getCreateTableSQL() == "CREATE TABLE role (id INTEGER PRIMARY KEY, name TEXT NOT NULL)");
+            assert(db["generator_test"].getCreateTableSQL() == "CREATE TABLE generator_test (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL)");
+            assert(db["role_users"].getCreateTableSQL() == "CREATE TABLE role_users (role_fk INT NOT NULL, user_fk INT NOT NULL, PRIMARY KEY (role_fk, user_fk), UNIQUE (user_fk, role_fk))");
+        } else static if (PGSQL_TESTS_ENABLED) {
+        }
+
 
 
         DataSource ds = getUnitTestDataSource();
@@ -822,14 +852,14 @@ unittest {
         assert(m[Variant(2)].length == 2);
     }
     
-    if (MYSQL_TESTS_ENABLED) {
+    if (DB_TESTS_ENABLED) {
         //recreateTestSchema();
         
         //writeln("metadata test 2");
         import hibernated.dialects.mysqldialect;
         
         // Checking generated metadata
-        Dialect dialect = new MySQLDialect();
+        Dialect dialect = getUnitTestDialect();
         DataSource ds = getUnitTestDataSource();
         if (ds is null)
             return; // DB tests disabled

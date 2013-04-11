@@ -3453,7 +3453,7 @@ class TableInfo {
         addColumn(c1);
         addColumn(c2);
         pkDef = "PRIMARY KEY (" ~ schema.dialect.quoteIfNeeded(c1.columnName) ~ ", " ~ schema.dialect.quoteIfNeeded(c2.columnName) ~ "), " ~
-            "UNIQUE INDEX " ~ tableName ~ "_reverse_index (" ~ schema.dialect.quoteIfNeeded(c2.columnName) ~ ", " ~ schema.dialect.quoteIfNeeded(c1.columnName) ~ ")";
+            schema.dialect.getUniqueIndexItemSQL(tableName ~ "_reverse_index", [c2.columnName, c1.columnName]);
         addForeignKey(tableName, entity, joinTable.column1, null);
         addForeignKey(tableName, entity2, joinTable.column2, null);
     }
