@@ -381,10 +381,10 @@ version(USE_PGSQL) {
                                     break;
                                 case VARCHAROID:
                                 case TEXTOID:
+                                case NAMEOID:
                                     v[col] = s;
                                     break;
                                 case BYTEAOID:
-                                case NAMEOID:
                                 default:
                                     throw new SQLException("Unsupported column type " ~ to!string(t));
                             }
@@ -546,7 +546,7 @@ version(USE_PGSQL) {
 //                                null);
 //            enforceEx!SQLException(rs !is null, "Error while preparing statement " ~ query);
 //            auto status = PQresultStatus(rs);
-            writeln("prepare paramCount = " ~ to!string(paramCount));
+            //writeln("prepare paramCount = " ~ to!string(paramCount));
 //            enforceEx!SQLException(status == PGRES_COMMAND_OK || status == PGRES_TUPLES_OK, "Error while preparing statement " ~ query ~ " : " ~ getError(rs));
 //            metadata = createMetadata(rs);
             //scope(exit) PQclear(rs);
@@ -873,7 +873,7 @@ version(USE_PGSQL) {
             for (int i=0; i<columnCount; i++) {
                 columnMap[metadata.getColumnName(i + 1)] = i;
             }
-            writeln("created result set: " ~ to!string(rowCount) ~ " rows, " ~ to!string(columnCount) ~ " cols");
+            //writeln("created result set: " ~ to!string(rowCount) ~ " rows, " ~ to!string(columnCount) ~ " cols");
         }
     	
     	void onStatementClosed() {

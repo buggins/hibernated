@@ -203,6 +203,7 @@ version(unittest) {
     import ddbc.common;
     import hibernated.dialects.mysqldialect;
     import hibernated.dialects.sqlitedialect;
+    import hibernated.dialects.pgsqldialect;
 
     
     string[] UNIT_TEST_DROP_TABLES_SCRIPT = 
@@ -303,8 +304,7 @@ version(unittest) {
         } else static if (SQLITE_TESTS_ENABLED) {
             return new SQLiteDialect();
         } else static if (PGSQL_TESTS_ENABLED) {
-            // TODO: implement PGSQLDialect
-            return new MySQLDialect();
+            return new PGSQLDialect();
         } else {
             return null; // disabled
         }
