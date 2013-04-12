@@ -154,7 +154,7 @@ version(USE_PGSQL) {
 
     		const char ** keywords = [std.string.toStringz("host"), std.string.toStringz("port"), std.string.toStringz("dbname"), std.string.toStringz("user"), std.string.toStringz("password"), null].ptr;
     		const char ** values = [std.string.toStringz(hostname), std.string.toStringz(to!string(port)), std.string.toStringz(dbName), std.string.toStringz(username), std.string.toStringz(password), null].ptr;
-    		writeln("trying to connect");
+    		//writeln("trying to connect");
     		conn = PQconnectdbParams(keywords, values, 0);
     		if(conn is null)
     			throw new SQLException("Cannot get Postgres connection");
@@ -385,6 +385,8 @@ version(USE_PGSQL) {
                                     v[col] = s;
                                     break;
                                 case BYTEAOID:
+                                    v[col] = byteaToUbytes(s);
+                                    break;
                                 default:
                                     throw new SQLException("Unsupported column type " ~ to!string(t));
                             }
@@ -675,29 +677,23 @@ version(USE_PGSQL) {
     	}
     	
     	override void setFloat(int parameterIndex, float x) {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		checkIndex(parameterIndex);
-    //		cmd.param(parameterIndex-1) = x;
-    	}
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            setParam(parameterIndex, to!string(x));
+        }
     	override void setDouble(int parameterIndex, double x){
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		checkIndex(parameterIndex);
-    //		cmd.param(parameterIndex-1) = x;
-    	}
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            setParam(parameterIndex, to!string(x));
+        }
     	override void setBoolean(int parameterIndex, bool x) {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		checkIndex(parameterIndex);
-    //		cmd.param(parameterIndex-1) = x;
-    	}
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            setParam(parameterIndex, x ? "true" : "false");
+        }
     	override void setLong(int parameterIndex, long x) {
     		checkClosed();
     		lock();
@@ -756,27 +752,11 @@ version(USE_PGSQL) {
         }
    
         override void setBytes(int parameterIndex, byte[] x) {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		checkIndex(parameterIndex);
-    //		if (x == null)
-    //			setNull(parameterIndex);
-    //		else
-    //			cmd.param(parameterIndex-1) = x;
-    	}
+            setString(parameterIndex, bytesToBytea(x));
+        }
     	override void setUbytes(int parameterIndex, ubyte[] x) {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		checkIndex(parameterIndex);
-    //		if (x == null)
-    //			setNull(parameterIndex);
-    //		else
-    //			cmd.param(parameterIndex-1) = x;
-    	}
+            setString(parameterIndex, ubytesToBytea(x));
+        }
     	override void setString(int parameterIndex, string x) {
             checkClosed();
             lock();
@@ -784,42 +764,41 @@ version(USE_PGSQL) {
             setParam(parameterIndex, x);
         }
     	override void setDateTime(int parameterIndex, DateTime x) {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		checkIndex(parameterIndex);
-    //		cmd.param(parameterIndex-1) = x;
-    	}
+            setString(parameterIndex, x.toISOString());
+        }
     	override void setDate(int parameterIndex, Date x) {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		checkIndex(parameterIndex);
-    //		cmd.param(parameterIndex-1) = x;
-    	}
+            setString(parameterIndex, x.toISOString());
+        }
     	override void setTime(int parameterIndex, TimeOfDay x) {
-    		throw new SQLException("Not implemented");
-    //		checkClosed();
-    //		lock();
-    //		scope(exit) unlock();
-    //		checkIndex(parameterIndex);
-    //		cmd.param(parameterIndex-1) = x;
-    	}
+            setString(parameterIndex, x.toISOString());
+        }
+
     	override void setVariant(int parameterIndex, Variant x) {
             checkClosed();
             lock();
             scope(exit) unlock();
-            setParam(parameterIndex, x.toString);
+            if (x.convertsTo!DateTime)
+                setDateTime(parameterIndex, x.get!DateTime);
+            else if (x.convertsTo!Date)
+                setDate(parameterIndex, x.get!Date);
+            else if (x.convertsTo!TimeOfDay)
+                setTime(parameterIndex, x.get!TimeOfDay);
+            else if (x.convertsTo!(byte[]))
+                setBytes(parameterIndex, x.get!(byte[]));
+            else if (x.convertsTo!(ubyte[]))
+                setUbytes(parameterIndex, x.get!(ubyte[]));
+            else
+                setParam(parameterIndex, x.toString);
         }
-    	override void setNull(int parameterIndex) {
+
+        override void setNull(int parameterIndex) {
             checkClosed();
             lock();
             scope(exit) unlock();
             setParam(parameterIndex, null);
         }
-    	override void setNull(int parameterIndex, int sqlType) {
+
+        override void setNull(int parameterIndex, int sqlType) {
             checkClosed();
             lock();
             scope(exit) unlock();
@@ -1083,7 +1062,7 @@ version(USE_PGSQL) {
     		if (v.convertsTo!(byte[])) {
     			return v.get!(byte[]);
     		}
-    		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to byte[]");
+            return byteaToBytes(v.toString);
     	}
     	override ubyte[] getUbytes(int columnIndex) {
     		checkClosed();
@@ -1095,8 +1074,8 @@ version(USE_PGSQL) {
     		if (v.convertsTo!(ubyte[])) {
     			return v.get!(ubyte[]);
     		}
-    		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to ubyte[]");
-    	}
+            return byteaToUbytes(v.toString);
+        }
     	override string getString(int columnIndex) {
     		checkClosed();
     		lock();
@@ -1239,17 +1218,17 @@ version(USE_PGSQL) {
     		assert(conn !is null);
     		scope(exit) conn.close();
             {
-                writeln("dropping table");
+                //writeln("dropping table");
                 Statement stmt = conn.createStatement();
                 scope(exit) stmt.close();
                 stmt.executeUpdate("DROP TABLE IF EXISTS t1");
             }
             {
-                writeln("creating table");
+                //writeln("creating table");
                 Statement stmt = conn.createStatement();
                 scope(exit) stmt.close();
                 stmt.executeUpdate("CREATE TABLE IF NOT EXISTS t1 (id SERIAL, name VARCHAR(255) NOT NULL, flags int null)");
-                writeln("populating table");
+                //writeln("populating table");
                 Variant id = 0;
                 assert(stmt.executeUpdate("INSERT INTO t1 (name) VALUES ('test1') returning id", id) == 1);
                 assert(id.get!long > 0);
@@ -1262,7 +1241,7 @@ version(USE_PGSQL) {
                 assert(id.get!long > 0);
             }
             {
-                writeln("reading table");
+                //writeln("reading table");
                 Statement stmt = conn.createStatement();
                 scope(exit) stmt.close();
                 ResultSet rs = stmt.executeQuery("SELECT id, name, flags FROM t1");
@@ -1271,16 +1250,16 @@ version(USE_PGSQL) {
                 assert(rs.getMetaData().getColumnName(2) == "name");
                 assert(rs.getMetaData().getColumnName(3) == "flags");
                 scope(exit) rs.close();
-                writeln("id" ~ "\t" ~ "name");
+                //writeln("id" ~ "\t" ~ "name");
                 while (rs.next()) {
                     long id = rs.getLong(1);
                     string name = rs.getString(2);
                     assert(rs.isNull(3));
-                    writeln("" ~ to!string(id) ~ "\t" ~ name);
+                    //writeln("" ~ to!string(id) ~ "\t" ~ name);
                 }
             }
             {
-                writeln("reading table");
+                //writeln("reading table");
                 Statement stmt = conn.createStatement();
                 scope(exit) stmt.close();
                 ResultSet rs = stmt.executeQuery("SELECT id, name, flags FROM t1");
@@ -1289,18 +1268,18 @@ version(USE_PGSQL) {
                 assert(rs.getMetaData().getColumnName(2) == "name");
                 assert(rs.getMetaData().getColumnName(3) == "flags");
                 scope(exit) rs.close();
-                writeln("id" ~ "\t" ~ "name");
+                //writeln("id" ~ "\t" ~ "name");
                 while (rs.next()) {
                     //writeln("calling getLong");
                     long id = rs.getLong(1);
                     //writeln("done getLong");
                     string name = rs.getString(2);
                     assert(rs.isNull(3));
-                    writeln("" ~ to!string(id) ~ "\t" ~ name);
+                    //writeln("" ~ to!string(id) ~ "\t" ~ name);
                 }
             }
             {
-                writeln("reading table with parameter id=1");
+                //writeln("reading table with parameter id=1");
                 PreparedStatement stmt = conn.prepareStatement("SELECT id, name, flags FROM t1 WHERE id = ?");
                 scope(exit) stmt.close();
 //                assert(stmt.getMetaData().getColumnCount() == 3);
@@ -1313,26 +1292,26 @@ version(USE_PGSQL) {
                 {
                     ResultSet rs = stmt.executeQuery();
                     scope(exit) rs.close();
-                    writeln("id" ~ "\t" ~ "name");
+                    //writeln("id" ~ "\t" ~ "name");
                     while (rs.next()) {
                         long id = rs.getLong(1);
                         string name = rs.getString(2);
                         assert(rs.isNull(3));
-                        writeln("" ~ to!string(id) ~ "\t" ~ name);
+                        //writeln("" ~ to!string(id) ~ "\t" ~ name);
                     }
                 }
-                writeln("changing parameter id=2");
+                //writeln("changing parameter id=2");
                 //writeln("calling setLong");
                 stmt.setLong(1, 2);
                 //writeln("done setLong");
                 {
                     ResultSet rs = stmt.executeQuery();
                     scope(exit) rs.close();
-                    writeln("id" ~ "\t" ~ "name");
+                    //writeln("id" ~ "\t" ~ "name");
                     while (rs.next()) {
                         long id = rs.getLong(1);
                         string name = rs.getString(2);
-                        writeln("" ~ to!string(id) ~ "\t" ~ name);
+                        //writeln("" ~ to!string(id) ~ "\t" ~ name);
                     }
                 }
             }

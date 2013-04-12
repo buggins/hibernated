@@ -46,6 +46,118 @@ version(USE_PGSQL) {
         pragma (msg, "You will need to manually link in the LIBPQ library.");
     } 
 
+
+    string bytesToBytea(byte[] bytes) {
+        if (bytes is null)
+            return null;
+        string res;
+        foreach(b; bytes) {
+            if (b == 0)
+                res ~= "\\0";
+            else if (b == '\r')
+                res ~= "\\r";
+            else if (b == '\n')
+                res ~= "\\n";
+            else if (b == '\t')
+                res ~= "\\t";
+            else if (b == '\\')
+                res ~= "\\\\";
+            else
+                res ~= cast(char)b;
+        }
+        return res;
+    }
+
+    string ubytesToBytea(ubyte[] bytes) {
+        if (bytes is null)
+            return null;
+        string res;
+        foreach(b; bytes) {
+            if (b == 0)
+                res ~= "\\0";
+            else if (b == '\r')
+                res ~= "\\r";
+            else if (b == '\n')
+                res ~= "\\n";
+            else if (b == '\t')
+                res ~= "\\t";
+            else if (b == '\\')
+                res ~= "\\\\";
+            else
+                res ~= cast(char)b;
+        }
+        return res;
+    }
+
+    byte[] byteaToBytes(string s) {
+        if (s is null)
+            return null;
+        byte[] res;
+        bool lastBackSlash = 0;
+        foreach(ch; s) {
+            if (ch == '\\') {
+                if (lastBackSlash) {
+                    res ~= '\\';
+                    lastBackSlash = false;
+                } else {
+                    lastBackSlash = true;
+                }
+            } else {
+                if (lastBackSlash) {
+                    if (ch == '0') {
+                        res ~= 0;
+                    } else if (ch == 'r') {
+                        res ~= '\r';
+                    } else if (ch == 'n') {
+                        res ~= '\n';
+                    } else if (ch == 't') {
+                        res ~= '\t';
+                    } else {
+                    }
+                } else {
+                    res ~= cast(byte)ch;
+                }
+                lastBackSlash = false;
+            }
+        }
+        return res;
+    }
+
+    ubyte[] byteaToUbytes(string s) {
+        if (s is null)
+            return null;
+        ubyte[] res;
+        bool lastBackSlash = 0;
+        foreach(ch; s) {
+            if (ch == '\\') {
+                if (lastBackSlash) {
+                    res ~= '\\';
+                    lastBackSlash = false;
+                } else {
+                    lastBackSlash = true;
+                }
+            } else {
+                if (lastBackSlash) {
+                    if (ch == '0') {
+                        res ~= 0;
+                    } else if (ch == 'r') {
+                        res ~= '\r';
+                    } else if (ch == 'n') {
+                        res ~= '\n';
+                    } else if (ch == 't') {
+                        res ~= '\t';
+                    } else {
+                    }
+                } else {
+                    res ~= cast(byte)ch;
+                }
+                lastBackSlash = false;
+            }
+        }
+        return res;
+    }
+    
+
     // C interface of libpq is taken from https://github.com/adamdruppe/misc-stuff-including-D-programming-language-web-stuff/blob/master/postgres.d
     
 
