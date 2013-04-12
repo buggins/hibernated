@@ -224,7 +224,11 @@ class PGSQLDialect : Dialect {
         return "UNIQUE " ~ createFieldListSQL(columnNames);
     }
     
-    
+    /// for some of RDBMS it's necessary to pass additional clauses in query to get generated value (e.g. in Postgres - " returing id"
+    override string appendInsertToFetchGeneratedKey(string query, const EntityInfo entity) {
+        return query ~ " RETURNING " ~ quoteIfNeeded(entity.getKeyProperty().columnName);
+    }
+
     this() {
         addKeywords(PGSQL_RESERVED_WORDS);
     }

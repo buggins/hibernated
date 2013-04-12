@@ -84,6 +84,12 @@ abstract class Dialect {
     string getUniqueIndexItemSQL(string indexName, string[] columnNames) {
         return "UNIQUE INDEX " ~ quoteIfNeeded(indexName) ~ " " ~ createFieldListSQL(columnNames);
     }
+
+    /// for some of RDBMS it's necessary to pass additional clauses in query to get generated value (e.g. in Postgres - " returing id"
+    string appendInsertToFetchGeneratedKey(string query, const EntityInfo entity) {
+        return query;
+    }
+
     /// returns comma separated quoted identifier list in () parenthesis
     string createFieldListSQL(string[] fields) {
         string res;
