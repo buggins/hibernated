@@ -2,10 +2,10 @@
     "name": "hibernated",
     "description": "ORM for D language, similar to Hibernate",
     "authors": ["Vadim Lopatin"],
-    "homepage": "https://github.com/buggins/ddbc",
+    "homepage": "https://github.com/buggins/hibernated",
     "license": "Boost Software License (BSL 1.0)",
     "dependencies": {
-        "ddbc": ">=0.2.4"
+        "ddbc": "~master"
     },
     "targetType": "staticLibrary",
     "configurations": [
