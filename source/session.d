@@ -573,7 +573,7 @@ class SessionImpl : Session {
 	override void persist(Object obj) {
         auto info = metaData.findEntityForObject(obj);
         enforceEx!TransientObjectException(info.isKeySet(obj), "Cannot persist entity w/o key assigned");
-		string query = metaData.generateInsertAllFieldsForEntity(info);;
+		string query = metaData.generateInsertAllFieldsForEntity(info);
 		PreparedStatement stmt = conn.prepareStatement(query);
 		scope(exit) stmt.close();
 		metaData.writeAllColumns(obj, stmt, 1);
@@ -708,7 +708,7 @@ Variant normalize(Variant v) {
         return Variant(v.get!long);
     else if (v.convertsTo!ulong)
         return Variant(v.get!ulong);
-    return Variant(v.toString);
+    return Variant(v.toString());
 }
 
 /// task to load reference entity
