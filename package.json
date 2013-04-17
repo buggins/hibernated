@@ -5,7 +5,7 @@
     "homepage": "https://github.com/buggins/ddbc",
     "license": "Boost Software License (BSL 1.0)",
     "dependencies": {
-
+        "ddbc": ">=0.2.4"
     },
     "targetType": "staticLibrary",
     "configurations": [
