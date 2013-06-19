@@ -1414,7 +1414,7 @@ Token[] tokenize(string s) {
 			i++;
 			// && state == 0
 			for(int j=i; j<len; j++) {
-				if (isAlphaNum(s[j])) {
+				if (isAlphaNum(s[j]) || s[j] == '_') {
 					text ~= s[j];
 					i = j;
 				} else {
@@ -1431,7 +1431,7 @@ Token[] tokenize(string s) {
 			}
 			// && state == 0
 			for(int j=i; j<len; j++) {
-				if (isAlphaNum(s[j])) {
+				if (isAlphaNum(s[j]) || s[j] == '_') {
 					text ~= s[j];
 					i = j;
 				} else {

@@ -12,6 +12,7 @@ import std.traits;
 class User {
     long id;
     string name;
+    int some_field_with_underscore;
     @ManyToMany // cannot be inferred, requires annotation
         LazyCollection!Role roles;
 }
@@ -80,7 +81,7 @@ void testHibernate() {
 
     writeln("Loading User");
     // load and check data
-    User u11 = sess.createQuery("FROM User WHERE name=:Name").setParameter("Name", "Alex").uniqueResult!User();
+    User u11 = sess.createQuery("FROM User WHERE name=:Name and some_field_with_underscore != 42").setParameter("Name", "Alex").uniqueResult!User();
     writeln("Checking User");
     assert(u11.roles.length == 2);
     assert(u11.roles[0].name == "role10" || u11.roles.get()[0].name == "role11");
