@@ -2895,9 +2895,43 @@ string getEntityDef(T)() {
 	return generatedEntityInfo ~ "\n" ~ generatedGettersSetters;
 }
 
+template myPackageNamePrefix(alias T)
+{
+    static if (is(typeof(__traits(parent, T))))
+        enum parent = myPackageNamePrefix!(__traits(parent, T));
+    else
+        enum string parent = null;
+
+    static if (T.stringof.startsWith("package "))
+        enum myPackageNamePrefix = (parent ? parent ~ '.' : "") ~ T.stringof[8 .. $] ~ ".";
+    else static if (parent)
+        enum myPackageNamePrefix = parent;
+    else
+        enum myPackageNamePrefix = "";
+}
+
+string generateImportFor(T)() {
+    static if (T.stringof.startsWith("module ")) {
+        return "import " ~ fullyQualifiedName!T ~ ";\n";
+    } else {
+        return "import " ~ myPackageNamePrefix!T ~ moduleName!T ~ ";\n";
+    }
+}
+
 string entityListDef(T ...)() {
 	string res;
+	string imp;
 	foreach(t; T) {
+        string impcode = "";
+        static if (t.stringof.startsWith("module ")) {
+            impcode = "import " ~ fullyQualifiedName!t ~ ";\n";
+        } else {
+            impcode = generateImportFor!(t);
+        }
+        if (indexOf(imp, impcode) < 0)
+            imp ~= impcode;
+    }
+    foreach(t; T) {
         //pragma(msg, t);
         static if (t.stringof.startsWith("module ")) {
             //pragma(msg, "is module");
@@ -2941,6 +2975,7 @@ string entityListDef(T ...)() {
 	}
 	string code = 
 		"static this() {\n" ~
+        imp ~ // imports
 		"    //writeln(\"starting static initializer\");\n" ~
 		"    entities = [\n" ~ res ~ "];\n" ~
 		"    EntityInfo [string] map;\n" ~
@@ -3202,6 +3237,7 @@ class SchemaInfoImpl(T...) : SchemaInfo {
 	static EntityInfo [] entities;
 	static EntityInfo [TypeInfo_Class] classMap;
 
+    //import htestmain;
     //pragma(msg, entityListDef!(T)());
     mixin(entityListDef!(T)());
 
