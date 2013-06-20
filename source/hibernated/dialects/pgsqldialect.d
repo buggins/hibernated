@@ -147,9 +147,9 @@ string[] PGSQL_RESERVED_WORDS =
 
 class PGSQLDialect : Dialect {
     ///The character specific to this dialect used to close a quoted identifier.
-    override char closeQuote() { return '`'; }
+    override char closeQuote() const { return '`'; }
     ///The character specific to this dialect used to begin a quoted identifier.
-    override char  openQuote() { return '`'; }
+    override char  openQuote() const { return '`'; }
     
     // returns string like "BIGINT(20) NOT NULL" or "VARCHAR(255) NULL"
     override string getColumnTypeDefinition(const PropertyInfo pi, const PropertyInfo overrideTypeFrom = null) {
