@@ -192,8 +192,8 @@ class PGSQLDialect : Dialect {
             case SqlType.FLOAT:
                 return "FLOAT(24)" ~ modifiers;
             case SqlType.DOUBLE:
-            case SqlType.DECIMAL:
                 return "FLOAT(53)" ~ modifiers;
+            case SqlType.DECIMAL:
                 return "REAL" ~ modifiers;
             case SqlType.DATE:
             case SqlType.DATETIME:
