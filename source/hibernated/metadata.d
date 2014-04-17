@@ -467,7 +467,7 @@ string camelCaseToUnderscoreDelimited(immutable string s) {
 				lastLower = false;
 				res ~= "_";
 			}
-			res ~= toLower(ch);
+			res ~= std.ascii.toLower(ch);
 		} else if (ch >= 'a' && ch <= 'z') {
 			lastLower = true;
 			res ~= ch;

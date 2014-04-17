@@ -1519,7 +1519,7 @@ Token[] tokenize(string s) {
 					}
 				}
 			}
-			if (i < len - 1 && toLower(s[i + 1]) == 'e') {
+			if (i < len - 1 && std.ascii.toLower(s[i + 1]) == 'e') {
 				text ~= s[i+1];
 				i++;
 				if (i < len - 1 && (s[i + 1] == '-' || s[i + 1] == '+')) {
