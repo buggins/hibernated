@@ -1,13 +1,13 @@
 {
-    "name": "hibernated",
-    "description": "ORM for D language, similar to Hibernate",
-    "authors": ["Vadim Lopatin"],
-    "homepage": "https://github.com/buggins/hibernated",
-    "license": "Boost Software License (BSL 1.0)",
+    "name": "hdtest",
+    "description": "test hiberbated.",
+    "authors": [ "Vadim Lopatin", "Arjan Knepper" ],
+    "targetType": "executable",
+    "copyFiles-windows-x86": [ "../lib/windows-x32/sqlite3.dll" ],
+    "sourceFiles-windows-x86" : [ "../lib/windows-x32/sqlite3.lib" ],
     "dependencies": {
-        "ddbc": "~master"
+        "hibernated": {"version": "~master", "path": "../"}
     },
-    "targetType": "staticLibrary",
     "configurations": [
         {
             "name": "MySQL",
@@ -20,6 +20,7 @@
             "libs-windows": ["sqlite3"],
             "copyFiles-windows-x86": [ "lib/windows-x32/sqlite3.dll" ],
             "sourceFiles-windows-x86" : [ "lib/windows-x32/sqlite3.lib" ],
+
         },
         {
             "name": "PGSQL",
