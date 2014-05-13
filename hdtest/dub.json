@@ -10,27 +10,27 @@
         {
             "name": "MySQL",
             "versions": ["USE_MYSQL"],
-			"subConfigurations": {
-				"hibernated": "MySQL"
-			}
+            "subConfigurations": {
+                "hibernated": "MySQL"
+            }
         },
         {
             "name": "SQLite",
             "versions": ["USE_SQLITE"],
             "libs-posix": ["sqlite3"],
             "libs-windows": ["sqlite3"],
-			"subConfigurations": {
-				"hibernated": "SQLite"
-			}
+            "subConfigurations": {
+                "hibernated": "SQLite"
+            }
         },
         {
             "name": "PGSQL",
             "versions": ["USE_PGSQL"],
             "libs-posix": ["pq"],
             "libs-windows": ["libpq"],
-			"subConfigurations": {
-				"hibernated": "PGSQL"
-			}
+            "subConfigurations": {
+                "hibernated": "PGSQL"
+            }
         }
     ]
 }

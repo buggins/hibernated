@@ -12,27 +12,27 @@
         {
             "name": "MySQL",
             "versions": ["USE_MYSQL"],
-			"subConfigurations": {
-				"ddbc": "MySQL"
-			}
-		},
+            "subConfigurations": {
+                "ddbc": "MySQL"
+            }
+        },
         {
             "name": "SQLite",
             "versions": ["USE_SQLITE"],
             "libs-posix": ["sqlite3"],
             "libs-windows": ["sqlite3"],
-			"subConfigurations": {
-				"ddbc": "SQLite"
-			}
+            "subConfigurations": {
+                "ddbc": "SQLite"
+            }
         },
         {
             "name": "PGSQL",
             "versions": ["USE_PGSQL"],
             "libs-posix": ["pq"],
             "libs-windows": ["libpq"],
-			"subConfigurations": {
-				"ddbc": "PGSQL"
-			}
+            "subConfigurations": {
+                "ddbc": "PGSQL"
+            }
         }
     ]
 }
