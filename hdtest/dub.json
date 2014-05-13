@@ -3,30 +3,34 @@
     "description": "test hiberbated.",
     "authors": [ "Vadim Lopatin", "Arjan Knepper" ],
     "targetType": "executable",
-    "copyFiles-windows-x86": [ "../lib/windows-x32/sqlite3.dll" ],
-    "sourceFiles-windows-x86" : [ "../lib/windows-x32/sqlite3.lib" ],
     "dependencies": {
         "hibernated": {"version": "~master", "path": "../"}
     },
     "configurations": [
         {
             "name": "MySQL",
-            "versions": ["USE_MYSQL"]
+            "versions": ["USE_MYSQL"],
+			"subConfigurations": {
+				"hibernated": "MySQL"
+			}
         },
         {
             "name": "SQLite",
             "versions": ["USE_SQLITE"],
             "libs-posix": ["sqlite3"],
             "libs-windows": ["sqlite3"],
-            "copyFiles-windows-x86": [ "lib/windows-x32/sqlite3.dll" ],
-            "sourceFiles-windows-x86" : [ "lib/windows-x32/sqlite3.lib" ],
-
+			"subConfigurations": {
+				"hibernated": "SQLite"
+			}
         },
         {
             "name": "PGSQL",
             "versions": ["USE_PGSQL"],
             "libs-posix": ["pq"],
-            "libs-windows": ["libpq"]
+            "libs-windows": ["libpq"],
+			"subConfigurations": {
+				"hibernated": "PGSQL"
+			}
         }
     ]
 }
