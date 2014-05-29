@@ -1217,7 +1217,7 @@ unittest {
     static assert(isCollectionMember!(MemberTest, "lfoos"));
     static assert(isCollectionMember!(MemberTest, "lgetFoos"));
     static assert(isCollectionMember!(MemberTest, "lfooos"));
-    static assert(!isSupportedSimpleType!(MemberTest, "simple")); // bool not supported so far
+    static assert(isSupportedSimpleType!(MemberTest, "simple"));
     static assert(!isSupportedSimpleType!(MemberTest, "foo"));
     static assert(isSupportedSimpleType!(MemberTest, "someInt"));
     static assert(isSupportedSimpleType!(MemberTest, "someLong"));
@@ -1318,6 +1318,7 @@ string getPropertyReferencedClassName(T : Object, string m)() {
 
 
 enum PropertyMemberType : int {
+    BOOL_TYPE,    // bool
     BYTE_TYPE,    // byte
     SHORT_TYPE,   // short
     INT_TYPE,     // int
@@ -1353,7 +1354,9 @@ enum PropertyMemberType : int {
 template isSupportedSimpleType(T, string m) {
     alias typeof(__traits(getMember, T, m)) ti;
     static if (is(ti == function)) {
-        static if (is(ReturnType!(ti) == byte)) {
+        static if (is(ReturnType!(ti) == bool)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == byte)) {
             enum bool isSupportedSimpleType = true;
         } else static if (is(ReturnType!(ti) == short)) {
             enum bool isSupportedSimpleType = true;
@@ -1416,6 +1419,8 @@ template isSupportedSimpleType(T, string m) {
         } else {
             enum bool isSupportedSimpleType = false;
         }
+    } else static if (is(ti == bool)) {
+        enum bool isSupportedSimpleType = true;
     } else static if (is(ti == byte)) {
         enum bool isSupportedSimpleType = true;
     } else static if (is(ti == short)) {
@@ -1484,7 +1489,9 @@ template isSupportedSimpleType(T, string m) {
 PropertyMemberType getPropertyMemberType(T, string m)() {
     alias typeof(__traits(getMember, T, m)) ti;
     static if (is(ti == function)) {
-        static if (is(ReturnType!(ti) == byte)) {
+		static if (is(ReturnType!(ti) == bool)) {
+			return PropertyMemberType.BOOL_TYPE;
+		} else static if (is(ReturnType!(ti) == byte)) {
             return PropertyMemberType.BYTE_TYPE;
         } else if (is(ReturnType!(ti) == short)) {
             return PropertyMemberType.SHORT_TYPE;
@@ -1547,6 +1554,8 @@ PropertyMemberType getPropertyMemberType(T, string m)() {
         } else {
             assert (false, "Member " ~ m ~ " of class " ~ T.stringof ~ " has unsupported type " ~ ti.stringof);
         }
+	} else if (is(ti == bool)) {
+		return PropertyMemberType.BOOL_TYPE;
     } else if (is(ti == byte)) {
         return PropertyMemberType.BYTE_TYPE;
     } else if (is(ti == short)) {
@@ -1620,6 +1629,7 @@ string getPropertyReadCode(T, string m)() {
 
 static immutable bool[] ColumnTypeCanHoldNulls = 
     [
+     false, //BOOL_TYPE     // bool
      false, //BYTE_TYPE,    // byte
      false, //SHORT_TYPE,   // short
      false, //INT_TYPE,     // int
@@ -1659,6 +1669,7 @@ bool isColumnTypeNullableByDefault(T, string m)() {
 
 static immutable string[] ColumnTypeKeyIsSetCode = 
     [
+     "(%s != 0)", //BOOL_TYPE     // bool
      "(%s != 0)", //BYTE_TYPE,    // byte
      "(%s != 0)", //SHORT_TYPE,   // short
      "(%s != 0)", //INT_TYPE,     // int
@@ -1697,6 +1708,7 @@ string getColumnTypeKeyIsSetCode(T, string m)() {
 
 static immutable string[] ColumnTypeIsNullCode = 
     [
+     "(false)", //BOOL_TYPE     // bool
      "(false)", //BYTE_TYPE,    // byte
      "(false)", //SHORT_TYPE,   // short
      "(false)", //INT_TYPE,     // int
@@ -1735,6 +1747,7 @@ string getColumnTypeIsNullCode(T, string m)() {
 
 static immutable string[] ColumnTypeSetNullCode = 
     [
+     "bool nv;", // BOOL_TYPE   // bool
      "byte nv = 0;", //BYTE_TYPE,    // byte
      "short nv = 0;", //SHORT_TYPE,   // short
      "int nv = 0;", //INT_TYPE,     // int
@@ -1769,6 +1782,7 @@ static immutable string[] ColumnTypeSetNullCode =
 
 static immutable string[] ColumnTypePropertyToVariant = 
     [
+     "Variant(%s)", //BOOL_TYPE     // bool
      "Variant(%s)", //BYTE_TYPE,    // byte
      "Variant(%s)", //SHORT_TYPE,   // short
      "Variant(%s)", //INT_TYPE,     // int
@@ -1855,6 +1869,7 @@ string getPropertyVariantReadCode(T, string m)() {
 
 static immutable string[] ColumnTypeConstructorCode = 
     [
+     "new BooleanType()", // BOOL_TYPE, bool
      "new NumberType(2, false, SqlType.TINYINT)", //BYTE_TYPE,    // byte
      "new NumberType(4, false, SqlType.SMALLINT)", //SHORT_TYPE,   // short
      "new NumberType(9, false, SqlType.INTEGER)", //INT_TYPE,     // int
@@ -1898,6 +1913,7 @@ string getColumnTypeName(T, string m, int length)() {
 
 static immutable string[] ColumnTypeDatasetReaderCode = 
     [
+     "r.getBoolean(index)", //BOOL_TYPE,    // bool
      "r.getByte(index)", //BYTE_TYPE,    // byte
      "r.getShort(index)", //SHORT_TYPE,   // short
      "r.getInt(index)", //INT_TYPE,     // int
@@ -1936,6 +1952,7 @@ string getColumnTypeDatasetReadCode(T, string m)() {
 
 static immutable string[] ColumnTypeVariantReadCode = 
     [
+     "(value == null ? nv : value.get!(bool))", //BOOL_TYPE,    // bool
      "(value == null ? nv : (value.convertsTo!(byte) ? value.get!(byte) : (value.convertsTo!(long) ? to!byte(value.get!(long)) : to!byte((value.get!(ulong))))))", //BYTE_TYPE,    // byte
      "(value == null ? nv : (value.convertsTo!(short) ? value.get!(short) : (value.convertsTo!(long) ? to!short(value.get!(long)) : to!short((value.get!(ulong))))))", //SHORT_TYPE,   // short
      "(value == null ? nv : (value.convertsTo!(int) ? value.get!(int) : (value.convertsTo!(long) ? to!int(value.get!(long)) : to!int((value.get!(ulong))))))", //INT_TYPE,     // int
@@ -1970,6 +1987,7 @@ static immutable string[] ColumnTypeVariantReadCode =
 
 static immutable string[] DatasetWriteCode = 
     [
+     "r.setBoolean(index, %s);", //BOOL_TYPE,    // bool
      "r.setByte(index, %s);", //BYTE_TYPE,    // byte
      "r.setShort(index, %s);", //SHORT_TYPE,   // short
      "r.setInt(index, %s);", //INT_TYPE,     // int
@@ -2887,6 +2905,7 @@ string getEntityDef(T)() {
                 // automatically treat all public members of supported types as persistent
                 immutable bool typeSupported = (isSupportedSimpleType!(T, m) || isObjectMember!(T, m) || isCollectionMember!(T, m));
                 immutable bool isMainProp = isMainMemberForProperty!(T,m) && !hasMemberAnnotation!(T, m, Transient);
+                //pragma( msg, entityName ~ ":" ~ tableName ~ "." ~ m ~ ": typeSupported: " ~ (typeSupported ? "true" : "false") ~ " isMainProp: " ~ (isMainProp ? "true" : "false") )
                 static if (typeSupported && isMainProp) {
                     
                     immutable string propertyDef = getPropertyDef!(T, m)();
@@ -3005,12 +3024,16 @@ string entityListDef(T ...)() {
         "    classMap = typemap;\n" ~
         "    //writeln(\"updating referenced entities\");\n" ~
         "    foreach(e; entities) {\n" ~
+		"        //writefln( \"Entity:%s table:%s type:%s\", e.name, e.tableName, e.classInfo.name );\n" ~
         "        foreach(p; e._properties) {\n" ~
+		"            //writefln( \"\tproperty:%s column:%s ref-entityname:%s ref-propertyname:%s \", p.propertyName, p.columnName, p.referencedEntityName, p.referencedPropertyName );\n" ~
         "            if (p.referencedEntityName !is null) {\n" ~
         "                //writeln(\"embedded entity \" ~ p.referencedEntityName);\n" ~
         "                enforceEx!MappingException((p.referencedEntityName in map) !is null, \"referenced entity not found in schema: \" ~ p.referencedEntityName);\n" ~
         "                p._referencedEntity = map[p.referencedEntityName];\n" ~
         "                if (p.referencedPropertyName !is null) {\n" ~
+        "                    //writeln(\"\t\tembedded entity property name \" ~ p.referencedPropertyName );\n" ~
+        "                    //writefln(\"\t\tembedded entity._propertyMap: %s \", p._referencedEntity._propertyMap );\n" ~
         "                    enforceEx!MappingException((p.referencedPropertyName in p._referencedEntity._propertyMap) !is null, \"embedded entity property not found in schema: \" ~ p.referencedEntityName);\n" ~
         "                    p._referencedProperty = p._referencedEntity._propertyMap[p.referencedPropertyName];\n" ~
         "                }\n" ~
