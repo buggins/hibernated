@@ -2973,7 +2973,7 @@ string entityListDef(T ...)() {
         }
 	}
 	string code = 
-		"static this() {\n" ~
+		"shared static this() {\n" ~
         imp ~ // imports
 		"    //writeln(\"starting static initializer\");\n" ~
 		"    entities = [\n" ~ res ~ "];\n" ~
