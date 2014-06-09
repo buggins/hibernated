@@ -1117,7 +1117,6 @@ bool isMainMemberForProperty(T : Object, string m)() {
             static assert (!thisMemberHasAnnotation || !hasAnnotadedGetter, "Both getter and corresponding field have annotations. Annotate only one of them.");
             return !hasAnnotadedGetter && (thisMemberHasAnnotation || !hasGetter);
         }
-        return false;
     } else {
         // member is not public
         return false;
@@ -2974,7 +2973,7 @@ string entityListDef(T ...)() {
         }
 	}
 	string code = 
-		"static this() {\n" ~
+		"shared static this() {\n" ~
         imp ~ // imports
 		"    //writeln(\"starting static initializer\");\n" ~
 		"    entities = [\n" ~ res ~ "];\n" ~
