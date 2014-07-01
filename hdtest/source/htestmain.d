@@ -39,8 +39,8 @@ class Role {
 class MyGroup {
     long id;
     string name;
-    @OneToMany( "group" )
-    User[] users;
+    @OneToMany
+    LazyCollection!User users;
 }
 
 void testHibernate() {

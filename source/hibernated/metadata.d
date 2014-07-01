@@ -777,8 +777,16 @@ string getOneToManyReferencedPropertyName(T, string m)() {
         }
     }
     // No attrib or no name, try to deduce the field name from the type of T's field m
-    import std.range : ElementType;
-    alias refererType = ElementType!(typeof(__traits(getMember, T, m)));
+    alias memberFieldType = typeof(__traits(getMember, T, m));
+    static if( is( memberFieldType == LazyCollection!TAL, TAL ))
+    {
+        alias refererType = TAL;
+    }
+    else
+    {
+        import std.range : ElementType;
+        alias refererType = ElementType!memberFieldType;
+    }
     // test T has single occurance in refererType
     import std.traits : FieldTypeTuple, Filter;
     alias refererFields = FieldTypeTuple!refererType;
