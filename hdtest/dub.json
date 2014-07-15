@@ -1,19 +1,17 @@
 {
-    "name": "hibernated",
-    "description": "ORM for D language, similar to Hibernate",
-    "authors": ["Vadim Lopatin"],
-    "homepage": "https://github.com/buggins/hibernated",
-    "license": "Boost Software License (BSL 1.0)",
+    "name": "hdtest",
+    "description": "test hiberbated.",
+    "authors": [ "Vadim Lopatin", "Arjan Knepper" ],
+    "targetType": "executable",
     "dependencies": {
-        "ddbc": ">=0.2.11"
+        "hibernated": {"version": "~master", "path": "../"}
     },
-    "targetType": "staticLibrary",
     "configurations": [
         {
             "name": "MySQL",
             "versions": ["USE_MYSQL"],
             "subConfigurations": {
-                "ddbc": "MySQL"
+                "hibernated": "MySQL"
             }
         },
         {
@@ -22,7 +20,7 @@
             "libs-posix": ["sqlite3"],
             "libs-windows": ["sqlite3"],
             "subConfigurations": {
-                "ddbc": "SQLite"
+                "hibernated": "SQLite"
             }
         },
         {
@@ -31,7 +29,7 @@
             "libs-posix": ["pq"],
             "libs-windows": ["libpq"],
             "subConfigurations": {
-                "ddbc": "PGSQL"
+                "hibernated": "PGSQL"
             }
         }
     ]

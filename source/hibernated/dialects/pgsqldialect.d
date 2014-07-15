@@ -196,8 +196,11 @@ class PGSQLDialect : Dialect {
             case SqlType.DECIMAL:
                 return "REAL" ~ modifiers;
             case SqlType.DATE:
+                return "DATE" ~ modifiers;
             case SqlType.DATETIME:
+                return "TIMESTAMP" ~ modifiers;
             case SqlType.TIME:
+                return "TIME" ~ modifiers;
             case SqlType.CHAR:
             case SqlType.CLOB:
             case SqlType.LONGNVARCHAR:
