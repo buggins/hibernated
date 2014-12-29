@@ -8,6 +8,7 @@
         "ddbc": ">=0.2.11"
     },
     "targetType": "staticLibrary",
+    "targetPath": "lib",
     "configurations": [
         {
             "name": "full",

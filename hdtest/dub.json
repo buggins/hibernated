@@ -8,6 +8,13 @@
     },
     "configurations": [
         {
+            "name": "full",
+            "versions": ["USE_MYSQL", "USE_SQLITE", "USE_PGSQL"],
+            "subConfigurations": {
+                "hibernated": "full"
+            }
+        },
+        {
             "name": "MySQL",
             "versions": ["USE_MYSQL"],
             "subConfigurations": {
