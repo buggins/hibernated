@@ -287,10 +287,10 @@ version(unittest) {
             static if (SQLITE_TESTS_ENABLED) {
                 pragma(msg, "Will use SQLite for HibernateD unit tests");
                 _unitTestConnectionPool = createUnitTestSQLITEDataSource();
-            } else static if (MYSQL_TESTS_ENABLED) {
+            } else if (MYSQL_TESTS_ENABLED) {
                 pragma(msg, "Will use MySQL for HibernateD unit tests");
                 _unitTestConnectionPool = createUnitTestMySQLDataSource();
-            } else static if (PGSQL_TESTS_ENABLED) {
+            } else if (PGSQL_TESTS_ENABLED) {
                 pragma(msg, "Will use PGSQL for HibernateD unit tests");
                 _unitTestConnectionPool = createUnitTestPGSQLDataSource();
             }
@@ -299,11 +299,11 @@ version(unittest) {
     }
     Dialect getUnitTestDialect() {
 
-        static if (MYSQL_TESTS_ENABLED) {
-            return new MySQLDialect();
-        } else static if (SQLITE_TESTS_ENABLED) {
+        static if (SQLITE_TESTS_ENABLED) {
             return new SQLiteDialect();
-        } else static if (PGSQL_TESTS_ENABLED) {
+        } else if (MYSQL_TESTS_ENABLED) {
+            return new MySQLDialect();
+        } else if (PGSQL_TESTS_ENABLED) {
             return new PGSQLDialect();
         } else {
             return null; // disabled
