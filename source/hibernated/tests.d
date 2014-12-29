@@ -284,12 +284,12 @@ version(unittest) {
     /// will return null if DB tests are disabled
     DataSource getUnitTestDataSource() {
         if (_unitTestConnectionPool is null) {
-            static if (MYSQL_TESTS_ENABLED) {
-                pragma(msg, "Will use MySQL for HibernateD unit tests");
-                _unitTestConnectionPool = createUnitTestMySQLDataSource();
-            } else static if (SQLITE_TESTS_ENABLED) {
+            static if (SQLITE_TESTS_ENABLED) {
                 pragma(msg, "Will use SQLite for HibernateD unit tests");
                 _unitTestConnectionPool = createUnitTestSQLITEDataSource();
+            } else static if (MYSQL_TESTS_ENABLED) {
+                pragma(msg, "Will use MySQL for HibernateD unit tests");
+                _unitTestConnectionPool = createUnitTestMySQLDataSource();
             } else static if (PGSQL_TESTS_ENABLED) {
                 pragma(msg, "Will use PGSQL for HibernateD unit tests");
                 _unitTestConnectionPool = createUnitTestPGSQLDataSource();

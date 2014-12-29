@@ -556,15 +556,19 @@ bool isGetterFunction(alias overload, string methodName)() {
                 //pragma(msg, "is property");
                 //writeln("is property or starts with get or is");
                 return true;
-            }
-            static if (methodName.startsWith("get") || methodName.startsWith("get")) {
+            } else if (methodName.startsWith("get") || methodName.startsWith("get")) {
                 //pragma(msg, "is getter");
                 //writeln("is property or starts with get or is");
                 return true;
+            } else {
+                return false;
             }
+        } else {
+            return false;
         }
+    } else {
+        return false;
     }
-    return false;
 }
 
 /// returns true if class member has specified anotations
@@ -828,8 +832,8 @@ string getPropertyName(T, string m)() {
     alias typeof(__traits(getMember, T, m)) ti;
     static if (is(ti == function)) {
         return getterNameToFieldName(m);
-    }
-    return m;
+    } else
+        return m;
 }
 
 enum PropertyMemberKind : int {
