@@ -10,6 +10,13 @@
     "targetType": "staticLibrary",
     "configurations": [
         {
+            "name": "full",
+            "versions": ["USE_MYSQL", "USE_SQLITE", "USE_PGSQL"],
+            "subConfigurations": {
+                "ddbc": "full"
+            }
+        },
+        {
             "name": "MySQL",
             "versions": ["USE_MYSQL"],
             "subConfigurations": {
