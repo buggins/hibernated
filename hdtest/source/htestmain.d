@@ -52,7 +52,7 @@ void testHibernate() {
         DataSource ds = new ConnectionPoolDataSourceImpl(driver, "zzz.db", params);
         Dialect dialect = new SQLiteDialect();
     }
-    version( USE_PGSQL )
+    else version( USE_PGSQL )
     {
         string url = PGSQLDriver.generateUrl( "/tmp", 5432, "testdb" );
         string[string] params;

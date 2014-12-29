@@ -26,8 +26,7 @@ module hibernated.core;
 //public import std.typetuple;
 //public import std.variant;
 
-public import ddbc.core;
-public import ddbc.common;
+public import ddbc.all;
 
 public import hibernated.annotations;
 public import hibernated.session;
@@ -35,3 +34,16 @@ public import hibernated.metadata;
 public import hibernated.core;
 public import hibernated.type;
 public import hibernated.dialect;
+
+version( USE_SQLITE )
+{
+    public import hibernated.dialects.sqlitedialect;
+}
+version( USE_PGSQL )
+{
+    public import hibernated.dialects.pgsqldialect;
+}
+version( USE_MYSQL )
+{
+    public import hibernated.dialects.mysqldialect;
+}

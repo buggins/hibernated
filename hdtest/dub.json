@@ -3,6 +3,7 @@
     "description": "test hiberbated.",
     "authors": [ "Vadim Lopatin", "Arjan Knepper" ],
     "targetType": "executable",
+    "targetPath": "bin",
     "dependencies": {
         "hibernated": {"version": "~master", "path": "../"}
     },
