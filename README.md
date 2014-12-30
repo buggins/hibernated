@@ -64,15 +64,16 @@ Sample code:
     }
 
     // create metadata from annotations
-    EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, T1, TypeTest, Address, Role, GeneratorTest);
+    EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, 
+                                     T1, TypeTest, Address, Role, GeneratorTest);
 
 
 
 
     // setup DB connection factory
     MySQLDriver driver = new MySQLDriver();
-    string url = MySQLDriver.generateUrl(MYSQL_UNITTEST_HOST, MYSQL_UNITTEST_PORT, MYSQL_UNITTEST_DB);
-    string[string] params = MySQLDriver.setUserAndPassword(MYSQL_UNITTEST_USER, MYSQL_UNITTEST_PASSWORD);
+    string url = MySQLDriver.generateUrl("localhost", 3306, "test_db");
+    string[string] params = MySQLDriver.setUserAndPassword("testuser", "testpasswd");
     DataSource ds = ConnectionPoolDataSourceImpl(driver, url, params);
 
     // create session factory
@@ -89,6 +90,7 @@ Sample code:
 
     // use session to access DB
 
+    // read all users using query
     Query q = sess.createQuery("FROM User ORDER BY name");
     User[] list = q.list!User();
 
@@ -109,7 +111,8 @@ Sample code:
     sess.save(u10);
 
     // load and check data
-    User u11 = sess.createQuery("FROM User WHERE name=:Name").setParameter("Name", "Alex").uniqueResult!User();
+    User u11 = sess.createQuery("FROM User WHERE name=:Name").
+                               setParameter("Name", "Alex").uniqueResult!User();
     assert(u11.roles.length == 2);
     assert(u11.roles[0].name == "role10" || u11.roles.get()[0].name == "role11");
     assert(u11.roles[1].name == "role10" || u11.roles.get()[1].name == "role11");
