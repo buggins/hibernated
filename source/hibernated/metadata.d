@@ -794,7 +794,7 @@ string getOneToManyReferencedPropertyName(T, string m)() {
     // test T has single occurance in refererType
     import std.traits : FieldTypeTuple, Filter;
     alias refererFields = FieldTypeTuple!refererType;
-    enum bool isSameType(U) = is( T == U );
+    enum bool isSameType(U) = is( T == U ) || is ( Lazy!T == U );
     alias refererFieldsofTypeT = Filter!( isSameType, refererFields );
     // assert there is exactly one field with type T in refererFields
     // when there is more than one use explicit attributes for each field eg: OneToMany( "field name first referer" ).. OneToMany( "field name second referer" )..
