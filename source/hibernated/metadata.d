@@ -3405,12 +3405,13 @@ class DBInfo {
 
     /// drop and/or create tables and indexes in DB using specified connection
     void updateDBSchema(Connection conn, bool dropTables, bool createTables) {
+        assert(dropTables || createTables);
         string[] existingTables = getExistingTables(conn);
         string[] batch;
         if (dropTables)
             batch ~= getDropTableSQL(existingTables);
         if (createTables)
-            batch ~= getCreateTableSQL(existingTables);
+            batch ~= getCreateTableSQL(dropTables ? null : existingTables);
         try {
             Statement stmt = conn.createStatement();
             scope(exit) stmt.close();
