@@ -1,1 +1,3 @@
 language: d
+script: dub test --config=SQLite
+
