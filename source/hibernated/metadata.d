@@ -234,15 +234,15 @@ public:
         _joinTable.setEntities(entity, referencedEntity);
     }
 
-    const hash_t opHash() const {
+    hash_t opHash() const {
         return (cast(hash_t)(cast(void*)this)) * 31;
     }
 
-    const bool opEquals(ref const PropertyInfo s) const {
+    bool opEquals(ref const PropertyInfo s) const {
         return this == s;
     }
 
-    const int opCmp(ref const PropertyInfo s) const {
+    int opCmp(ref const PropertyInfo s) const {
         return this == s ? 0 : (opHash() > s.opHash() ? 1 : -1);
     }
 
