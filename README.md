@@ -14,6 +14,7 @@ Uses DDBC as DB abstraction layer: https://github.com/buggins/ddbc
 
 Available as DUB package
 
+Use SQLite 3.7.11 or later. In older versions syntax INSERT INTO (col1, col2) VALUES (1, 2), (3, 4) is not supported.
 
 Sample code:
 --------------------
