@@ -83,6 +83,14 @@ Sample code:
     SessionFactory factory = new SessionFactoryImpl(schema, dialect, ds);
     scope(exit) factory.close();
 
+    // Create schema if necessary
+    {
+	// get connection
+	Connection conn = ds.getConnection();
+	scope(exit) conn.close();
+	// create tables if not exist
+	factory.getDBMetaData().updateDBSchema(conn, false, true);
+    }
 
     // Now you can use HibernateD
 
