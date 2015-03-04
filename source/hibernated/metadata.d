@@ -234,15 +234,15 @@ public:
         _joinTable.setEntities(entity, referencedEntity);
     }
 
-    const hash_t opHash() const {
+    hash_t opHash() const {
         return (cast(hash_t)(cast(void*)this)) * 31;
     }
 
-    const bool opEquals(ref const PropertyInfo s) const {
+    bool opEquals(ref const PropertyInfo s) const {
         return this == s;
     }
 
-    const int opCmp(ref const PropertyInfo s) const {
+    int opCmp(ref const PropertyInfo s) const {
         return this == s ? 0 : (opHash() > s.opHash() ? 1 : -1);
     }
 
@@ -794,7 +794,7 @@ string getOneToManyReferencedPropertyName(T, string m)() {
     // test T has single occurance in refererType
     import std.traits : FieldTypeTuple, Filter;
     alias refererFields = FieldTypeTuple!refererType;
-    enum bool isSameType(U) = is( T == U );
+    enum bool isSameType(U) = is( T == U ) || is ( Lazy!T == U );
     alias refererFieldsofTypeT = Filter!( isSameType, refererFields );
     // assert there is exactly one field with type T in refererFields
     // when there is more than one use explicit attributes for each field eg: OneToMany( "field name first referer" ).. OneToMany( "field name second referer" )..
@@ -3405,12 +3405,13 @@ class DBInfo {
 
     /// drop and/or create tables and indexes in DB using specified connection
     void updateDBSchema(Connection conn, bool dropTables, bool createTables) {
+        assert(dropTables || createTables);
         string[] existingTables = getExistingTables(conn);
         string[] batch;
         if (dropTables)
             batch ~= getDropTableSQL(existingTables);
         if (createTables)
-            batch ~= getCreateTableSQL(existingTables);
+            batch ~= getCreateTableSQL(dropTables ? null : existingTables);
         try {
             Statement stmt = conn.createStatement();
             scope(exit) stmt.close();
