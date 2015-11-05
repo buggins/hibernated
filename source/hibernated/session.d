@@ -836,7 +836,7 @@ class QueryImpl : Query
 
 	/// Convenience method to return a single instance that matches the query, or null if the query returns no results.
 	override Object uniqueObject() {
-        return uniqueResult(null);
+        return uniqueResult(cast(Object)null);
 	}
 
     /// Convenience method to return a single instance that matches the query, or null if the query returns no results. Reusing existing buffer.
