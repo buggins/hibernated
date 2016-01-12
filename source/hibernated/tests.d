@@ -902,4 +902,23 @@ unittest {
     }
 }
 
+version(unittest) {
+    enum ignore = 2;
 
+    @Table("checks")
+    static class Check
+    {
+        int id;
+        @ManyToMany @ignore
+        LazyCollection!Subscriber subscribers;
+    }
+
+    @Table("subscribers")
+    static class Subscriber
+    {
+        int id;
+        string email;
+        @ManyToMany
+        LazyCollection!Check check;
+    }
+}

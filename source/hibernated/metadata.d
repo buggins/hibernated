@@ -717,7 +717,7 @@ string getJoinTableName(T, string m)() {
         foreach(overload; MemberFunctionsTuple!(T, m)) {
             static if (isGetterFunction!(overload, m)) {
                 foreach(a; __traits(getAttributes, overload)) {
-                    static if (is(typeof(a) == JoinTable)) {
+                    static if (is(typeof(a) == ManyToMany)) {
                         return emptyStringToNull(a.joinTableName);
                     }
                 }
@@ -725,7 +725,7 @@ string getJoinTableName(T, string m)() {
         }
     } else {
         foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
-            static if (is(typeof(a) == JoinTable)) {
+            static if (is(typeof(a) == ManyToMany)) {
                 return emptyStringToNull(a.joinTableName);
             }
         }
@@ -735,7 +735,7 @@ string getJoinTableName(T, string m)() {
 
 string getJoinTableColumn1(T, string m)() {
     foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
-        static if (is(typeof(a) == JoinTable)) {
+        static if (is(typeof(a) == ManyToMany)) {
             return emptyStringToNull(a.joinColumn1);
         }
     }
@@ -744,7 +744,7 @@ string getJoinTableColumn1(T, string m)() {
 
 string getJoinTableColumn2(T, string m)() {
     foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
-        static if (is(typeof(a) == JoinTable)) {
+        static if (is(typeof(a) == ManyToMany)) {
             return emptyStringToNull(a.joinColumn2);
         }
     }
