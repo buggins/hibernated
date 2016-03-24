@@ -1,13 +1,13 @@
 /**
- * HibernateD - Object-Relation Mapping for D programming language, with interface similar to Hibernate. 
- * 
+ * HibernateD - Object-Relation Mapping for D programming language, with interface similar to Hibernate.
+ *
  * Hibernate documentation can be found here:
  * $(LINK http://hibernate.org/docs)$(BR)
- * 
+ *
  * Source file hibernated/metadata.d.
  *
  * This module contains implementation of Annotations parsing and ORM model metadata holder classes.
- * 
+ *
  * Copyright: Copyright 2013
  * License:   $(LINK www.boost.org/LICENSE_1_0.txt, Boost License 1.0).
  * Author:   Vadim Lopatin
@@ -47,13 +47,13 @@ abstract class EntityMetaData {
     public string getEntityName(TypeInfo_Class type) const {
         return getClassMap()[type].name;
     }
-    
+
     public string getEntityNameForClass(T)() const {
         return getClassMap()[T.classinfo].name;
     }
 
     int opApply(int delegate(ref const EntityInfo) dg) const;
-    
+
 
     public const(EntityInfo[]) getEntities() const;
     public const(EntityInfo[string]) getEntityMap() const;
@@ -185,15 +185,15 @@ public:
     @property bool manyToOne() const { return relation == RelationType.ManyToOne; };
     @property bool manyToMany() const { return relation == RelationType.ManyToMany; };
 
-    this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, string uniqueIndex, RelationType relation, string referencedEntityName, string referencedPropertyName, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, KeyIsSetFunc keyIsSetFunc, IsNullFunc isNullFunc, 
-            CopyFunc copyFieldFunc, 
+    this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, string uniqueIndex, RelationType relation, string referencedEntityName, string referencedPropertyName, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, KeyIsSetFunc keyIsSetFunc, IsNullFunc isNullFunc,
+            CopyFunc copyFieldFunc,
             GeneratorFunc generatorFunc = null,
-            GetObjectFunc getObjectFunc = null, 
-            SetObjectFunc setObjectFunc = null, 
-            GetCollectionFunc getCollectionFunc = null, 
+            GetObjectFunc getObjectFunc = null,
+            SetObjectFunc setObjectFunc = null,
+            GetCollectionFunc getCollectionFunc = null,
             SetCollectionFunc setCollectionFunc = null,
-            SetObjectDelegateFunc setObjectDelegateFunc = null, 
-            SetCollectionDelegateFunc setCollectionDelegateFunc = null, 
+            SetObjectDelegateFunc setObjectDelegateFunc = null,
+            SetCollectionDelegateFunc setCollectionDelegateFunc = null,
             IsLoadedFunc isLoadedFunc = null,
             bool lazyLoad = false, bool collection = false,
             JoinTableInfo joinTable = null) {
@@ -279,13 +279,13 @@ class EntityInfo {
     immutable bool embeddable;
 
 
-    int opApply(int delegate(ref const PropertyInfo) dg) const { 
-        int result = 0; 
-        for (int i = 0; i < _properties.length; i++) { 
-            result = dg(_properties[i]); 
-            if (result) break; 
-        } 
-        return result; 
+    int opApply(int delegate(ref const PropertyInfo) dg) const {
+        int result = 0;
+        for (int i = 0; i < _properties.length; i++) {
+            result = dg(_properties[i]);
+            if (result) break;
+        }
+        return result;
     }
 
     public this(string name, string tableName, bool embeddable, PropertyInfo [] properties, TypeInfo_Class classInfo) {
@@ -390,7 +390,7 @@ class JoinTableInfo {
     static string generateJoinTableCode(string table, string column1, string column2) {
         return "new JoinTableInfo(" ~ quoteString(table) ~ ", " ~ quoteString(column1) ~ ", " ~ quoteString(column2) ~ ")";
     }
-    
+
     string getInsertSQL(const Dialect dialect) const {
         return "INSERT INTO " ~ dialect.quoteIfNeeded(_tableName) ~ "(" ~ dialect.quoteIfNeeded(_column1) ~ ", " ~ dialect.quoteIfNeeded(column2) ~ ") VALUES ";
     }
@@ -489,64 +489,121 @@ template hasHibernatedPropertyAnnotation(T, string m) {
 }
 
 bool hasHibernatedClassOrPropertyAnnotation(T)() {
-    static if (hasOneOfAnnotations!(T, Entity, Embeddable, Table)) {
+    if (hasOneOfAnnotations!(T, Entity, Embeddable, Table)) {
         return true;
     } else {
+        bool found = false;
         foreach (m; __traits(allMembers, T)) {
-            static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
+            if (__traits(compiles, (typeof(__traits(getMember, T, m))))) {
                 static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
-                    static if (hasHibernatedPropertyAnnotation!(T, m))
-                        return true;
+                    static if (hasHibernatedPropertyAnnotation!(T, m)) {
+                        found = true;
+                        break;
+                    }
                 }
             }
         }
-        return false;
+        return found;
     }
 }
 
 bool hasAnyKeyPropertyAnnotation(T)() {
+    bool found = false;
     foreach (m; __traits(allMembers, T)) {
         static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
             static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
-                static if (hasOneOfMemberAnnotations!(T, m, Id, Generated, Generator))
-                    return true;
+                static if (hasOneOfMemberAnnotations!(T, m, Id, Generated, Generator)) {
+                    found = true;
+                    break;
+                }
             }
         }
     }
-    return false;
+    return found;
+}
+
+unittest {
+    @Entity
+    class TestEntity {
+        @Id @Generated uint id;
+        @Column("name", 60) @NotNull string name;
+    }
+
+    class NonEntity {
+        uint id;
+    }
+
+    assert( hasAnyKeyPropertyAnnotation!TestEntity );
+    assert( !hasAnyKeyPropertyAnnotation!NonEntity );
 }
 
 /// returns true if class has one of specified anotations
 bool hasOneOfAnnotations(T : Object, A...)() {
+    bool found = false;
     foreach(a; A) {
-        static if (hasAnnotation!(T, a)) {
-            return true;
+        if (hasAnnotation!(T, a)) {
+            found = true;
+            break;
         }
     }
-    return false;
+    return found;
+}
+
+unittest {
+    @Entity
+    class TestEntity {
+        @Id @Generated uint id;
+        @Column("name", 60) @NotNull string name;
+    }
+
+    assert( hasOneOfAnnotations!(TestEntity, Entity, Table) );
+    assert( !hasOneOfAnnotations!(TestEntity, Table) );
 }
 
 /// returns true if class member has one of specified anotations
 bool hasOneOfMemberAnnotations(T : Object, string m, A...)() {
+    bool found = false;
     foreach(a; A) {
-        static if (hasMemberAnnotation!(T, m, a)) {
-            return true;
+        if (hasMemberAnnotation!(T, m, a)) {
+            found = true;
+            break;
         }
     }
-    return false;
+    return found;
+}
+
+unittest {
+    @Entity
+    class TestEntity {
+        @Id @Generated uint id;
+        @Column("name", 60) @NotNull string name;
+    }
+
+    assert( hasOneOfMemberAnnotations!(TestEntity, "id", Generated, Id) );
+    assert( hasOneOfMemberAnnotations!(TestEntity, "name", Null, NotNull) );
+    assert( !hasOneOfMemberAnnotations!(TestEntity, "name", Null, OneToMany) );
 }
 
 /// returns true if class has specified anotations
 bool hasAnnotation(T, A)() {
-    foreach(a; __traits(getAttributes, T)) {
-        static if (is(typeof(a) == A) || a.stringof == A.stringof) {
-            return true;
+    alias attribs = AliasSeq!(__traits(getAttributes, T));
+
+    bool found = false;
+    foreach(a; attribs) {
+        if (attributeIsAnnotation!(a, A)) {
+            found = true;
+            //pragma(msg, "Hibernated: Found @" ~ A.stringof ~ " on class "~T.stringof);
+            break;
         }
     }
-    return false;
+    return found;
 }
 
-bool isGetterFunction(alias overload, string methodName)() {
+bool attributeIsAnnotation(alias attr, A)() {
+    return is(typeof(attr) == A) || attr.stringof == A.stringof;
+}
+
+bool isGetterFunction(alias overload, immutable string methodName)() {
     //pragma(msg, "isGetterFunction " ~ methodName ~ " " ~ typeof(overload).stringof);
     static if (is(typeof(overload) == function)) {
         //pragma(msg, "is function " ~ methodName ~ " " ~ typeof(overload).stringof);
@@ -572,26 +629,51 @@ bool isGetterFunction(alias overload, string methodName)() {
 }
 
 /// returns true if class member has specified anotations
-bool hasMemberAnnotation(T, string m, A)() {
-    static if (is(typeof(__traits(getMember, T, m)) == function)) {
+bool hasMemberAnnotation(T, immutable string m, A)() {
+    if(!hasMember!(T, m)) {
+        return false;
+    }
+    alias member = AliasSeq!(__traits(getMember, T, m));
+    bool hasAnnotation = false;
+
+    if (is(typeof(member) == function)) {
         // function: check overloads
         foreach(overload; MemberFunctionsTuple!(T, m)) {
             static if (isGetterFunction!(overload, m)) {
                 foreach(a; __traits(getAttributes, overload)) {
-                    static if (is(typeof(a) == A) || a.stringof == A.stringof) {
-                        return true;
+                    static if (attributeIsAnnotation!(a, A)) {
+                        hasAnnotation = true;
+                        break;
                     }
                 }
             }
+            if(hasAnnotation) {
+                break;
+            }
         }
     } else {
-        foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
-            static if (is(typeof(a) == A) || a.stringof == A.stringof) {
-                return true;
+        alias attribs = AliasSeq!(__traits(getAttributes, member));
+        foreach(a; attribs) {
+            static if (attributeIsAnnotation!(a, A)) {
+                hasAnnotation = true;
+                break;
             }
         }
     }
-    return false;
+    return hasAnnotation;
+}
+
+unittest {
+    @Entity
+    class TestEntity {
+        @Id @Generated uint id;
+        @Column("name", 60) @NotNull string name;
+    }
+
+    assert( hasMemberAnnotation!(TestEntity, "id", Id) );
+    assert( hasMemberAnnotation!(TestEntity, "id", Generated) );
+    assert( hasMemberAnnotation!(TestEntity, "name", Column) );
+    assert( hasMemberAnnotation!(TestEntity, "name", NotNull) );
 }
 
 /// returns entity name for class type
@@ -609,21 +691,46 @@ string getEntityName(T : Object)() {
 
 /// returns table name for class type
 string getTableName(T : Object)() {
+    string tableName;
+    bool found = false;
     foreach (a; __traits(getAttributes, T)) {
         static if (is(typeof(a) == Table)) {
-            return a.name;
+            found = true;
+            tableName = a.name;
+            break;
         }
     }
-    return camelCaseToUnderscoreDelimited(T.stringof);
+    return found? tableName : camelCaseToUnderscoreDelimited(T.stringof);
+}
+
+unittest {
+    // without using @Table will default to 'some_thing'
+    class SomeThing {
+        int id;
+        string name;
+    }
+
+    @Table("anotherthing")
+    class AnotherThing {
+        int id;
+        string name;
+    }
+
+    writeln("Testing getTableName");
+    immutable string tableName = getTableName!SomeThing;
+    assert( tableName == "some_thing");
+    immutable string anotherthing = getTableName!AnotherThing;
+    assert( anotherthing == "anotherthing");
 }
 
 string applyDefault(string s, string defaultValue) {
     return s != null && s.length > 0 ? s : defaultValue;
 }
 
-string getColumnName(T, string m)() {
+string getColumnName(T, immutable string m)() {
     immutable string defValue = camelCaseToUnderscoreDelimited(getPropertyName!(T,m));
-    static if (is(typeof(__traits(getMember, T, m)) == function)) {
+    alias member = AliasSeq!(__traits(getMember, T, m));
+    static if (is(typeof(member) == function)) {
         // function: check overloads
         foreach(overload; MemberFunctionsTuple!(T, m)) {
             static if (isGetterFunction!(overload, m)) {
@@ -635,7 +742,9 @@ string getColumnName(T, string m)() {
             }
         }
     } else {
-        foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
+        alias attribs = AliasSeq!(__traits(getAttributes, member));
+
+        foreach(a; attribs) {
             static if (is(typeof(a) == Column)) {
                 return applyDefault(a.name, defValue);
             }
@@ -644,71 +753,114 @@ string getColumnName(T, string m)() {
     return defValue;
 }
 
-string getGeneratorCode(T, string m)() {
-    foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
+string getGeneratorCode(T : Object, immutable string m)() {
+    if(!hasMemberAnnotation!(T, m, Generator)) {
+        return null;
+    }
+
+    alias attribs = AliasSeq!(__traits(getAttributes, __traits(getMember,T,m) ) );
+
+    string generatorCode = null;
+
+    foreach (a; attribs) {
         static if (is(typeof(a) == Generator)) {
             static assert(a.code != null && a.code != "", "@Generator doesn't have code specified");
-            return a.code;
+            generatorCode = a.code;
+            break;
         }
         static if (a.stringof == Generator.stringof) {
             static assert(false, "@Generator doesn't have code specified");
         }
     }
-    return null;
+    return generatorCode;
+}
+
+unittest {
+    @Entity
+    class TestEntity {
+        @Generator(UUID_GENERATOR)
+        uint id;
+    }
+
+    @Entity
+    class TestEntity2 {
+        @Generator("myCustomCode()")
+        uint id;
+    }
+
+    immutable string generatorCode = getGeneratorCode!(TestEntity, "id");
+    assert(generatorCode != null);
+    assert(generatorCode == "std.uuid.randomUUID().toString()", "@Generator(UUID_GENERATOR) should return std.uuid.randomUUID().toString()");
+
+    assert(getGeneratorCode!(TestEntity2, "id"), "@Generator(\"myCustomCode()\") should return myCustomCode()");
 }
 
 string getJoinColumnName(T, string m)() {
     immutable string defValue = camelCaseToUnderscoreDelimited(getPropertyName!(T,m)()) ~ "_fk";
-    static if (is(typeof(__traits(getMember, T, m)) == function)) {
+    alias member = AliasSeq!(__traits(getMember, T, m));
+    string joinColumnName = null;
+    if (is(typeof(member) == function)) {
         // function: check overloads
         foreach(overload; MemberFunctionsTuple!(T, m)) {
             static if (isGetterFunction!(overload, m)) {
                 foreach(a; __traits(getAttributes, overload)) {
                     static if (is(typeof(a) == JoinColumn)) {
-                        return applyDefault(a.name, defValue);
+                        joinColumnName = applyDefault(a.name, defValue);
+                        break;
                     } else static if (a.stringof == JoinColumn.stringof) {
-                        return defValue;   
+                        joinColumnName = defValue;
+                        break;
                     }
                 }
             }
         }
     } else {
-        foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
+        alias attribs = AliasSeq!(__traits(getAttributes, member));
+        foreach(a; attribs) {
             static if (is(typeof(a) == JoinColumn)) {
-                return applyDefault(a.name, defValue);
+                joinColumnName = applyDefault(a.name, defValue);
+                break;
             } else static if (a.stringof == JoinColumn.stringof) {
-                return defValue;
+                joinColumnName = defValue;
+                break;
             }
         }
     }
-    return null;
+    return joinColumnName;
 }
 
 string getUniqueIndexName(T, string m)() {
     immutable string defValue = camelCaseToUnderscoreDelimited(getEntityName!T) ~ "_" ~ camelCaseToUnderscoreDelimited(getPropertyName!(T,m)()) ~ "_index";
-    static if (is(typeof(__traits(getMember, T, m)) == function)) {
+    alias member = AliasSeq!(__traits(getMember, T, m));
+    string uniqueIndexName = null;
+    if (is(typeof(member) == function)) {
         // function: check overloads
         foreach(overload; MemberFunctionsTuple!(T, m)) {
             static if (isGetterFunction!(overload, m)) {
                 foreach(a; __traits(getAttributes, overload)) {
                     static if (is(typeof(a) == UniqueKey)) {
-                        return applyDefault(a.name, defValue);
+                        uniqueIndexName = applyDefault(a.name, defValue);
+                        break;
                     } else static if (a.stringof == UniqueKey.stringof) {
-                        return defValue;
+                        uniqueIndexName = defValue;
+                        break;
                     }
                 }
             }
         }
     } else {
-        foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
+        alias attribs = AliasSeq!(__traits(getAttributes, member));
+        foreach(a; attribs) {
             static if (is(typeof(a) == UniqueKey)) {
-                return applyDefault(a.name, defValue);
+                uniqueIndexName = applyDefault(a.name, defValue);
+                break;
             } else static if (a.stringof == UniqueKey.stringof) {
-                return defValue;
+                uniqueIndexName = defValue;
+                break;
             }
         }
     }
-    return null;
+    return uniqueIndexName;
 }
 
 string getJoinTableName(T, string m)() {
@@ -724,7 +876,8 @@ string getJoinTableName(T, string m)() {
             }
         }
     } else {
-        foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
+        alias attribs = AliasSeq!(__traits(getAttributes, __traits(getMember,T,m)));
+        foreach(a; attribs) {
             static if (is(typeof(a) == JoinTable)) {
                 return emptyStringToNull(a.joinTableName);
             }
@@ -734,7 +887,9 @@ string getJoinTableName(T, string m)() {
 }
 
 string getJoinTableColumn1(T, string m)() {
-    foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
+    alias attribs = AliasSeq!(__traits(getAttributes, __traits(getMember,T,m)));
+
+    foreach (a; attribs) {
         static if (is(typeof(a) == JoinTable)) {
             return emptyStringToNull(a.joinColumn1);
         }
@@ -743,7 +898,9 @@ string getJoinTableColumn1(T, string m)() {
 }
 
 string getJoinTableColumn2(T, string m)() {
-    foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
+    alias attribs = AliasSeq!(__traits(getAttributes, __traits(getMember,T,m)));
+
+    foreach (a; attribs) {
         static if (is(typeof(a) == JoinTable)) {
             return emptyStringToNull(a.joinColumn2);
         }
@@ -756,15 +913,18 @@ string emptyStringToNull(string s) {
 }
 
 string getOneToOneReferencedPropertyName(T, string m)() {
-    foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
+    alias attribs = AliasSeq!(__traits(getAttributes, __traits(getMember,T,m)));
+    string propertyName = null;
+    foreach (a; attribs) {
         static if (is(typeof(a) == OneToOne)) {
-            return emptyStringToNull(a.name);
+            propertyName = emptyStringToNull(a.name);
+            break;
         }
         static if (a.stringof == OneToOne.stringof) {
-            return null;
+            break;
         }
     }
-    return null;
+    return propertyName;
 }
 
 /**
@@ -773,23 +933,20 @@ m is member of T eg T.m; m is a collection/array. The ElementType of the collect
 Try to figure out the field name in the type of m which is of type T.
 When m has a attribute of OneToMany with a name, the atribute.name is used.
 */
-string getOneToManyReferencedPropertyName(T, string m)() {
+string getOneToManyReferencedPropertyName(T, immutable string m)() {
+    alias attribs = AliasSeq!(__traits(getAttributes, __traits(getMember,T,m)));
     // first check there is a attribute @OneToMany with a non null name, if so use it!
-    foreach( a; __traits( getAttributes, __traits( getMember, T, m ) ) ) {
+    foreach( a; attribs) {
         static if( is( typeof(a) == OneToMany ) && a.name != null && a.name.length != 0 ) {
             return a.name;
         }
     }
     // No attrib or no name, try to deduce the field name from the type of T's field m
     alias memberFieldType = typeof(__traits(getMember, T, m));
-    static if( is( memberFieldType == LazyCollection!TAL, TAL ))
-    {
+    static if( is( memberFieldType == LazyCollection!TAL, TAL )) {
         alias refererType = TAL;
-    }
-    else
-    {
-        import std.range : ElementType;
-        alias refererType = ElementType!memberFieldType;
+    } else {
+        alias refererType = std.range.ElementType!memberFieldType;
     }
     // test T has single occurance in refererType
     import std.traits : FieldTypeTuple, Filter;
@@ -799,15 +956,19 @@ string getOneToManyReferencedPropertyName(T, string m)() {
     // assert there is exactly one field with type T in refererFields
     // when there is more than one use explicit attributes for each field eg: OneToMany( "field name first referer" ).. OneToMany( "field name second referer" )..
     static assert( refererFieldsofTypeT.length == 1, "auto deduction of OneToMany referencedPropertyName for " ~ T.stringof ~ "." ~ m ~ " failed: ElementType of " ~ refererType.stringof ~ "[] has " ~ refererFieldsofTypeT.length.stringof ~ " of fields " ~ T.stringof ~ ". (Use explicit OneToMany( fieldname in " ~ refererType.stringof ~ " ) annotations for multiple referers.)" );
+    string result = null;
     foreach( mf; __traits( allMembers, refererType ) ) {
-        static if( is( typeof(__traits(getMember, refererType, mf)) == T ) )
-            return mf;
+        static if( is( typeof(__traits(getMember, refererType, mf)) == T ) ) {
+            result = mf;
+            break;
+        }
     }
-    return null;
+    return result;
 }
 
-int getColumnLength(T, string m)() {
-    static if (is(typeof(__traits(getMember, T, m)) == function)) {
+int getColumnLength(T, immutable string m)() {
+    alias typeof(__traits(getMember, T, m)) ti;
+    static if (is(ti == function)) {
         // function: check overloads
         foreach(overload; MemberFunctionsTuple!(T, m)) {
             static if (isGetterFunction!(overload, m)) {
@@ -819,7 +980,8 @@ int getColumnLength(T, string m)() {
             }
         }
     } else {
-        foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
+        alias member = AliasSeq!(__traits(getMember, T, m));
+        foreach(a; __traits(getAttributes, member)) {
             static if (is(typeof(a) == Column)) {
                 return a.length;
             }
@@ -841,7 +1003,7 @@ enum PropertyMemberKind : int {
     GETTER_MEMBER,     // getField() + setField() or isField() and setField()
     PROPERTY_MEMBER,   // @property T field() { ... } + @property xxx field(T value) { ... }
     LAZY_MEMBER,       // Lazy!Object field;
-    UNSUPPORTED_MEMBER,// 
+    UNSUPPORTED_MEMBER,//
 }
 
 bool hasPercentSign(immutable string str) {
@@ -909,7 +1071,7 @@ string substituteParamTwice(immutable string fmt, immutable string value) {
         return fmt;
 }
 
-static immutable string[] PropertyMemberKind_ReadCode = 
+static immutable string[] PropertyMemberKind_ReadCode =
     [
         "entity.%s",
         "entity.%s()",
@@ -920,25 +1082,25 @@ static immutable string[] PropertyMemberKind_ReadCode =
 
 PropertyMemberKind getPropertyMemberKind(T : Object, string m)() {
     alias typeof(__traits(getMember, T, m)) ti;
+    PropertyMemberKind memberKind = PropertyMemberKind.UNSUPPORTED_MEMBER;
     static if (is(ti == function)) {
         // interate through all overloads
         //return checkGetterOverload!(T, m);
         foreach(overload; MemberFunctionsTuple!(T, m)) {
             static if (ParameterTypeTuple!(overload).length == 0) {
-                static if (functionAttributes!overload & FunctionAttribute.property)
-                    return PropertyMemberKind.PROPERTY_MEMBER;
-                else static if (m.startsWith("get") || m.startsWith("is"))
-                    return PropertyMemberKind.GETTER_MEMBER;
+                static if (functionAttributes!overload & FunctionAttribute.property) {
+                    memberKind = PropertyMemberKind.PROPERTY_MEMBER;
+                    break;
+                } else static if (m.startsWith("get") || m.startsWith("is")) {
+                    memberKind = PropertyMemberKind.GETTER_MEMBER;
+                    break;
+                }
             }
         }
-        return PropertyMemberKind.UNSUPPORTED_MEMBER;
     } else {
-        static if (isLazyInstance!(ti)) {
-            return PropertyMemberKind.LAZY_MEMBER;
-        } else {
-            return PropertyMemberKind.FIELD_MEMBER;
-        }
+        memberKind = isLazyInstance!(ti)? PropertyMemberKind.LAZY_MEMBER : PropertyMemberKind.FIELD_MEMBER;
     }
+    return memberKind;
 }
 
 string getPropertyEmbeddedEntityName(T : Object, string m)() {
@@ -953,7 +1115,7 @@ string getPropertyEmbeddedEntityName(T : Object, string m)() {
         static if (isImplicitlyConvertible!(ti, Object)) {
             static assert(hasAnnotation!(ti, Embeddable), "@Embedded property class should have @Embeddable annotation");
             return getEntityName!ti;
-        } else 
+        } else
             static assert(false, "@Embedded property can be only class with @Embeddable annotation");
     }
 }
@@ -1078,7 +1240,7 @@ template isValidSetter(T : Object, string m, ParamType) {
                 ParameterTypeTuple!(typeof(__traits(getMember, T, m))).length == 1 &&
                 is(ParameterTypeTuple!(typeof(__traits(getMember, T, m)))[0] == ParamType);
     } else {
-        enum bool isValidSetter = false; 
+        enum bool isValidSetter = false;
     }
 }
 
@@ -1093,25 +1255,25 @@ template isValidGetter(T : Object, string m) {
             static if (ParameterTypeTuple!(typeof(__traits(getMember, T, m))).length == 0) {
                 // has paired setter function of the same type
                 static if (isValidSetter!(T, getterNameToSetterName(m), rti)) {
-                    enum bool isValidGetter = true; 
+                    enum bool isValidGetter = true;
                 } else {
                     enum bool isValidGetter = false;
                 }
             }
         } else {
-            enum bool isValidGetter = false; 
+            enum bool isValidGetter = false;
         }
     } else {
-        enum bool isValidGetter = false; 
+        enum bool isValidGetter = false;
     }
 }
 
 template isValidGetterWithAnnotation(T : Object, string m) {
     // it's public member with get or is prefix
     static if (isValidGetter!(T, m)) {
-        enum bool isValidGetterWithAnnotation = hasHibernatedPropertyAnnotation!(T,m); 
+        enum bool isValidGetterWithAnnotation = hasHibernatedPropertyAnnotation!(T,m);
     } else {
-        enum bool isValidGetterWithAnnotation = false; 
+        enum bool isValidGetterWithAnnotation = false;
     }
 }
 
@@ -1315,7 +1477,7 @@ string getPropertyEmbeddedClassName(T : Object, string m)() {
         static if (isImplicitlyConvertible!(ti, Object)) {
             static assert(hasAnnotation!(ti, Embeddable), "@Embedded property class should have @Embeddable annotation");
             return fullyQualifiedName!ti;
-        } else 
+        } else
             static assert(false, "@Embedded property can be only class with @Embeddable annotation");
     }
 }
@@ -1639,7 +1801,7 @@ string getPropertyReadCode(T, string m)() {
     return substituteParam(PropertyMemberKind_ReadCode[getPropertyMemberKind!(T,m)()], m);
 }
 
-static immutable bool[] ColumnTypeCanHoldNulls = 
+static immutable bool[] ColumnTypeCanHoldNulls =
     [
      false, //BOOL_TYPE     // bool
      false, //BYTE_TYPE,    // byte
@@ -1679,7 +1841,7 @@ bool isColumnTypeNullableByDefault(T, string m)() {
 }
 
 
-static immutable string[] ColumnTypeKeyIsSetCode = 
+static immutable string[] ColumnTypeKeyIsSetCode =
     [
      "(%s != 0)", //BOOL_TYPE     // bool
      "(%s != 0)", //BYTE_TYPE,    // byte
@@ -1718,7 +1880,7 @@ string getColumnTypeKeyIsSetCode(T, string m)() {
     return substituteParam(ColumnTypeKeyIsSetCode[getPropertyMemberType!(T,m)()], getPropertyReadCode!(T,m)());
 }
 
-static immutable string[] ColumnTypeIsNullCode = 
+static immutable string[] ColumnTypeIsNullCode =
     [
      "(false)", //BOOL_TYPE     // bool
      "(false)", //BYTE_TYPE,    // byte
@@ -1757,7 +1919,7 @@ string getColumnTypeIsNullCode(T, string m)() {
     return substituteParam(ColumnTypeIsNullCode[getPropertyMemberType!(T,m)()], getPropertyReadCode!(T,m)());
 }
 
-static immutable string[] ColumnTypeSetNullCode = 
+static immutable string[] ColumnTypeSetNullCode =
     [
      "bool nv;", // BOOL_TYPE   // bool
      "byte nv = 0;", //BYTE_TYPE,    // byte
@@ -1792,7 +1954,7 @@ static immutable string[] ColumnTypeSetNullCode =
      "ubyte[] nv = null;", //UBYTE_ARRAY_TYPE, // ubyte[]
      ];
 
-static immutable string[] ColumnTypePropertyToVariant = 
+static immutable string[] ColumnTypePropertyToVariant =
     [
      "Variant(%s)", //BOOL_TYPE     // bool
      "Variant(%s)", //BYTE_TYPE,    // byte
@@ -1879,7 +2041,7 @@ string getPropertyVariantReadCode(T, string m)() {
 }
 
 
-static immutable string[] ColumnTypeConstructorCode = 
+static immutable string[] ColumnTypeConstructorCode =
     [
      "new BooleanType()", // BOOL_TYPE, bool
      "new NumberType(2, false, SqlType.TINYINT)", //BYTE_TYPE,    // byte
@@ -1923,7 +2085,7 @@ string getColumnTypeName(T, string m, int length)() {
     }
 }
 
-static immutable string[] ColumnTypeDatasetReaderCode = 
+static immutable string[] ColumnTypeDatasetReaderCode =
     [
      "r.getBoolean(index)", //BOOL_TYPE,    // bool
      "r.getByte(index)", //BYTE_TYPE,    // byte
@@ -1962,7 +2124,7 @@ string getColumnTypeDatasetReadCode(T, string m)() {
     return ColumnTypeDatasetReaderCode[getPropertyMemberType!(T,m)()];
 }
 
-static immutable string[] ColumnTypeVariantReadCode = 
+static immutable string[] ColumnTypeVariantReadCode =
     [
      "(value == null ? nv : value.get!(bool))", //BOOL_TYPE,    // bool
      "(value == null ? nv : (value.convertsTo!(byte) ? value.get!(byte) : (value.convertsTo!(long) ? to!byte(value.get!(long)) : to!byte((value.get!(ulong))))))", //BYTE_TYPE,    // byte
@@ -1997,7 +2159,7 @@ static immutable string[] ColumnTypeVariantReadCode =
      "(value == null ? nv : value.get!(ubyte[]))", //UBYTE_ARRAY_TYPE, // ubyte[]
      ];
 
-static immutable string[] DatasetWriteCode = 
+static immutable string[] DatasetWriteCode =
     [
      "r.setBoolean(index, %s);", //BOOL_TYPE,    // bool
      "r.setByte(index, %s);", //BYTE_TYPE,    // byte
@@ -2172,43 +2334,43 @@ string getOneToOnePropertyDef(T, immutable string m)() {
     //  pragma(msg, "variant get: " ~ propertyVariantGetCode);
     immutable string readerFuncDef = "null";
     immutable string writerFuncDef = "null";
-    immutable string getVariantFuncDef = 
+    immutable string getVariantFuncDef =
         "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ propertyVariantGetCode ~ "; \n" ~
             " }\n";
-    immutable string setVariantFuncDef = 
+    immutable string setVariantFuncDef =
         "\n" ~
-            "function(Object obj, Variant value) { \n" ~ 
+            "function(Object obj, Variant value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyVariantSetCode ~ "\n" ~
             " }\n";
     immutable string keyIsSetFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    return false;\n" ~
             " }\n";
     immutable string isNullFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ isNullCode ~ ";\n" ~
             " }\n";
-    immutable string getObjectFuncDef = 
+    immutable string getObjectFuncDef =
         "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    assert(entity !is null);\n" ~
             "    return " ~ propertyObjectGetCode ~ "; \n" ~
             " }\n";
-    immutable string setObjectFuncDef = 
+    immutable string setObjectFuncDef =
         "\n" ~
-            "function(Object obj, Object value) { \n" ~ 
+            "function(Object obj, Object value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyObjectSetCode ~ "\n" ~
             " }\n";
-    immutable string copyFuncDef = 
+    immutable string copyFuncDef =
         "\n" ~
-            "function(Object to, Object from) { \n" ~ 
+            "function(Object to, Object from) { \n" ~
             "    " ~ entityClassName ~ " toentity = cast(" ~ entityClassName ~ ")to; \n" ~
             "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
             "    " ~ copyFieldCode ~ "\n" ~
@@ -2217,30 +2379,30 @@ string getOneToOnePropertyDef(T, immutable string m)() {
     immutable string setCollectionFuncDef = "null";
     immutable string setObjectDelegateFuncDef = !isLazy ? "null" :
             "\n" ~
-            "function(Object obj, Object delegate() loader) { \n" ~ 
+            "function(Object obj, Object delegate() loader) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ getLazyPropertyObjectWriteCode!(T,m) ~ "\n" ~
             " }\n";
     immutable string setCollectionDelegateFuncDef = "null";
-    immutable string isLoadedFuncDef = !isLazy ? "null" : 
+    immutable string isLoadedFuncDef = !isLazy ? "null" :
             "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ getLazyPropertyLoadedCode!(T,m) ~ ";\n" ~
             " }\n";
-    
+
     return "    new PropertyInfo(" ~
-            quoteString(propertyName) ~ ", " ~ 
-            quoteString(columnName) ~ ", " ~ 
-            typeName ~ ", " ~ 
-            format("%s",length) ~ ", " ~ 
+            quoteString(propertyName) ~ ", " ~
+            quoteString(columnName) ~ ", " ~
+            typeName ~ ", " ~
+            format("%s",length) ~ ", " ~
             "false, " ~ // id
             "false, " ~ // generated
-            quoteBool(nullable) ~ ", " ~ 
+            quoteBool(nullable) ~ ", " ~
             unique ~ ", " ~
             "RelationType.OneToOne, " ~
-            quoteString(referencedEntityName)  ~ ", " ~ 
-            quoteString(referencedPropertyName)  ~ ", " ~ 
+            quoteString(referencedEntityName)  ~ ", " ~
+            quoteString(referencedPropertyName)  ~ ", " ~
             readerFuncDef ~ ", " ~
             writerFuncDef ~ ", " ~
             getVariantFuncDef ~ ", " ~
@@ -2295,30 +2457,30 @@ string getManyToOnePropertyDef(T, immutable string m)() {
     //  pragma(msg, "variant get: " ~ propertyVariantGetCode);
     immutable string readerFuncDef = "null";
     immutable string writerFuncDef = "null";
-    immutable string getVariantFuncDef = 
+    immutable string getVariantFuncDef =
         "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ propertyVariantGetCode ~ "; \n" ~
             " }\n";
-    immutable string setVariantFuncDef = 
+    immutable string setVariantFuncDef =
         "\n" ~
-            "function(Object obj, Variant value) { \n" ~ 
+            "function(Object obj, Variant value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyVariantSetCode ~ "\n" ~
             " }\n";
     immutable string keyIsSetFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    return false;\n" ~
             " }\n";
     immutable string isNullFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ isNullCode ~ ";\n" ~
             " }\n";
-    immutable string getObjectFuncDef = 
+    immutable string getObjectFuncDef =
         "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    //writeln(\"Inside getObjectFunc\"); \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    assert(entity !is null);\n" ~
@@ -2326,15 +2488,15 @@ string getManyToOnePropertyDef(T, immutable string m)() {
             "    //writeln(res is null ? \"obj is null\" : \"obj is not null\"); \n" ~
             "    return res; \n" ~
             " }\n";
-    immutable string setObjectFuncDef = 
+    immutable string setObjectFuncDef =
         "\n" ~
-            "function(Object obj, Object value) { \n" ~ 
+            "function(Object obj, Object value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyObjectSetCode ~ "\n" ~
             " }\n";
-    immutable string copyFuncDef = 
+    immutable string copyFuncDef =
         "\n" ~
-            "function(Object to, Object from) { \n" ~ 
+            "function(Object to, Object from) { \n" ~
             "    " ~ entityClassName ~ " toentity = cast(" ~ entityClassName ~ ")to; \n" ~
             "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
             "    " ~ copyFieldCode ~ "\n" ~
@@ -2343,30 +2505,30 @@ string getManyToOnePropertyDef(T, immutable string m)() {
     immutable string setCollectionFuncDef = "null";
     immutable string setObjectDelegateFuncDef = !isLazy ? "null" :
         "\n" ~
-        "function(Object obj, Object delegate() loader) { \n" ~ 
+        "function(Object obj, Object delegate() loader) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ getLazyPropertyObjectWriteCode!(T,m) ~ "\n" ~
             " }\n";
     immutable string setCollectionDelegateFuncDef = "null";
-    immutable string isLoadedFuncDef = !isLazy ? "null" : 
+    immutable string isLoadedFuncDef = !isLazy ? "null" :
     "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ getLazyPropertyLoadedCode!(T,m) ~ ";\n" ~
             " }\n";
 
     return "    new PropertyInfo(" ~
-            quoteString(propertyName) ~ ", " ~ 
-            quoteString(columnName) ~ ", " ~ 
-            typeName ~ ", " ~ 
-            format("%s",length) ~ ", " ~ 
+            quoteString(propertyName) ~ ", " ~
+            quoteString(columnName) ~ ", " ~
+            typeName ~ ", " ~
+            format("%s",length) ~ ", " ~
             "false, " ~ // id
             "false, " ~ // generated
-            quoteBool(nullable) ~ ", " ~ 
+            quoteBool(nullable) ~ ", " ~
             unique ~ ", " ~
             "RelationType.ManyToOne, " ~
-            quoteString(referencedEntityName)  ~ ", " ~ 
-            quoteString(referencedPropertyName)  ~ ", " ~ 
+            quoteString(referencedEntityName)  ~ ", " ~
+            quoteString(referencedPropertyName)  ~ ", " ~
             readerFuncDef ~ ", " ~
             writerFuncDef ~ ", " ~
             getVariantFuncDef ~ ", " ~
@@ -2426,75 +2588,75 @@ string getOneToManyPropertyDef(T, immutable string m)() {
     //  pragma(msg, "variant get: " ~ propertyVariantGetCode);
     immutable string readerFuncDef = "null";
     immutable string writerFuncDef = "null";
-    immutable string getVariantFuncDef = 
+    immutable string getVariantFuncDef =
         "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ propertyVariantGetCode ~ "; \n" ~
             " }\n";
-    immutable string setVariantFuncDef = 
+    immutable string setVariantFuncDef =
         "\n" ~
-            "function(Object obj, Variant value) { \n" ~ 
+            "function(Object obj, Variant value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyVariantSetCode ~ "\n" ~
             " }\n";
     immutable string keyIsSetFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    return false;\n" ~
             " }\n";
     immutable string isNullFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ isNullCode ~ ";\n" ~
             " }\n";
     immutable string getObjectFuncDef = "null";
     immutable string setObjectFuncDef = "null";
-    immutable string copyFuncDef = 
+    immutable string copyFuncDef =
         "\n" ~
-            "function(Object to, Object from) { \n" ~ 
+            "function(Object to, Object from) { \n" ~
             "    " ~ entityClassName ~ " toentity = cast(" ~ entityClassName ~ ")to; \n" ~
             "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
             "    " ~ copyFieldCode ~ "\n" ~
             " }\n";
-    immutable string getCollectionFuncDef = 
+    immutable string getCollectionFuncDef =
         "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    assert(entity !is null);\n" ~
             "    return cast(Object[])" ~ propertyObjectGetCode ~ "; \n" ~
             " }\n";
-    immutable string setCollectionFuncDef = 
+    immutable string setCollectionFuncDef =
         "\n" ~
-        "function(Object obj, Object[] value) { \n" ~ 
+        "function(Object obj, Object[] value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyObjectSetCode ~ "\n" ~
             " }\n";
     immutable string setObjectDelegateFuncDef = "null";
     immutable string setCollectionDelegateFuncDef = !isLazy ? "null" :
     "\n" ~
-        "function(Object obj, Object[] delegate() loader) { \n" ~ 
+        "function(Object obj, Object[] delegate() loader) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ getLazyPropertyObjectWriteCode!(T,m) ~ "\n" ~
             " }\n";
-    immutable string isLoadedFuncDef = !isLazy ? "null" : 
+    immutable string isLoadedFuncDef = !isLazy ? "null" :
     "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ getLazyPropertyLoadedCode!(T,m) ~ ";\n" ~
             " }\n";
 
     return "    new PropertyInfo(" ~
-            quoteString(propertyName) ~ ", " ~ 
-            quoteString(columnName) ~ ", " ~ 
-            typeName ~ ", " ~ 
-            format("%s",length) ~ ", " ~ 
+            quoteString(propertyName) ~ ", " ~
+            quoteString(columnName) ~ ", " ~
+            typeName ~ ", " ~
+            format("%s",length) ~ ", " ~
             "false"  ~ ", " ~ // id
             "false"  ~ ", " ~ // generated
-            quoteBool(nullable) ~ ", " ~ 
+            quoteBool(nullable) ~ ", " ~
             unique ~ ", " ~
             "RelationType.OneToMany, " ~
-            quoteString(referencedEntityName)  ~ ", " ~ 
-            quoteString(referencedPropertyName)  ~ ", " ~ 
+            quoteString(referencedEntityName)  ~ ", " ~
+            quoteString(referencedPropertyName)  ~ ", " ~
             readerFuncDef ~ ", " ~
             writerFuncDef ~ ", " ~
             getVariantFuncDef ~ ", " ~
@@ -2553,74 +2715,74 @@ string getManyToManyPropertyDef(T, immutable string m)() {
     immutable string copyFieldCode = getPropertyCopyCode!(T,m);
     immutable string readerFuncDef = "null";
     immutable string writerFuncDef = "null";
-    immutable string getVariantFuncDef = 
+    immutable string getVariantFuncDef =
         "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ propertyVariantGetCode ~ "; \n" ~
             " }\n";
-    immutable string setVariantFuncDef = 
+    immutable string setVariantFuncDef =
         "\n" ~
-            "function(Object obj, Variant value) { \n" ~ 
+            "function(Object obj, Variant value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyVariantSetCode ~ "\n" ~
             " }\n";
     immutable string keyIsSetFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    return false;\n" ~
             " }\n";
     immutable string isNullFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ isNullCode ~ ";\n" ~
             " }\n";
     immutable string getObjectFuncDef = "null";
     immutable string setObjectFuncDef = "null";
-    immutable string copyFuncDef = 
+    immutable string copyFuncDef =
         "\n" ~
-            "function(Object to, Object from) { \n" ~ 
+            "function(Object to, Object from) { \n" ~
             "    " ~ entityClassName ~ " toentity = cast(" ~ entityClassName ~ ")to; \n" ~
             "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
             "    " ~ copyFieldCode ~ "\n" ~
             " }\n";
-    immutable string getCollectionFuncDef = 
+    immutable string getCollectionFuncDef =
         "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    assert(entity !is null);\n" ~
             "    return cast(Object[])" ~ propertyObjectGetCode ~ "; \n" ~
             " }\n";
-    immutable string setCollectionFuncDef = 
+    immutable string setCollectionFuncDef =
         "\n" ~
-            "function(Object obj, Object[] value) { \n" ~ 
+            "function(Object obj, Object[] value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyObjectSetCode ~ "\n" ~
             " }\n";
     immutable string setObjectDelegateFuncDef = "null";
     immutable string setCollectionDelegateFuncDef = !isLazy ? "null" :
     "\n" ~
-        "function(Object obj, Object[] delegate() loader) { \n" ~ 
+        "function(Object obj, Object[] delegate() loader) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ getLazyPropertyObjectWriteCode!(T,m) ~ "\n" ~
             " }\n";
-    immutable string isLoadedFuncDef = !isLazy ? "null" : 
+    immutable string isLoadedFuncDef = !isLazy ? "null" :
     "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ getLazyPropertyLoadedCode!(T,m) ~ ";\n" ~
             " }\n";
 
     return "    new PropertyInfo(" ~
-            quoteString(propertyName) ~ ", " ~ 
-            quoteString(columnName) ~ ", " ~ 
-            typeName ~ ", " ~ 
-            format("%s",length) ~ ", " ~ 
+            quoteString(propertyName) ~ ", " ~
+            quoteString(columnName) ~ ", " ~
+            typeName ~ ", " ~
+            format("%s",length) ~ ", " ~
             "false"  ~ ", " ~ // id
             "false"  ~ ", " ~ // generated
-            quoteBool(nullable) ~ ", " ~ 
+            quoteBool(nullable) ~ ", " ~
             unique ~ ", " ~
             "RelationType.ManyToMany, " ~
-            quoteString(referencedEntityName)  ~ ", " ~ 
+            quoteString(referencedEntityName)  ~ ", " ~
             "null, " ~ //referencedPropertyName
             readerFuncDef ~ ", " ~
             writerFuncDef ~ ", " ~
@@ -2674,59 +2836,59 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
     //  pragma(msg, "variant get: " ~ propertyVariantGetCode);
     immutable string readerFuncDef = "null";
     immutable string writerFuncDef = "null";
-    immutable string getVariantFuncDef = 
+    immutable string getVariantFuncDef =
         "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ propertyVariantGetCode ~ "; \n" ~
             " }\n";
-    immutable string setVariantFuncDef = 
+    immutable string setVariantFuncDef =
         "\n" ~
-        "function(Object obj, Variant value) { \n" ~ 
+        "function(Object obj, Variant value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyVariantSetCode ~ "\n" ~
             " }\n";
     immutable string keyIsSetFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    return false;\n" ~
             " }\n";
     immutable string isNullFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ isNullCode ~ ";\n" ~
             " }\n";
-    immutable string getObjectFuncDef = 
+    immutable string getObjectFuncDef =
         "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    assert(entity !is null);\n" ~
             "    return " ~ propertyObjectGetCode ~ "; \n" ~
             " }\n";
-    immutable string setObjectFuncDef = 
+    immutable string setObjectFuncDef =
         "\n" ~
-            "function(Object obj, Object value) { \n" ~ 
+            "function(Object obj, Object value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyObjectSetCode ~ "\n" ~
             " }\n";
-    immutable string copyFuncDef = 
+    immutable string copyFuncDef =
         "\n" ~
-            "function(Object to, Object from) { \n" ~ 
+            "function(Object to, Object from) { \n" ~
             "    " ~ entityClassName ~ " toentity = cast(" ~ entityClassName ~ ")to; \n" ~
             "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
             "    " ~ copyFieldCode ~ "\n" ~
             " }\n";
-    
-    return "    new PropertyInfo(" ~ 
-            quoteString(propertyName) ~ ", " ~ 
-            quoteString(columnName) ~ ", " ~ 
-            typeName ~ ", " ~ 
-            format("%s",length) ~ ", " ~ 
+
+    return "    new PropertyInfo(" ~
+            quoteString(propertyName) ~ ", " ~
+            quoteString(columnName) ~ ", " ~
+            typeName ~ ", " ~
+            format("%s",length) ~ ", " ~
             "false, " ~ // id
             "false, " ~ // generated
-            quoteBool(nullable) ~ ", " ~ 
+            quoteBool(nullable) ~ ", " ~
             unique ~ ", " ~
             "RelationType.Embedded, " ~
-            quoteString(referencedEntityName)  ~ ", " ~ 
+            quoteString(referencedEntityName)  ~ ", " ~
             "null, \n" ~
             readerFuncDef ~ ", " ~
             writerFuncDef ~ ", " ~
@@ -2737,7 +2899,7 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
             copyFuncDef ~ ", " ~
             "null, " ~ // generatorFunc
             getObjectFuncDef ~ ", " ~
-            setObjectFuncDef ~ 
+            setObjectFuncDef ~
             ")";
 }
 
@@ -2773,60 +2935,60 @@ string getSimplePropertyDef(T, immutable string m)() {
     immutable string isNullCode = getColumnTypeIsNullCode!(T,m);
     immutable string copyFieldCode = getPropertyCopyCode!(T,m);
     immutable string readerFuncDef = "\n" ~
-        "function(Object obj, DataSetReader r, int index) { \n" ~ 
+        "function(Object obj, DataSetReader r, int index) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyWriteCode ~ " \n" ~
             " }\n";
     immutable string writerFuncDef = "\n" ~
-        "function(Object obj, DataSetWriter r, int index) { \n" ~ 
+        "function(Object obj, DataSetWriter r, int index) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ datasetWriteCode ~ " \n" ~
             " }\n";
     immutable string getVariantFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ propertyVariantGetCode ~ "; \n" ~
             " }\n";
     immutable string setVariantFuncDef = "\n" ~
-        "function(Object obj, Variant value) { \n" ~ 
+        "function(Object obj, Variant value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyVariantSetCode ~ "\n" ~
             " }\n";
     immutable string keyIsSetFuncDef = "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ keyIsSetCode ~ ";\n" ~
             " }\n";
     immutable string isNullFuncDef = "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ isNullCode ~ ";\n" ~
             " }\n";
-    immutable string copyFuncDef = 
+    immutable string copyFuncDef =
             "\n" ~
-            "function(Object to, Object from) { \n" ~ 
+            "function(Object to, Object from) { \n" ~
             "    " ~ entityClassName ~ " toentity = cast(" ~ entityClassName ~ ")to; \n" ~
             "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
             "    " ~ copyFieldCode ~ "\n" ~
             " }\n";
     immutable string generatorFuncDef = generatorCode is null ? "null" :
             "\n" ~
-            "function(Connection conn, const PropertyInfo property) { \n" ~ 
+            "function(Connection conn, const PropertyInfo property) { \n" ~
             "    return Variant(" ~ generatorCode ~ ");\n" ~
             "}\n";
 
     static assert (typeName != null, "Cannot determine column type for member " ~ m ~ " of type " ~ T.stringof);
-    return "    new PropertyInfo(" ~ 
+    return "    new PropertyInfo(" ~
             quoteString(propertyName) ~ ", " ~
-            quoteString(columnName) ~ ", " ~ 
-            typeName ~ ", " ~ 
-            format("%s",length) ~ ", " ~ 
-            quoteBool(isId)  ~ ", " ~ 
-            quoteBool(isGenerated)  ~ ", " ~ 
-            quoteBool(nullable) ~ ", " ~ 
+            quoteString(columnName) ~ ", " ~
+            typeName ~ ", " ~
+            format("%s",length) ~ ", " ~
+            quoteBool(isId)  ~ ", " ~
+            quoteBool(isGenerated)  ~ ", " ~
+            quoteBool(nullable) ~ ", " ~
             unique ~ ", " ~
-            "RelationType.None, " ~ 
-            "null, " ~ 
+            "RelationType.None, " ~
+            "null, " ~
             "null, \n" ~
             readerFuncDef ~ ", " ~
             writerFuncDef ~ ", " ~
@@ -2840,7 +3002,7 @@ string getSimplePropertyDef(T, immutable string m)() {
 }
 
 /// creates "new PropertyInfo(...)" code to create property metadata for member m of class T
-string getPropertyDef(T, string m)() {
+string getPropertyDef(T, immutable string m)() {
     immutable bool isObject = isObjectMember!(T, m);
     immutable bool isCollection = isCollectionMember!(T, m);
     immutable bool isEmbedded = isEmbeddedObjectMember!(T, m);
@@ -2919,7 +3081,7 @@ string getEntityDef(T)() {
                 immutable bool isMainProp = isMainMemberForProperty!(T,m) && !hasMemberAnnotation!(T, m, Transient);
                 //pragma( msg, entityName ~ ":" ~ tableName ~ "." ~ m ~ ": typeSupported: " ~ (typeSupported ? "true" : "false") ~ " isMainProp: " ~ (isMainProp ? "true" : "false") )
                 static if (typeSupported && isMainProp) {
-                    
+
                     immutable string propertyDef = getPropertyDef!(T, m)();
                     //pragma(msg, propertyDef);
 
@@ -3021,7 +3183,7 @@ string entityListDef(T ...)() {
             }
         }
     }
-    string code = 
+    string code =
         "shared static this() {\n" ~
         imp ~ // imports
         "    //writeln(\"starting static initializer\");\n" ~
@@ -3109,7 +3271,7 @@ abstract class SchemaInfo : EntityMetaData {
         }
         return query;
     }
-    
+
     override public string getAllFieldList(const EntityInfo ei, bool exceptKey = false) const {
         string query;
         foreach(pi; ei) {
@@ -3131,7 +3293,7 @@ abstract class SchemaInfo : EntityMetaData {
         }
         return query;
     }
-    
+
     override public int getFieldCount(const EntityInfo ei, bool exceptKey) const {
         int count = 0;
         foreach(pi; ei) {
@@ -3153,7 +3315,7 @@ abstract class SchemaInfo : EntityMetaData {
         }
         return count;
     }
-    
+
     public string getAllFieldPlaceholderList(const EntityInfo ei, bool exceptKey = false) const {
         string query;
         foreach(pi; ei) {
@@ -3175,7 +3337,7 @@ abstract class SchemaInfo : EntityMetaData {
         }
         return query;
     }
-    
+
     override public string getAllFieldList(string entityName, bool exceptKey) const {
         return getAllFieldList(findEntity(entityName), exceptKey);
     }
@@ -3299,33 +3461,33 @@ class SchemaInfoImpl(T...) : SchemaInfo {
     override public const(EntityInfo[string]) getEntityMap() const  { return entityMap; }
     override public const(EntityInfo [TypeInfo_Class]) getClassMap() const  { return classMap; }
 
-    override int opApply(int delegate(ref const EntityInfo) dg) const { 
-        int result = 0; 
-        for (int i = 0; i < entities.length; i++) { 
-            result = dg(entities[i]); 
-            if (result) break; 
-        } 
-        return result; 
+    override int opApply(int delegate(ref const EntityInfo) dg) const {
+        int result = 0;
+        for (int i = 0; i < entities.length; i++) {
+            result = dg(entities[i]);
+            if (result) break;
+        }
+        return result;
     }
 
     override public const(EntityInfo) findEntity(string entityName) const  {
         enforceEx!MappingException((entityName in entityMap) !is null, "Cannot find entity by name " ~ entityName);
-        return entityMap[entityName]; 
+        return entityMap[entityName];
     }
 
-    override public const(EntityInfo) findEntity(TypeInfo_Class entityClass) const { 
+    override public const(EntityInfo) findEntity(TypeInfo_Class entityClass) const {
         enforceEx!MappingException((entityClass in classMap) !is null, "Cannot find entity by class " ~ entityClass.toString());
-        return classMap[entityClass]; 
+        return classMap[entityClass];
     }
 
-    override public const(EntityInfo) getEntity(int entityIndex) const { 
+    override public const(EntityInfo) getEntity(int entityIndex) const {
         enforceEx!MappingException(entityIndex >= 0 && entityIndex < entities.length, "Invalid entity index " ~ to!string(entityIndex));
-        return entities[entityIndex]; 
+        return entities[entityIndex];
     }
 
-    override public Object createEntity(string entityName) const { 
+    override public Object createEntity(string entityName) const {
         enforceEx!MappingException((entityName in entityMap) !is null, "Cannot find entity by name " ~ entityName);
-        return entityMap[entityName].createEntity(); 
+        return entityMap[entityName].createEntity();
     }
 
     override public const(EntityInfo) findEntityForObject(Object obj) const {
@@ -3687,7 +3849,7 @@ class ColumnInfo {
         this.table = table;
         this.property = null;
         this.columnName = columnName;
-        this.columnDefinition = table.schema.dialect.quoteIfNeeded(columnName) ~ " " ~ 
+        this.columnDefinition = table.schema.dialect.quoteIfNeeded(columnName) ~ " " ~
                 table.schema.dialect.getColumnTypeDefinition(null, referencedEntity.getKeyProperty());
     }
     this(TableInfo table, const PropertyInfo property) {
@@ -3730,7 +3892,7 @@ class IndexInfo {
                 return [table.schema.dialect.getDropIndexSQL(table.tableName, indexName)];
             case IndexType.ForeignKey:
             case IndexType.UniqueForeignKey:
-                return [table.schema.dialect.getDropForeignKeySQL(table.tableName, indexName), 
+                return [table.schema.dialect.getDropForeignKeySQL(table.tableName, indexName),
                         table.schema.dialect.getDropIndexSQL(table.tableName, indexName)];
         }
     }
@@ -3743,7 +3905,7 @@ class IndexInfo {
             case IndexType.ForeignKey:
                 return [table.schema.dialect.getForeignKeySQL(table.tableName, indexName, columnNames, referencedTable, referencedColumnNames)];
             case IndexType.UniqueForeignKey:
-                return [table.schema.dialect.getUniqueIndexSQL(table.tableName, indexName, columnNames), 
+                return [table.schema.dialect.getUniqueIndexSQL(table.tableName, indexName, columnNames),
                         table.schema.dialect.getForeignKeySQL(table.tableName, indexName, columnNames, referencedTable, referencedColumnNames)];
         }
     }
@@ -3754,30 +3916,30 @@ unittest {
     @Entity
     @Table("users")
     static class User {
-        
+
         //@Id @Generated
         @Column("id_column")
         int id;
-        
+
         @Column("name_column")
         string name;
-        
+
         // no column name
         //@Column
         string flags;
-        
+
         // annotated getter
         private string login;
         //@Column
         public string getLogin() { return login; }
         public void setLogin(string login) { this.login = login; }
-        
+
         // no (), no column name
         //@Column
         int testColumn;
     }
-    
-    
+
+
     @Entity
     @Table("customer")
     static class Customer {

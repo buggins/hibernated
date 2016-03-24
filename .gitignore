@@ -23,3 +23,22 @@ code.visualdproj
 HibernatedTest/*
 main.d
 Unittest/*
+
+# Ignore generated files
+lib/
+__test__library__
+*.sqlite
+*.db
+dub.selections.json
+.dub/
+
+
+# Ignore code coverage:
+*.lst
+.*.lst
+
+# Ignore Intellij IDEA folder:
+.idea
+
+# Ignore Sublime Text workspace (project file is ok):
+*.sublime-workspace
