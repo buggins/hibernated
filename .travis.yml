@@ -7,19 +7,24 @@ d:
   - dmd-2.069.2
   - dmd-2.068.2
   - dmd-2.067.1
-  - dmd-2.066.1
   - ldc-1.0.0-alpha1
   - ldc-0.17.0
   - ldc-0.16.1
-  - ldc-0.15.1
   - gdc-5.2.0
   - gdc-4.9.2
+
+before_install:
+  - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew update && brew install sqlite; fi"
 
 os:
  - linux
  - osx
 
 script: dub test --config=SQLite
+
+addons:
+  apt:
+    packages: [ libsqlite3-dev ]
 
 matrix:
   allow_failures:
