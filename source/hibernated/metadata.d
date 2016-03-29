@@ -489,12 +489,12 @@ template hasHibernatedPropertyAnnotation(T, string m) {
 }
 
 bool hasHibernatedClassOrPropertyAnnotation(T)() {
-    if (hasOneOfAnnotations!(T, Entity, Embeddable, Table)) {
+    static if (hasOneOfAnnotations!(T, Entity, Embeddable, Table)) {
         return true;
     } else {
         bool found = false;
         foreach (m; __traits(allMembers, T)) {
-            if (__traits(compiles, (typeof(__traits(getMember, T, m))))) {
+            static if (__traits(compiles, (typeof(__traits(getMember, T, m))))) {
                 static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
                     static if (hasHibernatedPropertyAnnotation!(T, m)) {
                         found = true;
@@ -541,7 +541,7 @@ unittest {
 bool hasOneOfAnnotations(T : Object, A...)() {
     bool found = false;
     foreach(a; A) {
-        if (hasAnnotation!(T, a)) {
+        static if (hasAnnotation!(T, a)) {
             found = true;
             break;
         }
@@ -564,7 +564,7 @@ unittest {
 bool hasOneOfMemberAnnotations(T : Object, string m, A...)() {
     bool found = false;
     foreach(a; A) {
-        if (hasMemberAnnotation!(T, m, a)) {
+        static if (hasMemberAnnotation!(T, m, a)) {
             found = true;
             break;
         }
@@ -590,7 +590,7 @@ bool hasAnnotation(T, A)() {
 
     bool found = false;
     foreach(a; attribs) {
-        if (attributeIsAnnotation!(a, A)) {
+        static if (attributeIsAnnotation!(a, A)) {
             found = true;
             //pragma(msg, "Hibernated: Found @" ~ A.stringof ~ " on class "~T.stringof);
             break;
@@ -630,7 +630,7 @@ bool isGetterFunction(alias overload, immutable string methodName)() {
 
 /// returns true if class member has specified anotations
 bool hasMemberAnnotation(T, immutable string m, A)() {
-    if(!hasMember!(T, m)) {
+    static if(!hasMember!(T, m)) {
         return false;
     }
     alias member = AliasSeq!(__traits(getMember, T, m));
@@ -799,7 +799,7 @@ string getJoinColumnName(T, string m)() {
     immutable string defValue = camelCaseToUnderscoreDelimited(getPropertyName!(T,m)()) ~ "_fk";
     alias member = AliasSeq!(__traits(getMember, T, m));
     string joinColumnName = null;
-    if (is(typeof(member) == function)) {
+    static if (is(typeof(member) == function)) {
         // function: check overloads
         foreach(overload; MemberFunctionsTuple!(T, m)) {
             static if (isGetterFunction!(overload, m)) {
@@ -833,7 +833,7 @@ string getUniqueIndexName(T, string m)() {
     immutable string defValue = camelCaseToUnderscoreDelimited(getEntityName!T) ~ "_" ~ camelCaseToUnderscoreDelimited(getPropertyName!(T,m)()) ~ "_index";
     alias member = AliasSeq!(__traits(getMember, T, m));
     string uniqueIndexName = null;
-    if (is(typeof(member) == function)) {
+    static if (is(typeof(member) == function)) {
         // function: check overloads
         foreach(overload; MemberFunctionsTuple!(T, m)) {
             static if (isGetterFunction!(overload, m)) {
