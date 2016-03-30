@@ -1,27 +1,21 @@
 language: d
 
-sudo: false
+sudo: required
+dist: trusty
 
 d:
   - dmd
   - dmd-2.069.2
   - dmd-2.068.2
-  - dmd-2.067.1
-  - dmd-2.066.1
   - ldc-1.0.0-alpha1
-  - ldc-0.17.0
-  - ldc-0.16.1
-  - ldc-0.15.1
-  - gdc-5.2.0
-  - gdc-4.9.2
+  - gdc
 
 os:
  - linux
- - osx
 
 script: dub test --config=SQLite
 
 matrix:
   allow_failures:
-    - d: ldc
+    - d: ldc-1.0.0-alpha1
     - d: gdc
