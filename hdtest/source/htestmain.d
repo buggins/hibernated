@@ -16,13 +16,21 @@ class User {
     LazyCollection!Role roles;
     //@ManyToOne
     MyGroup group;
+
+    override string toString() {
+        return format("{id:%s, name:%s, roles:%s, group:%s}", id, name, roles, group);
+    }
 }
 
 class Role {
     int id;
     string name;
     @ManyToMany // w/o this annotation will be OneToMany by convention
-        LazyCollection!User users;
+    LazyCollection!User users;
+
+    override string toString() {
+        return format("{id:%s, name:%s}", id, name);
+    }
 }
 
 @Entity
@@ -31,6 +39,10 @@ class MyGroup {
     string name;
     @OneToMany
     LazyCollection!User users;
+
+    override string toString() {
+        return format("{id:%s, name:%s}", id, name);
+    }
 }
 
 void testHibernate() {
@@ -134,12 +146,18 @@ void testHibernate() {
     writefln( "query result: %s", qresult.listRows() );
     User u11 = qresult.uniqueResult!User();
     //User u11 = sess.createQuery("FROM User WHERE name=:Name and some_field_with_underscore != 42").setParameter("Name", "Alex").uniqueResult!User();
-    writeln("Checking User");
+    writefln("Checking User 11 : %s", u11);
     assert(u11.roles.length == 2);
     assert(u11.roles[0].name == "role10" || u11.roles.get()[0].name == "role11");
     assert(u11.roles[1].name == "role10" || u11.roles.get()[1].name == "role11");
     assert(u11.roles[0].users.length == 3);
     assert(u11.roles[0].users[0] == u10);
+
+//  todo: get this functionality working
+//    writeln("Test retrieving users by group... (ManyToOne relationship)");
+//    auto qUsersByGroup = sess.createQuery("FROM User WHERE group=:Group").setParameter("Group", grp1);
+//    User[] usersByGroup = qUsersByGroup.list!User();
+//    assert(usersByGroup.length > 0);
 
     //writeln("Removing User");
     // remove reference
@@ -154,6 +172,6 @@ void main()
 {
     testHibernate();
     writeln("Press any key");
-    readln();
+    //readln();
 
 }

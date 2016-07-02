@@ -9,6 +9,7 @@
     },
     "targetType": "staticLibrary",
     "targetPath": "lib",
+    "buildRequirements": ["allowWarnings"],
     "configurations": [
         {
             "name": "full",
