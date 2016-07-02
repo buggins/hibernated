@@ -10,11 +10,19 @@ d:
   - ldc
   - gdc
 
+before_install:
+ - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew update; fi"
+ - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew install sqlite; fi"
+
 os:
  - linux
  - osx
 
 script: dub test --config=SQLite
+
+addons:
+  apt:
+    packages: [ libsqlite3-dev ]
 
 matrix:
   allow_failures:
