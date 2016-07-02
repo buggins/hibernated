@@ -7,15 +7,15 @@ d:
   - dmd
   - dmd-2.069.2
   - dmd-2.068.2
-  - ldc-1.0.0-alpha1
+  - ldc
   - gdc
 
 os:
  - linux
+ - osx
 
 script: dub test --config=SQLite
 
 matrix:
   allow_failures:
-    - d: ldc-1.0.0-alpha1
     - d: gdc
