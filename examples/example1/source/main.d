@@ -1,26 +1,6 @@
-HibernateD
-==========
-
-[![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/buggins/hibernated?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-
-[![Build Status](https://travis-ci.org/buggins/hibernated.svg?branch=master)](https://travis-ci.org/buggins/hibernated)
-
-HibernateD is ORM for D language (similar to Hibernate)
-
-Project home page: https://github.com/buggins/hibernated
-Documentation: https://github.com/buggins/hibernated/wiki
-
-Uses DDBC as DB abstraction layer: https://github.com/buggins/ddbc
-
-Available as DUB package
-
-Use SQLite 3.7.11 or later. In older versions syntax INSERT INTO (col1, col2) VALUES (1, 2), (3, 4) is not supported.
-
-Sample code:
---------------------
-
     import hibernated.core;
     import std.algorithm;
+    import std.stdio;
 
 
     // Annotations of entity classes
@@ -146,6 +126,7 @@ Sample code:
         assert(u11.roles[0].name == "role10" || u11.roles.get()[0].name == "role11");
         assert(u11.roles[1].name == "role10" || u11.roles.get()[1].name == "role11");
         assert(u11.customer.name == "Customer 10");
+        writeln("u11.customer.users.length=", u11.customer.users.length);
         assert(u11.customer.users.length == 1);
         assert(u11.customer.users[0] == u10);
         assert(u11.roles[0].users.length == 1);
