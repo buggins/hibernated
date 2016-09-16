@@ -118,6 +118,8 @@
         sess.save(r11);
         sess.save(c10);
         sess.save(u10);
+	sess.close();
+        sess = factory.openSession();
 
         // load and check data
         User u11 = sess.createQuery("FROM User WHERE name=:Name").

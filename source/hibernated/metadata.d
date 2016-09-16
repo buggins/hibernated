@@ -528,22 +528,24 @@ bool hasOneOfAnnotations(T : Object, A...)() {
 
 /// returns true if class member has one of specified anotations
 bool hasOneOfMemberAnnotations(T : Object, string m, A...)() {
+    bool res = false;
     foreach(a; A) {
         static if (hasMemberAnnotation!(T, m, a)) {
-            return true;
+            res = true;
         }
     }
-    return false;
+    return res;
 }
 
 /// returns true if class has specified anotations
 bool hasAnnotation(T, A)() {
+    bool res = false;
     foreach(a; __traits(getAttributes, T)) {
         static if (is(typeof(a) == A) || a.stringof == A.stringof) {
-            return true;
+            res = true;
         }
     }
-    return false;
+    return res;
 }
 
 bool isGetterFunction(alias overload, string methodName)() {
@@ -573,13 +575,14 @@ bool isGetterFunction(alias overload, string methodName)() {
 
 /// returns true if class member has specified anotations
 bool hasMemberAnnotation(T, string m, A)() {
+    bool res = false;
     static if (is(typeof(__traits(getMember, T, m)) == function)) {
         // function: check overloads
         foreach(overload; MemberFunctionsTuple!(T, m)) {
             static if (isGetterFunction!(overload, m)) {
                 foreach(a; __traits(getAttributes, overload)) {
                     static if (is(typeof(a) == A) || a.stringof == A.stringof) {
-                        return true;
+                        res = true;
                     }
                 }
             }
@@ -587,11 +590,11 @@ bool hasMemberAnnotation(T, string m, A)() {
     } else {
         foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
             static if (is(typeof(a) == A) || a.stringof == A.stringof) {
-                return true;
+                res = true;
             }
         }
     }
-    return false;
+    return res;
 }
 
 /// returns entity name for class type
@@ -799,11 +802,12 @@ string getOneToManyReferencedPropertyName(T, string m)() {
     // assert there is exactly one field with type T in refererFields
     // when there is more than one use explicit attributes for each field eg: OneToMany( "field name first referer" ).. OneToMany( "field name second referer" )..
     static assert( refererFieldsofTypeT.length == 1, "auto deduction of OneToMany referencedPropertyName for " ~ T.stringof ~ "." ~ m ~ " failed: ElementType of " ~ refererType.stringof ~ "[] has " ~ refererFieldsofTypeT.length.stringof ~ " of fields " ~ T.stringof ~ ". (Use explicit OneToMany( fieldname in " ~ refererType.stringof ~ " ) annotations for multiple referers.)" );
+    string res = null;
     foreach( mf; __traits( allMembers, refererType ) ) {
         static if( is( typeof(__traits(getMember, refererType, mf)) == T ) )
-            return mf;
+            res = mf;
     }
-    return null;
+    return res;
 }
 
 int getColumnLength(T, string m)() {
