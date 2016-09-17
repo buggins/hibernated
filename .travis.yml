@@ -22,8 +22,8 @@ os:
  - osx
 
 script:
-  - dub build --config=SQLite
-  - cd hdtest && dub --config=SQLite
+  - dub build --config=SQLite --compiler=${DC}
+  - cd hdtest && dub --config=SQLite --compiler=${DC}
 
 addons:
   apt:
