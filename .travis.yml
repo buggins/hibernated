@@ -4,19 +4,16 @@ sudo: required
 dist: trusty
 
 d:
-  - dmd
   - ldc
-#  - dmd-2.071.2-b6
-#  - dmd-2.070.0
-#  - dmd-2.069.2
-#  - dmd-2.068.2
-#  - dmd-2.067.1
-#  - dmd-2.066.1
-#  - ldc-1.1.0-beta2
-#  - ldc-0.17.0
-#  - ldc-0.16.1
-#  - ldc-0.15.1
-#  - gdc
+  - dmd
+  - dmd-2.071.2-b6
+  - dmd-2.070.2
+  - dmd-2.069.2
+  - dmd-2.068.2
+  - ldc-1.1.0-beta2 # eq to dmd v2.071.1
+  - ldc-1.0.0 # eq to dmd v2.070.2
+  - ldc-0.17.1 # eq to dmd v2.068.2
+  - gdc
 
 before_install:
  - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew update; fi"
@@ -36,6 +33,4 @@ addons:
 
 matrix:
   allow_failures:
-    - os: osx
-      d: ldc
     - d: gdc
