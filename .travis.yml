@@ -4,18 +4,23 @@ sudo: required
 dist: trusty
 
 d:
-  - dmd-2.069.2
-  - dmd-2.068.2
-  - dmd-2.067.1
-  - dmd-2.066.1
-  - ldc-1.0.0
-  - ldc-0.16.1
-  - ldc-0.15.1
-  - gdc
+  - dmd
+  - ldc
+#  - dmd-2.071.2-b6
+#  - dmd-2.070.0
+#  - dmd-2.069.2
+#  - dmd-2.068.2
+#  - dmd-2.067.1
+#  - dmd-2.066.1
+#  - ldc-1.1.0-beta2
+#  - ldc-0.17.0
+#  - ldc-0.16.1
+#  - ldc-0.15.1
+#  - gdc
 
 before_install:
  - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew update; fi"
- - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew install sqlite; fi"
+ - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew install sqlite && brew link --force sqlite; fi"
 
 os:
  - linux
@@ -32,9 +37,5 @@ addons:
 matrix:
   allow_failures:
     - os: osx
-      d: ldc-1.0.0
-    - os: osx
-      d: ldc-0.16.1
-    - os: osx
-      d: ldc-0.15.1
+      d: ldc
     - d: gdc
