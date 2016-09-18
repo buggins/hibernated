@@ -492,38 +492,45 @@ bool hasHibernatedClassOrPropertyAnnotation(T)() {
     static if (hasOneOfAnnotations!(T, Entity, Embeddable, Table)) {
         return true;
     } else {
+        auto hasAnnotation = false;
         foreach (m; __traits(allMembers, T)) {
             static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
                 static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
-                    static if (hasHibernatedPropertyAnnotation!(T, m))
-                        return true;
+                    static if (hasHibernatedPropertyAnnotation!(T, m)) {
+                        hasAnnotation = true;
+                        break;
+                    }
                 }
             }
         }
-        return false;
+        return hasAnnotation;
     }
 }
 
 bool hasAnyKeyPropertyAnnotation(T)() {
+    auto hasAny = false;
     foreach (m; __traits(allMembers, T)) {
         static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
             static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
                 static if (hasOneOfMemberAnnotations!(T, m, Id, Generated, Generator))
-                    return true;
+                    hasAny = true;
+                    break;
             }
         }
     }
-    return false;
+    return hasAny;
 }
 
 /// returns true if class has one of specified anotations
 bool hasOneOfAnnotations(T : Object, A...)() {
+    auto hasOne = false;
     foreach(a; A) {
         static if (hasAnnotation!(T, a)) {
-            return true;
+            hasOne = true;
+            break;
         }
     }
-    return false;
+    return hasOne;
 }
 
 /// returns true if class member has one of specified anotations
@@ -532,6 +539,7 @@ bool hasOneOfMemberAnnotations(T : Object, string m, A...)() {
     foreach(a; A) {
         static if (hasMemberAnnotation!(T, m, a)) {
             res = true;
+            break;
         }
     }
     return res;
@@ -543,6 +551,7 @@ bool hasAnnotation(T, A)() {
     foreach(a; __traits(getAttributes, T)) {
         static if (is(typeof(a) == A) || a.stringof == A.stringof) {
             res = true;
+            break;
         }
     }
     return res;
@@ -578,11 +587,13 @@ bool hasMemberAnnotation(T, string m, A)() {
     bool res = false;
     static if (is(typeof(__traits(getMember, T, m)) == function)) {
         // function: check overloads
+    Louter:
         foreach(overload; MemberFunctionsTuple!(T, m)) {
             static if (isGetterFunction!(overload, m)) {
                 foreach(a; __traits(getAttributes, overload)) {
                     static if (is(typeof(a) == A) || a.stringof == A.stringof) {
                         res = true;
+                        break Louter;
                     }
                 }
             }
@@ -591,6 +602,7 @@ bool hasMemberAnnotation(T, string m, A)() {
         foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
             static if (is(typeof(a) == A) || a.stringof == A.stringof) {
                 res = true;
+                break;
             }
         }
     }
@@ -612,12 +624,14 @@ string getEntityName(T : Object)() {
 
 /// returns table name for class type
 string getTableName(T : Object)() {
+    string name = camelCaseToUnderscoreDelimited(T.stringof);
     foreach (a; __traits(getAttributes, T)) {
         static if (is(typeof(a) == Table)) {
-            return a.name;
+            name = a.name;
+            break;
         }
     }
-    return camelCaseToUnderscoreDelimited(T.stringof);
+    return name;
 }
 
 string applyDefault(string s, string defaultValue) {
@@ -626,13 +640,16 @@ string applyDefault(string s, string defaultValue) {
 
 string getColumnName(T, string m)() {
     immutable string defValue = camelCaseToUnderscoreDelimited(getPropertyName!(T,m));
+    string name = defValue;
     static if (is(typeof(__traits(getMember, T, m)) == function)) {
         // function: check overloads
+     Louter:
         foreach(overload; MemberFunctionsTuple!(T, m)) {
             static if (isGetterFunction!(overload, m)) {
                 foreach(a; __traits(getAttributes, overload)) {
                     static if (is(typeof(a) == Column)) {
-                        return applyDefault(a.name, defValue);
+                        name = applyDefault(a.name, defValue);
+                        break Louter;
                     }
                 }
             }
@@ -640,37 +657,44 @@ string getColumnName(T, string m)() {
     } else {
         foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
             static if (is(typeof(a) == Column)) {
-                return applyDefault(a.name, defValue);
+                name = applyDefault(a.name, defValue);
+                break Louter;
             }
         }
     }
-    return defValue;
+    return name;
 }
 
 string getGeneratorCode(T, string m)() {
+    string code = null;
     foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
         static if (is(typeof(a) == Generator)) {
             static assert(a.code != null && a.code != "", "@Generator doesn't have code specified");
-            return a.code;
+            code = a.code;
+            break;
         }
         static if (a.stringof == Generator.stringof) {
             static assert(false, "@Generator doesn't have code specified");
         }
     }
-    return null;
+    return code;
 }
 
 string getJoinColumnName(T, string m)() {
+    string name = null;
     immutable string defValue = camelCaseToUnderscoreDelimited(getPropertyName!(T,m)()) ~ "_fk";
     static if (is(typeof(__traits(getMember, T, m)) == function)) {
         // function: check overloads
+    Louter:
         foreach(overload; MemberFunctionsTuple!(T, m)) {
             static if (isGetterFunction!(overload, m)) {
                 foreach(a; __traits(getAttributes, overload)) {
                     static if (is(typeof(a) == JoinColumn)) {
-                        return applyDefault(a.name, defValue);
+                        name = applyDefault(a.name, defValue);
+                        break Louter;
                     } else static if (a.stringof == JoinColumn.stringof) {
-                        return defValue;   
+                        name = defValue;   
+                        break Louter;
                     }
                 }
             }
@@ -678,26 +702,32 @@ string getJoinColumnName(T, string m)() {
     } else {
         foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
             static if (is(typeof(a) == JoinColumn)) {
-                return applyDefault(a.name, defValue);
+                name = applyDefault(a.name, defValue);
+                break;
             } else static if (a.stringof == JoinColumn.stringof) {
-                return defValue;
+                name = defValue;
+                break;
             }
         }
     }
-    return null;
+    return name;
 }
 
 string getUniqueIndexName(T, string m)() {
+    string name = null;
     immutable string defValue = camelCaseToUnderscoreDelimited(getEntityName!T) ~ "_" ~ camelCaseToUnderscoreDelimited(getPropertyName!(T,m)()) ~ "_index";
     static if (is(typeof(__traits(getMember, T, m)) == function)) {
         // function: check overloads
+    Louter:
         foreach(overload; MemberFunctionsTuple!(T, m)) {
             static if (isGetterFunction!(overload, m)) {
                 foreach(a; __traits(getAttributes, overload)) {
                     static if (is(typeof(a) == UniqueKey)) {
-                        return applyDefault(a.name, defValue);
+                        name = applyDefault(a.name, defValue);
+                        break Louter;
                     } else static if (a.stringof == UniqueKey.stringof) {
-                        return defValue;
+                        name = defValue;
+                        break Louter;
                     }
                 }
             }
@@ -705,23 +735,28 @@ string getUniqueIndexName(T, string m)() {
     } else {
         foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
             static if (is(typeof(a) == UniqueKey)) {
-                return applyDefault(a.name, defValue);
+                name = applyDefault(a.name, defValue);
+                break;
             } else static if (a.stringof == UniqueKey.stringof) {
-                return defValue;
+                name = defValue;
+                break;
             }
         }
     }
-    return null;
+    return name;
 }
 
 string getJoinTableName(T, string m)() {
+    string name = null;
     static if (is(typeof(__traits(getMember, T, m)) == function)) {
         // function: check overloads
+    Louter:
         foreach(overload; MemberFunctionsTuple!(T, m)) {
             static if (isGetterFunction!(overload, m)) {
                 foreach(a; __traits(getAttributes, overload)) {
                     static if (is(typeof(a) == JoinTable)) {
-                        return emptyStringToNull(a.joinTableName);
+                        name = emptyStringToNull(a.joinTableName);
+                        break Louter;
                     }
                 }
             }
@@ -729,29 +764,34 @@ string getJoinTableName(T, string m)() {
     } else {
         foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
             static if (is(typeof(a) == JoinTable)) {
-                return emptyStringToNull(a.joinTableName);
+                name = emptyStringToNull(a.joinTableName);
+                break;
             }
         }
     }
-    return null;
+    return name;
 }
 
 string getJoinTableColumn1(T, string m)() {
+    string column = null;
     foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
         static if (is(typeof(a) == JoinTable)) {
-            return emptyStringToNull(a.joinColumn1);
+            column = emptyStringToNull(a.joinColumn1);
+            break;
         }
     }
-    return null;
+    return column;
 }
 
 string getJoinTableColumn2(T, string m)() {
+    string column = null;
     foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
         static if (is(typeof(a) == JoinTable)) {
-            return emptyStringToNull(a.joinColumn2);
+            column = emptyStringToNull(a.joinColumn2);
+            break;
         }
     }
-    return null;
+    return column;
 }
 
 string emptyStringToNull(string s) {
@@ -759,15 +799,18 @@ string emptyStringToNull(string s) {
 }
 
 string getOneToOneReferencedPropertyName(T, string m)() {
+    string propertyName = null;
     foreach (a; __traits(getAttributes, __traits(getMember,T,m))) {
         static if (is(typeof(a) == OneToOne)) {
-            return emptyStringToNull(a.name);
+            propertyName = emptyStringToNull(a.name);
+            break;
         }
         static if (a.stringof == OneToOne.stringof) {
-            return null;
+            propertyName = null;
+            break;
         }
     }
-    return null;
+    return propertyName;
 }
 
 /**
@@ -804,20 +847,25 @@ string getOneToManyReferencedPropertyName(T, string m)() {
     static assert( refererFieldsofTypeT.length == 1, "auto deduction of OneToMany referencedPropertyName for " ~ T.stringof ~ "." ~ m ~ " failed: ElementType of " ~ refererType.stringof ~ "[] has " ~ refererFieldsofTypeT.length.stringof ~ " of fields " ~ T.stringof ~ ". (Use explicit OneToMany( fieldname in " ~ refererType.stringof ~ " ) annotations for multiple referers.)" );
     string res = null;
     foreach( mf; __traits( allMembers, refererType ) ) {
-        static if( is( typeof(__traits(getMember, refererType, mf)) == T ) )
+        static if( is( typeof(__traits(getMember, refererType, mf)) == T ) ) {
             res = mf;
+            break;
+        }
     }
     return res;
 }
 
 int getColumnLength(T, string m)() {
+    auto length = 0;
     static if (is(typeof(__traits(getMember, T, m)) == function)) {
         // function: check overloads
+    Louter:
         foreach(overload; MemberFunctionsTuple!(T, m)) {
             static if (isGetterFunction!(overload, m)) {
                 foreach(a; __traits(getAttributes, overload)) {
                     static if (is(typeof(a) == Column)) {
-                        return a.length;
+                        length = a.length;
+                        break Louter;
                     }
                 }
             }
@@ -825,11 +873,12 @@ int getColumnLength(T, string m)() {
     } else {
         foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
             static if (is(typeof(a) == Column)) {
-                return a.length;
+                length = a.length;
+                break;
             }
         }
     }
-    return 0;
+    return length;
 }
 
 string getPropertyName(T, string m)() {
@@ -923,26 +972,31 @@ static immutable string[] PropertyMemberKind_ReadCode =
     ];
 
 PropertyMemberKind getPropertyMemberKind(T : Object, string m)() {
+    auto memberKind = PropertyMemberKind.UNSUPPORTED_MEMBER;
     alias typeof(__traits(getMember, T, m)) ti;
     static if (is(ti == function)) {
         // interate through all overloads
         //return checkGetterOverload!(T, m);
         foreach(overload; MemberFunctionsTuple!(T, m)) {
             static if (ParameterTypeTuple!(overload).length == 0) {
-                static if (functionAttributes!overload & FunctionAttribute.property)
-                    return PropertyMemberKind.PROPERTY_MEMBER;
-                else static if (m.startsWith("get") || m.startsWith("is"))
-                    return PropertyMemberKind.GETTER_MEMBER;
+                static if (functionAttributes!overload & FunctionAttribute.property) {
+                    memberKind = PropertyMemberKind.PROPERTY_MEMBER;
+                    break;
+                }
+                else static if (m.startsWith("get") || m.startsWith("is")) {
+                    memberKind = PropertyMemberKind.GETTER_MEMBER;
+                    break;
+                }
             }
         }
-        return PropertyMemberKind.UNSUPPORTED_MEMBER;
     } else {
         static if (isLazyInstance!(ti)) {
-            return PropertyMemberKind.LAZY_MEMBER;
+            memberKind = PropertyMemberKind.LAZY_MEMBER;
         } else {
-            return PropertyMemberKind.FIELD_MEMBER;
+            memberKind = PropertyMemberKind.FIELD_MEMBER;
         }
     }
+    return memberKind;
 }
 
 string getPropertyEmbeddedEntityName(T : Object, string m)() {
@@ -1052,25 +1106,30 @@ template hasPublicFieldWithAnnotation(T : Object, string m) {
 
 /// returns true if one of overloads of member m of class T is property setter with specified value type
 bool hasWritePropretyForType(T: Object, string m, ParamType)() {
+    auto hasProperty = false;
     foreach(overload; MemberFunctionsTuple!(T, m)) {
         static if (ParameterTypeTuple!(overload).length == 1) {
             static if (functionAttributes!overload & FunctionAttribute.property) {
-                return is(ParameterTypeTuple!(overload)[0] == ParamType);
+                hasProperty = is(ParameterTypeTuple!(overload)[0] == ParamType);
+                break;
             }
         }
     }
-    return false;
+    return hasProperty;
 }
 
 /// returns true if member m of class T has both property getter and setter of the same type
 bool isReadWriteProperty(T: Object, string m)() {
+    bool res = false;
     foreach(overload; MemberFunctionsTuple!(T, m)) {
         static if (ParameterTypeTuple!(overload).length == 0) {
-            static if (functionAttributes!overload & FunctionAttribute.property)
-                return hasWritePropretyForType!(T, m, ReturnType!overload);
+            static if (functionAttributes!overload & FunctionAttribute.property) {
+                res = hasWritePropretyForType!(T, m, ReturnType!overload);
+                break;
+            }
         }
     }
-    return false;
+    return res;
 }
 
 /// check that member m exists in class T, and it's function with single parameter of type ti
