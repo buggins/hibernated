@@ -1,20 +1,36 @@
 language: d
 
-sudo: false
+sudo: required
+dist: trusty
 
 d:
+  - ldc
+  - dmd
+  - dmd-2.071.2-b6
+  - dmd-2.070.2
   - dmd-2.069.2
   - dmd-2.068.2
-  - dmd-2.067.1
-  - dmd-2.066.1
-  - ldc-0.16.1
-  - ldc-0.15.1
-  - gdc-5.2.0
-  - gdc-4.9.2
+  - ldc-1.1.0-beta2 # eq to dmd v2.071.1
+  - ldc-1.0.0 # eq to dmd v2.070.2
+  - ldc-0.17.1 # eq to dmd v2.068.2
+  - gdc
+
+before_install:
+ - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew update; fi"
+ - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew install sqlite && brew link --force sqlite; fi"
 
 os:
  - linux
  - osx
 
-script: dub test --config=SQLite
+script:
+  - dub build --config=SQLite --compiler=${DC}
+  - cd hdtest && dub --config=SQLite --compiler=${DC}
 
+addons:
+  apt:
+    packages: [ libsqlite3-dev ]
+
+matrix:
+  allow_failures:
+    - d: gdc
