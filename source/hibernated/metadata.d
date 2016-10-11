@@ -1473,7 +1473,7 @@ template isSupportedSimpleType(T, string m) {
             enum bool isSupportedSimpleType = true;
         } else static if (is(ReturnType!(ti) == string)) {
             enum bool isSupportedSimpleType = true;
-        } else static if (is(ReturnType!(ti) == String)) {
+        } else static if (is(ReturnType!(ti) == hibernated.type.String)) {
             enum bool isSupportedSimpleType = true;
         } else static if (is(ReturnType!(ti) == DateTime)) {
             enum bool isSupportedSimpleType = true;
@@ -1538,7 +1538,7 @@ template isSupportedSimpleType(T, string m) {
         enum bool isSupportedSimpleType = true;
     } else static if (is(ti == string)) {
         enum bool isSupportedSimpleType = true;
-    } else static if (is(ti == String)) {
+    } else static if (is(ti == hibernated.type.String)) {
         enum bool isSupportedSimpleType = true;
     } else static if (is(ti == DateTime)) {
         enum bool isSupportedSimpleType = true;
@@ -1673,7 +1673,7 @@ PropertyMemberType getPropertyMemberType(T, string m)() {
         return PropertyMemberType.NULLABLE_DOUBLE_TYPE;
     } else if (is(ti == string)) {
         return PropertyMemberType.STRING_TYPE;
-    } else if (is(ti == String)) {
+    } else if (is(ti == hibernated.type.String)) {
         return PropertyMemberType.NULLABLE_STRING_TYPE;
     } else if (is(ti == DateTime)) {
         return PropertyMemberType.DATETIME_TYPE;
