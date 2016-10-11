@@ -1,0 +1,20 @@
+{
+    "name": "ddbctest",
+    "description": "example1 for Hibernated",
+    "authors": ["Vadim Lopatin"],
+    "homepage": "https://github.com/buggins/hibernated",
+    "license": "Boost Software License (BSL 1.0)",
+    "buildRequirements": ["allowWarnings"],
+    "dependencies": {
+        "hibernated": {"path": "../../"}
+    },
+    "targetType": "executable",
+    "configurations": [
+        {
+            "name": "default",
+            "subConfigurations": {
+                "hibernated": "SQLite"
+            }
+        }
+    ]
+}
