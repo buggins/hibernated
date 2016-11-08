@@ -658,7 +658,7 @@ string getColumnName(T, string m)() {
         foreach(a; __traits(getAttributes, __traits(getMember,T,m))) {
             static if (is(typeof(a) == Column)) {
                 name = applyDefault(a.name, defValue);
-                break Louter;
+                break;
             }
         }
     }
