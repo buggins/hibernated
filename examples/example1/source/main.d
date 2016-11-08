@@ -118,7 +118,7 @@
         sess.save(r11);
         sess.save(c10);
         sess.save(u10);
-	sess.close();
+        sess.close();
         sess = factory.openSession();
 
         // load and check data

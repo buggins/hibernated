@@ -1,6 +1,8 @@
 ﻿
-Microsoft Visual Studio Solution File, Format Version 11.00
-# Visual Studio 2010
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.24720.0
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{002A2DE9-8BB6-484D-9802-7E4AD4084715}") = "hibernated", "hibernated.visualdproj", "{312F0E35-F030-41F3-A785-DEEADE310BCE}"
 	ProjectSection(ProjectDependencies) = postProject
 		{73F0CBE2-F09C-4141-866B-352226CA8029} = {73F0CBE2-F09C-4141-866B-352226CA8029}
@@ -14,24 +16,58 @@ Project("{002A2DE9-8BB6-484D-9802-7E4AD4084715}") = "hdtest", "hdtest\hdtest.vis
 		{73F0CBE2-F09C-4141-866B-352226CA8029} = {73F0CBE2-F09C-4141-866B-352226CA8029}
 	EndProjectSection
 EndProject
+Project("{002A2DE9-8BB6-484D-9802-7E4AD4084715}") = "postgresql_native", "..\postgresql-native\postgresql-native.visualdproj", "{D5E25A68-65D6-4341-AD62-7C2CD84CD1AF}"
+	ProjectSection(ProjectDependencies) = postProject
+		{73F0CBE2-F09C-4141-866B-352226CA8029} = {73F0CBE2-F09C-4141-866B-352226CA8029}
+	EndProjectSection
+EndProject
+Project("{002A2DE9-8BB6-484D-9802-7E4AD4084715}") = "pgsql_test", "..\ddbc\examples\pgsql_test\pgsql_test.visualdproj", "{9398E775-3E49-4795-9D70-4A6D4932A069}"
+	ProjectSection(ProjectDependencies) = postProject
+		{73F0CBE2-F09C-4141-866B-352226CA8029} = {73F0CBE2-F09C-4141-866B-352226CA8029}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
+		Debug|x64 = Debug|x64
 		Release|Win32 = Release|Win32
+		Release|x64 = Release|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{312F0E35-F030-41F3-A785-DEEADE310BCE}.Debug|Win32.ActiveCfg = Debug|Win32
 		{312F0E35-F030-41F3-A785-DEEADE310BCE}.Debug|Win32.Build.0 = Debug|Win32
+		{312F0E35-F030-41F3-A785-DEEADE310BCE}.Debug|x64.ActiveCfg = Debug|Win32
 		{312F0E35-F030-41F3-A785-DEEADE310BCE}.Release|Win32.ActiveCfg = Release|Win32
 		{312F0E35-F030-41F3-A785-DEEADE310BCE}.Release|Win32.Build.0 = Release|Win32
+		{312F0E35-F030-41F3-A785-DEEADE310BCE}.Release|x64.ActiveCfg = Release|Win32
 		{73F0CBE2-F09C-4141-866B-352226CA8029}.Debug|Win32.ActiveCfg = Debug|Win32
 		{73F0CBE2-F09C-4141-866B-352226CA8029}.Debug|Win32.Build.0 = Debug|Win32
+		{73F0CBE2-F09C-4141-866B-352226CA8029}.Debug|x64.ActiveCfg = Debug|Win32
 		{73F0CBE2-F09C-4141-866B-352226CA8029}.Release|Win32.ActiveCfg = Release|Win32
 		{73F0CBE2-F09C-4141-866B-352226CA8029}.Release|Win32.Build.0 = Release|Win32
+		{73F0CBE2-F09C-4141-866B-352226CA8029}.Release|x64.ActiveCfg = Release|Win32
 		{5EF25CC4-CB25-43DC-885E-CFD633878981}.Debug|Win32.ActiveCfg = Debug|Win32
 		{5EF25CC4-CB25-43DC-885E-CFD633878981}.Debug|Win32.Build.0 = Debug|Win32
+		{5EF25CC4-CB25-43DC-885E-CFD633878981}.Debug|x64.ActiveCfg = Debug|Win32
 		{5EF25CC4-CB25-43DC-885E-CFD633878981}.Release|Win32.ActiveCfg = Release|Win32
 		{5EF25CC4-CB25-43DC-885E-CFD633878981}.Release|Win32.Build.0 = Release|Win32
+		{5EF25CC4-CB25-43DC-885E-CFD633878981}.Release|x64.ActiveCfg = Release|Win32
+		{D5E25A68-65D6-4341-AD62-7C2CD84CD1AF}.Debug|Win32.ActiveCfg = Debug|Win32
+		{D5E25A68-65D6-4341-AD62-7C2CD84CD1AF}.Debug|Win32.Build.0 = Debug|Win32
+		{D5E25A68-65D6-4341-AD62-7C2CD84CD1AF}.Debug|x64.ActiveCfg = Debug|x64
+		{D5E25A68-65D6-4341-AD62-7C2CD84CD1AF}.Debug|x64.Build.0 = Debug|x64
+		{D5E25A68-65D6-4341-AD62-7C2CD84CD1AF}.Release|Win32.ActiveCfg = Release|Win32
+		{D5E25A68-65D6-4341-AD62-7C2CD84CD1AF}.Release|Win32.Build.0 = Release|Win32
+		{D5E25A68-65D6-4341-AD62-7C2CD84CD1AF}.Release|x64.ActiveCfg = Release|x64
+		{D5E25A68-65D6-4341-AD62-7C2CD84CD1AF}.Release|x64.Build.0 = Release|x64
+		{9398E775-3E49-4795-9D70-4A6D4932A069}.Debug|Win32.ActiveCfg = Debug|Win32
+		{9398E775-3E49-4795-9D70-4A6D4932A069}.Debug|Win32.Build.0 = Debug|Win32
+		{9398E775-3E49-4795-9D70-4A6D4932A069}.Debug|x64.ActiveCfg = Debug|x64
+		{9398E775-3E49-4795-9D70-4A6D4932A069}.Debug|x64.Build.0 = Debug|x64
+		{9398E775-3E49-4795-9D70-4A6D4932A069}.Release|Win32.ActiveCfg = Release|Win32
+		{9398E775-3E49-4795-9D70-4A6D4932A069}.Release|Win32.Build.0 = Release|Win32
+		{9398E775-3E49-4795-9D70-4A6D4932A069}.Release|x64.ActiveCfg = Release|x64
+		{9398E775-3E49-4795-9D70-4A6D4932A069}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

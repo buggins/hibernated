@@ -5,11 +5,10 @@
     "homepage": "https://github.com/buggins/hibernated",
     "license": "Boost Software License (BSL 1.0)",
     "dependencies": {
-        "ddbc": "~>0.2.29"
+        "ddbc": "~>0.2.33"
     },
     "targetType": "staticLibrary",
     "targetPath": "lib",
-    "buildRequirements": ["allowWarnings"],
     "configurations": [
         {
             "name": "full",
