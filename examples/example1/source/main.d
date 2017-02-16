@@ -58,11 +58,13 @@
 
         // setup DB connection factory
         version (USE_MYSQL) {
+	    import ddbc.drivers.mysqlddbc;
             MySQLDriver driver = new MySQLDriver();
             string url = MySQLDriver.generateUrl("localhost", 3306, "test_db");
             string[string] params = MySQLDriver.setUserAndPassword("testuser", "testpasswd");
             Dialect dialect = new MySQLDialect();
         } else {
+	    import ddbc.drivers.sqliteddbc;
             SQLITEDriver driver = new SQLITEDriver();
             string url = "zzz.db"; // file with DB
             static import std.file;
