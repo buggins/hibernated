@@ -602,7 +602,7 @@ class SessionImpl : Session {
     override void remove(Object obj) {
         auto info = metaData.findEntityForObject(obj);
         deleteRelations(info, obj);
-        string query = "DELETE FROM " ~ info.tableName ~ " WHERE " ~ info.getKeyProperty().columnName ~ "=?";
+        string query = "DELETE FROM " ~ dialect.quoteIfNeeded(info.tableName) ~ " WHERE " ~ dialect.quoteIfNeeded(info.getKeyProperty().columnName) ~ "=?";
 		PreparedStatement stmt = conn.prepareStatement(query);
 		info.getKeyProperty().writeFunc(obj, stmt, 1);
 		stmt.executeUpdate();
