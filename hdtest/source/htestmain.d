@@ -49,6 +49,7 @@ void testHibernate() {
     // setup DB connection
     version( USE_SQLITE )
     {
+        import ddbc.drivers.sqliteddbc;
         SQLITEDriver driver = new SQLITEDriver();
         string[string] params;
         DataSource ds = new ConnectionPoolDataSourceImpl(driver, "zzz.db", params);
@@ -56,6 +57,7 @@ void testHibernate() {
     }
     else version( USE_PGSQL )
     {
+        import ddbc.drivers.pgsqlddbc;
         string url = PGSQLDriver.generateUrl( "/tmp", 5432, "testdb" );
         string[string] params;
         params["user"] = "hdtest";
