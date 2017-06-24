@@ -6,13 +6,14 @@ dist: trusty
 d:
   - ldc
   - dmd
-  - dmd-2.071.2-b6
+  - dmd-2.074.0
+  - dmd-2.073.2
+  - dmd-2.072.2
+  - dmd-2.071.2
   - dmd-2.070.2
-  - dmd-2.069.2
-  - dmd-2.068.2
-  - ldc-1.1.0-beta2 # eq to dmd v2.071.1
+  - ldc-1.2.0 # eq to dmd v2.072.2
+  - ldc-1.1.1 # eq to dmd v2.071.2
   - ldc-1.0.0 # eq to dmd v2.070.2
-  - ldc-0.17.1 # eq to dmd v2.068.2
   - gdc
 
 before_install:
