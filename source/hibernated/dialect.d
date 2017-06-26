@@ -38,7 +38,7 @@ abstract class Dialect {
     string quote(string name) const {
         //Apply dialect-specific quoting.
         //By default, the incoming value is checked to see if its first character is the back-tick (`). If so, the dialect specific quoting is applied. 
-        if (name.length <=2 || name[0] != '`')
+        if (name.length <=2 || name[0] != openQuote)
             return name;
         return openQuote() ~ name[1..$-1] ~ closeQuote();
     }
@@ -50,7 +50,7 @@ abstract class Dialect {
 
 	string quoteIfNeeded(string ident) const {
 		if (needQuote(ident))
-			return quote("`" ~ ident ~ "`");
+			return quote(openQuote ~ ident ~ closeQuote);
 		return quote(ident);
 	}
 

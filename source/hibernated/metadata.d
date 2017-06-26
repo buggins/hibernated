@@ -70,20 +70,20 @@ abstract class EntityMetaData {
     /// Puts all properties of entity instance to dataset
     public int writeAllColumns(Object obj, DataSetWriter w, int startColumn, bool exceptKey = false) const;
 
-    public string generateFindAllForEntity(string entityName) const;
+    public string generateFindAllForEntity(Dialect dialect, string entityName) const;
 
     public int getFieldCount(const EntityInfo ei, bool exceptKey) const;
 
-    public string getAllFieldList(const EntityInfo ei, bool exceptKey = false) const;
-    public string getAllFieldList(string entityName, bool exceptKey = false) const;
+    public string getAllFieldList(Dialect dialect, const EntityInfo ei, bool exceptKey = false) const;
+    public string getAllFieldList(Dialect dialect, string entityName, bool exceptKey = false) const;
 
-    public string generateFindByPkForEntity(const EntityInfo ei) const;
-    public string generateFindByPkForEntity(string entityName) const;
+    public string generateFindByPkForEntity(Dialect dialect, const EntityInfo ei) const;
+    public string generateFindByPkForEntity(Dialect dialect, string entityName) const;
 
-    public string generateInsertAllFieldsForEntity(const EntityInfo ei) const;
-    public string generateInsertAllFieldsForEntity(string entityName) const;
-    public string generateInsertNoKeyForEntity(const EntityInfo ei) const;
-    public string generateUpdateForEntity(const EntityInfo ei) const;
+    public string generateInsertAllFieldsForEntity(Dialect dialect, const EntityInfo ei) const;
+    public string generateInsertAllFieldsForEntity(Dialect dialect, string entityName) const;
+    public string generateInsertNoKeyForEntity(Dialect dialect, const EntityInfo ei) const;
+    public string generateUpdateForEntity(Dialect dialect, const EntityInfo ei) const;
 
     public Variant getPropertyValue(Object obj, string propertyName) const;
     public void setPropertyValue(Object obj, string propertyName, Variant value) const;
@@ -3151,45 +3151,45 @@ abstract class SchemaInfo : EntityMetaData {
         buf ~= data;
     }
 
-    public string getAllFieldListForUpdate(const EntityInfo ei, bool exceptKey = false) const {
+    public string getAllFieldListForUpdate(Dialect dialect, const EntityInfo ei, bool exceptKey = false) const {
         string query;
         foreach(pi; ei) {
             if (pi.key && exceptKey)
                 continue;
             if (pi.embedded) {
                 auto emei = pi.referencedEntity;
-                appendCommaDelimitedList(query, getAllFieldListForUpdate(emei, exceptKey));
+                appendCommaDelimitedList(query, getAllFieldListForUpdate(dialect, emei, exceptKey));
             } else if (pi.oneToOne || pi.manyToOne) {
                 if (pi.columnName != null) {
                     // read FK column
-                    appendCommaDelimitedList(query, pi.columnName ~ "=?");
+                    appendCommaDelimitedList(query, dialect.quoteIfNeeded(pi.columnName) ~ "=?");
                 }
             } else if (pi.oneToMany || pi.manyToMany) {
                 // skip
             } else {
-                appendCommaDelimitedList(query, pi.columnName ~ "=?");
+                appendCommaDelimitedList(query, dialect.quoteIfNeeded(pi.columnName) ~ "=?");
             }
         }
         return query;
     }
     
-    override public string getAllFieldList(const EntityInfo ei, bool exceptKey = false) const {
+    override public string getAllFieldList(Dialect dialect, const EntityInfo ei, bool exceptKey = false) const {
         string query;
         foreach(pi; ei) {
             if (pi.key && exceptKey)
                 continue;
             if (pi.embedded) {
                 auto emei = pi.referencedEntity;
-                appendCommaDelimitedList(query, getAllFieldList(emei, exceptKey));
+                appendCommaDelimitedList(query, getAllFieldList(dialect, emei, exceptKey));
             } else if (pi.oneToOne || pi.manyToOne) {
                 if (pi.columnName != null) {
                     // read FK column
-                    appendCommaDelimitedList(query, pi.columnName);
+                    appendCommaDelimitedList(query, dialect.quoteIfNeeded(pi.columnName));
                 }
             } else if (pi.oneToMany || pi.manyToMany) {
                 // skip
             } else {
-                appendCommaDelimitedList(query, pi.columnName);
+                appendCommaDelimitedList(query, dialect.quoteIfNeeded(pi.columnName));
             }
         }
         return query;
@@ -3239,8 +3239,8 @@ abstract class SchemaInfo : EntityMetaData {
         return query;
     }
     
-    override public string getAllFieldList(string entityName, bool exceptKey) const {
-        return getAllFieldList(findEntity(entityName), exceptKey);
+    override public string getAllFieldList(Dialect dialect, string entityName, bool exceptKey) const {
+        return getAllFieldList(dialect, findEntity(entityName), exceptKey);
     }
 
     override public int readAllColumns(Object obj, DataSetReader r, int startColumn) const {
@@ -3317,33 +3317,33 @@ abstract class SchemaInfo : EntityMetaData {
         return columnCount;
     }
 
-    override public string generateFindAllForEntity(string entityName) const {
+    override public string generateFindAllForEntity(Dialect dialect, string entityName) const {
         auto ei = findEntity(entityName);
-        return "SELECT " ~ getAllFieldList(ei) ~ " FROM " ~ ei.tableName;
+        return "SELECT " ~ getAllFieldList(dialect, ei) ~ " FROM " ~ dialect.quoteIfNeeded(ei.tableName);
     }
 
-    override public string generateFindByPkForEntity(const EntityInfo ei) const {
-        return "SELECT " ~ getAllFieldList(ei) ~ " FROM " ~ ei.tableName ~ " WHERE " ~ ei.keyProperty.columnName ~ " = ?";
+    override public string generateFindByPkForEntity(Dialect dialect, const EntityInfo ei) const {
+        return "SELECT " ~ getAllFieldList(dialect, ei) ~ " FROM " ~ dialect.quoteIfNeeded(ei.tableName) ~ " WHERE " ~ dialect.quoteIfNeeded(ei.keyProperty.columnName) ~ " = ?";
     }
 
-    override public string generateInsertAllFieldsForEntity(const EntityInfo ei) const {
-        return "INSERT INTO " ~ ei.tableName ~ "(" ~ getAllFieldList(ei) ~ ") VALUES (" ~ getAllFieldPlaceholderList(ei) ~ ")";
+    override public string generateInsertAllFieldsForEntity(Dialect dialect, const EntityInfo ei) const {
+        return "INSERT INTO " ~ dialect.quoteIfNeeded(ei.tableName) ~ "(" ~ getAllFieldList(dialect, ei) ~ ") VALUES (" ~ getAllFieldPlaceholderList(ei) ~ ")";
     }
 
-    override public string generateInsertNoKeyForEntity(const EntityInfo ei) const {
-        return "INSERT INTO " ~ ei.tableName ~ "(" ~ getAllFieldList(ei, true) ~ ") VALUES (" ~ getAllFieldPlaceholderList(ei, true) ~ ")";
+    override public string generateInsertNoKeyForEntity(Dialect dialect, const EntityInfo ei) const {
+        return "INSERT INTO " ~ dialect.quoteIfNeeded(ei.tableName) ~ "(" ~ getAllFieldList(dialect, ei, true) ~ ") VALUES (" ~ getAllFieldPlaceholderList(ei, true) ~ ")";
     }
 
-    override public string generateUpdateForEntity(const EntityInfo ei) const {
-        return "UPDATE " ~ ei.tableName ~ " SET " ~ getAllFieldListForUpdate(ei, true) ~ " WHERE " ~ ei.getKeyProperty().columnName ~ "=?";
+    override public string generateUpdateForEntity(Dialect dialect, const EntityInfo ei) const {
+        return "UPDATE " ~ dialect.quoteIfNeeded(ei.tableName) ~ " SET " ~ getAllFieldListForUpdate(dialect, ei, true) ~ " WHERE " ~ dialect.quoteIfNeeded(ei.getKeyProperty().columnName) ~ "=?";
     }
 
-    override public string generateFindByPkForEntity(string entityName) const {
-        return generateFindByPkForEntity(findEntity(entityName));
+    override public string generateFindByPkForEntity(Dialect dialect, string entityName) const {
+        return generateFindByPkForEntity(dialect, findEntity(entityName));
     }
 
-    override public string generateInsertAllFieldsForEntity(string entityName) const {
-        return generateInsertAllFieldsForEntity(findEntity(entityName));
+    override public string generateInsertAllFieldsForEntity(Dialect dialect, string entityName) const {
+        return generateInsertAllFieldsForEntity(dialect, findEntity(entityName));
     }
 }
 
