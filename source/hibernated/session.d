@@ -29,6 +29,15 @@ import hibernated.core;
 import hibernated.metadata;
 import hibernated.query;
 
+// For backwards compatibily
+// 'enforceEx' will be removed with 2.089
+static if(__VERSION__ < 2080) {
+    alias enforceHelper = enforceEx;
+} else {
+    alias enforceHelper = enforce;
+}
+
+
 const TRACE_REFS = false;
 
 /// Factory to create HibernateD Sessions - similar to org.hibernate.SessionFactory
@@ -215,7 +224,7 @@ class EntityCache {
         return items[key];
     }
     Object get(Variant key) {
-        enforce!CacheException((key in items) !is null, "entity " ~ name ~ " with key " ~ key.toString() ~ " not found in cache");
+        enforceHelper!CacheException((key in items) !is null, "entity " ~ name ~ " with key " ~ key.toString() ~ " not found in cache");
         return items[key];
     }
     void put(Variant key, Object obj) {
@@ -246,7 +255,7 @@ class SessionAccessor {
     }
     /// returns session, with session state check - throws LazyInitializationException if attempting to get unfetched lazy data while session is closed
     SessionImpl get() {
-        enforce!LazyInitializationException(_session !is null, "Cannot read from closed session");
+        enforceHelper!LazyInitializationException(_session !is null, "Cannot read from closed session");
         return _session;
     }
     /// nulls session reference
@@ -308,7 +317,7 @@ class SessionImpl : Session {
     }
 
     private void checkClosed() {
-        enforce!SessionException(!closed, "Session is closed");
+        enforceHelper!SessionException(!closed, "Session is closed");
     }
 
     this(SessionFactoryImpl sessionFactory, EntityMetaData metaData, Dialect dialect, DataSource connectionPool) {
@@ -380,7 +389,7 @@ class SessionImpl : Session {
     /// Read the persistent state associated with the given identifier into the given transient instance.
     override Object loadObject(string entityName, Variant id) {
         Object obj = getObject(entityName, id);
-        enforce!ObjectNotFoundException(obj !is null, "Entity " ~ entityName ~ " with id " ~ to!string(id) ~ " not found");
+        enforceHelper!ObjectNotFoundException(obj !is null, "Entity " ~ entityName ~ " with id " ~ to!string(id) ~ " not found");
         return obj;
     }
 
@@ -388,7 +397,7 @@ class SessionImpl : Session {
     override void loadObject(Object obj, Variant id) {
         auto info = metaData.findEntityForObject(obj);
         Object found = getObject(info, obj, id);
-        enforce!ObjectNotFoundException(found !is null, "Entity " ~ info.name ~ " with id " ~ to!string(id) ~ " not found");
+        enforceHelper!ObjectNotFoundException(found !is null, "Entity " ~ info.name ~ " with id " ~ to!string(id) ~ " not found");
     }
 
     /// Read the persistent state associated with the given identifier into the given transient instance
@@ -411,7 +420,7 @@ class SessionImpl : Session {
     override void refresh(Object obj) {
         auto info = metaData.findEntityForObject(obj);
         string query = metaData.generateFindByPkForEntity(dialect, info);
-        enforce!TransientObjectException(info.isKeySet(obj), "Cannot refresh entity " ~ info.name ~ ": no Id specified");
+        enforceHelper!TransientObjectException(info.isKeySet(obj), "Cannot refresh entity " ~ info.name ~ ": no Id specified");
         Variant id = info.getKey(obj);
         //writeln("Finder query: " ~ query);
         PreparedStatement stmt = conn.prepareStatement(query);
@@ -426,7 +435,7 @@ class SessionImpl : Session {
             //writeln("value: " ~ obj.toString);
         } else {
             // not found!
-            enforce!ObjectNotFoundException(false, "Entity " ~ info.name ~ " with id " ~ to!string(id) ~ " not found");
+            enforceHelper!ObjectNotFoundException(false, "Entity " ~ info.name ~ " with id " ~ to!string(id) ~ " not found");
         }
     }
 
@@ -572,7 +581,7 @@ class SessionImpl : Session {
 	/// Persist the given transient instance.
 	override void persist(Object obj) {
         auto info = metaData.findEntityForObject(obj);
-        enforce!TransientObjectException(info.isKeySet(obj), "Cannot persist entity w/o key assigned");
+        enforceHelper!TransientObjectException(info.isKeySet(obj), "Cannot persist entity w/o key assigned");
 		string query = metaData.generateInsertAllFieldsForEntity(dialect, info);
 		PreparedStatement stmt = conn.prepareStatement(query);
 		scope(exit) stmt.close();
@@ -585,7 +594,7 @@ class SessionImpl : Session {
 
     override void update(Object obj) {
         auto info = metaData.findEntityForObject(obj);
-        enforce!TransientObjectException(info.isKeySet(obj), "Cannot persist entity w/o key assigned");
+        enforceHelper!TransientObjectException(info.isKeySet(obj), "Cannot persist entity w/o key assigned");
 		string query = metaData.generateUpdateForEntity(dialect, info);
 		//writeln("Query: " ~ query);
         {
@@ -662,7 +671,7 @@ class SessionFactoryImpl : SessionFactory {
 //            observer.sessionFactoryCreated(this);
 //    }
     private void checkClosed() {
-        enforce!SessionException(!closed, "Session factory is closed");
+        enforceHelper!SessionException(!closed, "Session factory is closed");
     }
 
 	override void close() {
@@ -844,7 +853,7 @@ class QueryImpl : Query
         Object[] rows = listObjects(obj);
         if (rows == null)
             return null;
-        enforce!NonUniqueResultException(rows.length == 1, "Query returned more than one object: " ~ getQueryString());
+        enforceHelper!NonUniqueResultException(rows.length == 1, "Query returned more than one object: " ~ getQueryString());
         return rows[0];
     }
 
@@ -853,7 +862,7 @@ class QueryImpl : Query
 		Variant[][] rows = listRows();
 		if (rows == null)
 			return null;
-        enforce!NonUniqueResultException(rows.length == 1, "Query returned more than one row: " ~ getQueryString());
+        enforceHelper!NonUniqueResultException(rows.length == 1, "Query returned more than one row: " ~ getQueryString());
 		return rows[0];
 	}
 
@@ -1055,7 +1064,7 @@ class QueryImpl : Query
     Object[] listObjects(Object placeFirstObjectHere, PropertyLoadMap loadMap) {
         static if (TRACE_REFS) writeln("Entering listObjects " ~ query.hql);
         auto ei = query.entity;
-        enforce!SessionException(ei !is null, "No entity expected in result of query " ~ getQueryString());
+        enforceHelper!SessionException(ei !is null, "No entity expected in result of query " ~ getQueryString());
         params.checkAllParametersSet();
         sess.checkClosed();
         

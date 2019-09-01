@@ -36,6 +36,13 @@ import hibernated.session;
 import hibernated.dialect;
 import hibernated.dialects.mysqldialect;
 
+// For backwards compatibily
+// 'enforceEx' will be removed with 2.089
+static if(__VERSION__ < 2080) {
+    alias enforceHelper = enforceEx;
+} else {
+    alias enforceHelper = enforce;
+}
 
 abstract class EntityMetaData {
 
@@ -304,7 +311,7 @@ class EntityInfo {
             }
         }
         this._propertyMap = map;
-        enforce!MappingException(keyProperty !is null || embeddable, "No key specified for non-embeddable entity " ~ name);
+        enforceHelper!MappingException(keyProperty !is null || embeddable, "No key specified for non-embeddable entity " ~ name);
     }
     /// returns key value as Variant from entity instance
     Variant getKey(Object obj) const { return keyProperty.getFunc(obj); }
@@ -3105,12 +3112,12 @@ string entityListDef(T ...)() {
 		"            //writefln( \"\tproperty:%s column:%s ref-entityname:%s ref-propertyname:%s \", p.propertyName, p.columnName, p.referencedEntityName, p.referencedPropertyName );\n" ~
         "            if (p.referencedEntityName !is null) {\n" ~
         "                //writeln(\"embedded entity \" ~ p.referencedEntityName);\n" ~
-        "                enforce!MappingException((p.referencedEntityName in map) !is null, \"referenced entity not found in schema: \" ~ p.referencedEntityName);\n" ~
+        "                enforceHelper!MappingException((p.referencedEntityName in map) !is null, \"referenced entity not found in schema: \" ~ p.referencedEntityName);\n" ~
         "                p._referencedEntity = map[p.referencedEntityName];\n" ~
         "                if (p.referencedPropertyName !is null) {\n" ~
         "                    //writeln(\"\t\tembedded entity property name \" ~ p.referencedPropertyName );\n" ~
         "                    //writefln(\"\t\tembedded entity._propertyMap: %s \", p._referencedEntity._propertyMap );\n" ~
-        "                    enforce!MappingException((p.referencedPropertyName in p._referencedEntity._propertyMap) !is null, \"embedded entity property not found in schema: \" ~ p.referencedEntityName);\n" ~
+        "                    enforceHelper!MappingException((p.referencedPropertyName in p._referencedEntity._propertyMap) !is null, \"embedded entity property not found in schema: \" ~ p.referencedEntityName);\n" ~
         "                    p._referencedProperty = p._referencedEntity._propertyMap[p.referencedPropertyName];\n" ~
         "                }\n" ~
         "            }\n" ~
@@ -3373,27 +3380,27 @@ class SchemaInfoImpl(T...) : SchemaInfo {
     }
 
     override public const(EntityInfo) findEntity(string entityName) const  {
-        enforce!MappingException((entityName in entityMap) !is null, "Cannot find entity by name " ~ entityName);
+        enforceHelper!MappingException((entityName in entityMap) !is null, "Cannot find entity by name " ~ entityName);
         return entityMap[entityName]; 
     }
 
     override public const(EntityInfo) findEntity(TypeInfo_Class entityClass) const { 
-        enforce!MappingException((entityClass in classMap) !is null, "Cannot find entity by class " ~ entityClass.toString());
+        enforceHelper!MappingException((entityClass in classMap) !is null, "Cannot find entity by class " ~ entityClass.toString());
         return classMap[entityClass]; 
     }
 
     override public const(EntityInfo) getEntity(int entityIndex) const { 
-        enforce!MappingException(entityIndex >= 0 && entityIndex < entities.length, "Invalid entity index " ~ to!string(entityIndex));
+        enforceHelper!MappingException(entityIndex >= 0 && entityIndex < entities.length, "Invalid entity index " ~ to!string(entityIndex));
         return entities[entityIndex]; 
     }
 
     override public Object createEntity(string entityName) const { 
-        enforce!MappingException((entityName in entityMap) !is null, "Cannot find entity by name " ~ entityName);
+        enforceHelper!MappingException((entityName in entityMap) !is null, "Cannot find entity by name " ~ entityName);
         return entityMap[entityName].createEntity(); 
     }
 
     override public const(EntityInfo) findEntityForObject(Object obj) const {
-        enforce!MappingException((obj.classinfo in classMap) !is null, "Cannot find entity by class " ~ obj.classinfo.toString());
+        enforceHelper!MappingException((obj.classinfo in classMap) !is null, "Cannot find entity by class " ~ obj.classinfo.toString());
         return classMap[obj.classinfo];
     }
     this() {
@@ -3445,7 +3452,7 @@ class DBInfo {
     TableInfo[string] tableNameMap;
     TableInfo get(string tableName) {
         TableInfo res = find(tableName);
-        enforce!HibernatedException(res !is null, "table " ~ tableName ~ " is not found in schema");
+        enforceHelper!HibernatedException(res !is null, "table " ~ tableName ~ " is not found in schema");
         return res;
     }
     TableInfo find(string tableName) {
@@ -3454,7 +3461,7 @@ class DBInfo {
         return tableNameMap[tableName];
     }
     void add(TableInfo table) {
-        enforce!HibernatedException((table.tableName in tableNameMap) is null, "duplicate table " ~ table.tableName ~ " in schema");
+        enforceHelper!HibernatedException((table.tableName in tableNameMap) is null, "duplicate table " ~ table.tableName ~ " in schema");
         tables ~= table;
         tableNameMap[table.tableName] = table;
     }
@@ -3536,7 +3543,7 @@ class DBInfo {
     }
     TableInfo opIndex(string tableName) {
         TableInfo ti = find(tableName);
-        enforce!HibernatedException(ti !is null, "Table " ~ tableName ~ " is not found in schema");
+        enforceHelper!HibernatedException(ti !is null, "Table " ~ tableName ~ " is not found in schema");
         return ti;
     }
     private static TableInfo[] addTableSorted(TableInfo[] list, TableInfo table) {
@@ -3615,7 +3622,7 @@ class TableInfo {
 
     ColumnInfo opIndex(string columnName) {
         ColumnInfo ti = find(columnName);
-        enforce!HibernatedException(ti !is null, "Column " ~ columnName ~ " is not found in table " ~ tableName);
+        enforceHelper!HibernatedException(ti !is null, "Column " ~ columnName ~ " is not found in table " ~ tableName);
         return ti;
     }
 
@@ -3652,7 +3659,7 @@ class TableInfo {
         TableInfo t = new TableInfo(schema, entity, pi.referencedEntity, pi.joinTable);
         TableInfo existing = schema.find(t.tableName);
         if (existing !is null) {
-            enforce!HibernatedException(t.getCreateTableSQL() == existing.getCreateTableSQL(), "JoinTable structure in " ~ entity.name ~ " and " ~ pi.referencedEntityName ~ " do not match");
+            enforceHelper!HibernatedException(t.getCreateTableSQL() == existing.getCreateTableSQL(), "JoinTable structure in " ~ entity.name ~ " and " ~ pi.referencedEntityName ~ " do not match");
         } else {
             schema.add(t);
         }
@@ -3682,7 +3689,7 @@ class TableInfo {
         indexes ~= index;
     }
     void addColumn(ColumnInfo column) {
-        enforce!HibernatedException((column.columnName in columnNameMap) is null, "duplicate column name " ~ tableName ~ "." ~ column.columnName ~ " in schema");
+        enforceHelper!HibernatedException((column.columnName in columnNameMap) is null, "duplicate column name " ~ tableName ~ "." ~ column.columnName ~ " in schema");
         columns ~= column;
         columnNameMap[column.columnName] = column;
         if (column.property !is null && (column.property.manyToOne || column.property.oneToOne)) {
@@ -3728,7 +3735,7 @@ class TableInfo {
                 if ((index.referencedTable in visitedTables) is null) {
                     // not yet visited
                     TableInfo t = schema.find(index.referencedTable);
-                    enforce!HibernatedException(t !is null, "Table " ~ index.referencedTable ~ " referenced in index " ~ index.indexName ~ " is not found in schema");
+                    enforceHelper!HibernatedException(t !is null, "Table " ~ index.referencedTable ~ " referenced in index " ~ index.indexName ~ " is not found in schema");
                     if (t.references(visitedTables, other))
                         return true;
                 }
