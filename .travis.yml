@@ -12,7 +12,6 @@ d:
   - dmd-2.084.1
   - dmd-2.083.1
   - dmd-2.082.1
-  - dmd-2.081.2
   - ldc-1.17.0 # eq to dmd v2.087
   - ldc-1.16.0 # eq to dmd v2.086.1
   - ldc-1.15.0 # eq to dmd v2.085.1
