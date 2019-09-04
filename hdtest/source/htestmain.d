@@ -17,6 +17,11 @@ class User {
     //@ManyToOne
     MyGroup group;
 
+    @OneToMany
+    Address[] addresses;
+
+    Asset[] assets;
+
     override string toString() {
         return format("{id:%s, name:%s, roles:%s, group:%s}", id, name, roles, group);
     }
@@ -31,6 +36,24 @@ class Role {
     override string toString() {
         return format("{id:%s, name:%s}", id, name);
     }
+}
+
+class Address {
+    @Generated @Id int id;
+    User user;
+    string street;
+    string town;
+    string country;
+
+    override string toString() {
+        return format("{id:%s, user:%s, street:%s, town:%s, country:%s}", id, user, street, town, country);
+    }
+}
+
+class Asset {
+    @Generated @Id int id;
+    User user;
+    string name;
 }
 
 @Entity
@@ -70,7 +93,7 @@ void testHibernate() {
 
     // create metadata from annotations
     writeln("Creating schema from class list");
-    EntityMetaData schema = new SchemaInfoImpl!(User, Role, MyGroup);
+    EntityMetaData schema = new SchemaInfoImpl!(User, Role, Address, Asset, MyGroup);
     //writeln("Creating schema from module list");
     //EntityMetaData schema2 = new SchemaInfoImpl!(htestmain);
 
@@ -113,15 +136,33 @@ void testHibernate() {
     r10.name = "role10";
     Role r11 = new Role();
     r11.name = "role11";
-    //
+
+    // create a user called Alex with an address and an asset
     User u10 = new User();
     u10.name = "Alex";
     u10.roles = [r10, r11];
     u10.group = grp3;
+    auto address = new Address();
+    address.street = "Some Street";
+    address.town = "Big Town";
+    address.country = "Alaska";
+    address.user = u10;
+    writefln("Saving Address: %s", address);
+    sess.save(address);
+
+    u10.addresses = [address];
+    auto asset = new Asset();
+    asset.name = "Something Precious";
+    asset.user = u10;
+    writefln("Saving Asset: %s", asset);
+    sess.save(asset);
+    u10.assets = [asset];
+
     User u12 = new User();
     u12.name = "Arjan";
     u12.roles = [r10, r11];
     u12.group = grp2;
+
     User u13 = new User();
     u13.name = "Wessel";
     u13.roles = [r10, r11];
@@ -131,15 +172,20 @@ void testHibernate() {
     sess.save( grp1 );
     sess.save( grp2 );
     sess.save( grp3 );
-    writeln("Saving r10");
+
+    writeln("Saving Role r10: " ~ r10.name);
     sess.save(r10);
-    writeln("Saving r11");
+
+    writeln("Saving Role r11: " ~ r11.name);
     sess.save(r11);
-    writeln("Saving u10");
+
+    writeln("Saving User u10: " ~ u10.name);
     sess.save(u10);
-    writeln("Saving u12");
+
+    writeln("Saving User u12: " ~ u12.name);
     sess.save(u12);
-    writeln("Saving u13");
+
+    writeln("Saving User u13: " ~ u13.name);
     sess.save(u13);
 
     writeln("Loading User");
@@ -155,6 +201,29 @@ void testHibernate() {
     assert(u11.roles[0].users.length == 3);
     assert(u11.roles[0].users[0] == u10);
 
+    assert(u11.addresses.length == 1);
+    assert(u11.addresses[0].street == "Some Street");
+    assert(u11.addresses[0].town == "Big Town");
+    assert(u11.addresses[0].country == "Alaska");
+
+    assert(u11.assets.length == 1);
+    assert(u11.assets[0].name == "Something Precious");
+
+    // selecting all from address table should return a row that joins to the user table
+    auto allAddresses = sess.createQuery("FROM Address").list!Address();
+    assert(allAddresses.length == 1);
+    writefln("Found address : %s", allAddresses[0]);
+    assert(allAddresses[0].street == "Some Street");
+    assert(allAddresses[0].user == u11);
+
+    // selecting all from asset table should return a row that joins to the user table
+    auto allAssets = sess.createQuery("FROM Asset").list!Asset();
+    assert(allAssets.length == 1);
+    writefln("Found asset : %s", allAssets[0]);
+    assert(allAssets[0].name == "Something Precious");
+    assert(allAssets[0].user == u11);
+
+    // now test something else
     writeln("Test retrieving users by group... (ManyToOne relationship)");
     auto qUsersByGroup = sess.createQuery("FROM User WHERE group=:group_id").setParameter("group_id", grp2.id);
     User[] usersByGroup = qUsersByGroup.list!User();

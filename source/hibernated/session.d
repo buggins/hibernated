@@ -806,6 +806,20 @@ class PropertyLoadMap {
         assert(_map.length > 0);
         return _map[prop];
     }
+
+    this() {}
+
+    this(PropertyLoadMap plm) {
+        foreach(k; plm.keys) {
+            auto pli = plm[k];
+            foreach(plik; pli.map.keys) {
+                foreach(obj; pli.map[plik].list.dup) {
+                    add(k, plik, obj);
+                }
+            }
+        }
+    }
+
     PropertyLoadItem remove(const PropertyInfo pi) {
         PropertyLoadItem item = _map[pi];
         _map.remove(pi);
@@ -974,8 +988,11 @@ class QueryImpl : Query
 	}
 
     private void delayedLoadRelations(PropertyLoadMap loadMap) {
+        loadMap = new PropertyLoadMap(loadMap);
+
         auto types = loadMap.keys;
         static if (TRACE_REFS) writeln("delayedLoadRelations " ~ to!string(loadMap.length));
+
         foreach(pi; types) {
             static if (TRACE_REFS) writeln("delayedLoadRelations " ~ pi.entity.name ~ "." ~ pi.propertyName);
             assert(pi.referencedEntity !is null);
