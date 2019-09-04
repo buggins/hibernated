@@ -33,13 +33,11 @@ jobs:
   include:
     - stage: test
       d: dmd-beta
-      if: branch = master
     - d: gdc
       if: branch = master
     - stage: OSX builds
       d: dmd
       os: osx
-      if: branch = master
     - d: ldc
       os: osx
       if: branch = master
