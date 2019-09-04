@@ -21,7 +21,6 @@ d:
 
 script:
   - dub build --config=SQLite --compiler=${DC}
-  - cd hdtest && dub --config=SQLite --compiler=${DC}
 
 addons:
   apt:
@@ -30,14 +29,26 @@ addons:
   homebrew:
     brewfile: true
 
-matrix:
+jobs:
   include:
-    - d: dmd
+    - stage: test
+      d: dmd-beta
+      if: branch = master
+    - d: gdc
+      if: branch = master
+    - stage: OSX builds
+      d: dmd
       os: osx
+      if: branch = master
     - d: ldc
       os: osx
-    - d: dmd-beta
-    - d: gdc
+      if: branch = master
+    - stage: hdtest
+      d: dmd
+      script: cd hdtest && dub --config=SQLite --compiler=${DC}
+    - stage: examples
+      d: dmd
+      script: cd examples/example1 && dub run --compiler=${DC}
   allow_failures:
     - d: dmd-beta
     - d: gdc
