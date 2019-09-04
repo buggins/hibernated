@@ -845,8 +845,12 @@ string getOneToManyReferencedPropertyName(T, string m)() {
         alias refererType = ElementType!memberFieldType;
     }
     // test T has single occurance in refererType
-    import std.traits : FieldTypeTuple;
-    import std.meta : Filter;
+    static if (__VERSION__ < 2074) {
+        import std.traits : FieldTypeTuple, Filter; // Filter used to be in std.traits
+    } else {
+        import std.traits : FieldTypeTuple;
+        import std.meta : Filter;
+    }
     alias refererFields = FieldTypeTuple!refererType;
     enum bool isSameType(U) = is( T == U ) || is ( Lazy!T == U );
     alias refererFieldsofTypeT = Filter!( isSameType, refererFields );
