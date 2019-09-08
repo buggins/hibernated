@@ -3360,9 +3360,9 @@ abstract class SchemaInfo : EntityMetaData {
 }
 
 class SchemaInfoImpl(T...) : SchemaInfo {
-    static EntityInfo [string] entityMap;
-    static EntityInfo [] entities;
-    static EntityInfo [TypeInfo_Class] classMap;
+    __gshared EntityInfo [string] entityMap;
+    __gshared EntityInfo [] entities;
+    __gshared EntityInfo [TypeInfo_Class] classMap;
 
     //import htestmain;
     //pragma(msg, entityListDef!(T)());
