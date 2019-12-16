@@ -3,7 +3,7 @@
     "description": "ORM for D language, similar to Hibernate",
     "authors": ["Vadim Lopatin"],
     "homepage": "https://github.com/buggins/hibernated",
-    "license": "Boost Software License (BSL 1.0)",
+    "license": "BSL-1.0",
     "dependencies": {
         "ddbc": "~>0.5.1"
     },
@@ -11,7 +11,8 @@
     "targetPath": "lib",
     "buildRequirements": [
 		"allowWarnings"
-	],
+    ],
+    "systemDependencies": "Depending on configuration: ODBC, PostgreSQL and/or SQLite v3",
     "configurations": [
         {
             "name": "full",
