@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  schedule:
+    - cron: '30 7 1 * *'
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  test:
+    name: ${{ matrix.compiler }} on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest ] # don't bother with macOS-latest
+        compiler:
+          - dmd-latest
+          - ldc-latest
+          - dmd-2.088.1
+          - dmd-2.087.1
+          - dmd-2.086.1
+          - dmd-2.085.1
+          - dmd-2.084.1
+          - dmd-2.083.1
+          - dmd-2.082.1
+          - ldc-1.18.0 # eq to dmd v2.088.1
+          - ldc-1.17.0 # eq to dmd v2.087
+          - ldc-1.16.0 # eq to dmd v2.086.1
+          - ldc-1.15.0 # eq to dmd v2.085.1
+          - ldc-1.14.0 # eq to dmd v2.084.1
+          - ldc-1.13.0 # eq to dmd v2.083.1
+          - ldc-1.12.0 # eq to dmd v2.082.1
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Install D compiler
+        uses: mihails-strasuns/setup-dlang@v0.4.1
+        with:
+          compiler: ${{ matrix.compiler }}
+
+      - name: Install dependencies on Ubuntu
+        if: startsWith(matrix.os, 'ubuntu')
+        run: sudo apt-get update && sudo apt-get install libev-dev libpq-dev libevent-dev libsqlite3-dev -y
+
+      # - name: Install dependencies on Mac OSX
+      #   if: startsWith(matrix.os, 'mac')
+      #   run: brew bundle
+
+      - name: build with SQLite config
+        run: dub build --config=SQLite
+
+      - name: run the hdtest project
+        working-directory: hdtest
+        run: dub --config=SQLite
