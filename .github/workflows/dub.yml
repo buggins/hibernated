@@ -58,7 +58,7 @@ jobs:
       - name: build with SQLite config
         run: dub build --config=SQLite
   
-  examples:
+  build-examples:
     name: Test ${{ matrix.compiler }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -85,6 +85,7 @@ jobs:
         run: brew bundle
 
       - name: Run example 1
+        if: ${{ !(startsWith(matrix.os, 'windows') && startsWith(matrix.compiler, 'ldc')) }}
         working-directory: examples/example1
         run: dub
 
