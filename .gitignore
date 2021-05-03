@@ -31,6 +31,7 @@ __test__library__
 *.db
 dub.selections.json
 .dub/
+examples/example1/example1
 
 
 # Ignore code coverage:

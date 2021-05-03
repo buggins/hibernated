@@ -11,7 +11,7 @@ on:
       - master
 
 jobs:
-  test:
+  builds:
     name: ${{ matrix.compiler }} on ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -30,10 +30,6 @@ jobs:
           - dmd-2.088.1
           - dmd-2.087.1
           - dmd-2.086.1
-          - dmd-2.085.1
-          - dmd-2.084.1
-          - dmd-2.083.1
-          - dmd-2.082.1
           - ldc-1.25.1 # eq to dmd v2.095.1
           - ldc-1.24.0 # eq to dmd v2.094.1
           - ldc-1.23.0 # eq to dmd v2.093.1
@@ -42,10 +38,6 @@ jobs:
           - ldc-1.18.0 # eq to dmd v2.088.1
           - ldc-1.17.0 # eq to dmd v2.087
           - ldc-1.16.0 # eq to dmd v2.086.1
-          - ldc-1.15.0 # eq to dmd v2.085.1
-          - ldc-1.14.0 # eq to dmd v2.084.1
-          - ldc-1.13.0 # eq to dmd v2.083.1
-          - ldc-1.12.0 # eq to dmd v2.082.1
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v1
@@ -65,7 +57,95 @@ jobs:
 
       - name: build with SQLite config
         run: dub build --config=SQLite
+  
+  examples:
+    name: Test ${{ matrix.compiler }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
+        compiler:
+          - dmd-latest
+          - ldc-latest
+    steps:
+      - uses: actions/checkout@v2
 
-      - name: run the hdtest project
-        working-directory: hdtest
-        run: dub --config=SQLite
+      - name: Install D ${{ matrix.compiler }}
+        uses: dlang-community/setup-dlang@v1
+        with:
+          compiler: ${{ matrix.compiler }}
+
+      - name: Install dependencies on Ubuntu
+        if: startsWith(matrix.os, 'ubuntu')
+        run: sudo apt-get update && sudo apt-get install libev-dev libpq-dev libevent-dev libsqlite3-dev -y
+
+      - name: Install dependencies on Mac OSX
+        if: startsWith(matrix.os, 'macos')
+        run: brew bundle
+
+      - name: Run example 1
+        working-directory: examples/example1
+        run: dub
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-20.04
+
+    services:
+      mysql:
+        image: mysql:5.7
+        ports: [3306]
+        env:
+          MYSQL_ROOT_PASSWORD: f48dfhw3Hd!Asah7i2aZ
+          MYSQL_DATABASE: hdtest
+          MYSQL_USER: testuser
+          MYSQL_PASSWORD: passw0rd
+        # Set health checks to wait until mysql service has started
+        options: >-
+          --health-cmd "mysqladmin ping"
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 4
+
+      postgres:
+        image: postgres
+        ports: [5432]
+        env:
+          POSTGRES_DB: hdtest
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: passw0rd
+        # Set health checks to wait until postgres service has started
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 3
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install latest DMD
+        uses: dlang-community/setup-dlang@v1
+        with:
+          compiler: dmd-latest
+
+      - name: HD Test (SQLite)
+        working-directory: ./hdtest
+        run: |
+          dub build --config=SQLite && ./bin/hdtest
+
+      - name: HD Test (MySQL)
+        working-directory: ./hdtest
+        env:
+          PORT: ${{ job.services.mysql.ports[3306] }}
+        run: |
+          dub build --config=MySQL && ./bin/hdtest --host=127.0.0.1 --port=$PORT --database=hdtest --user=testuser --password=passw0rd
+
+      - name: HD Test (Postgres)
+        working-directory: ./hdtest
+        env:
+          PORT: ${{ job.services.postgres.ports[5432] }}
+        run: |
+          dub build --config=PGSQL && ./bin/hdtest --host=127.0.0.1 --port=$PORT --database=hdtest --user=testuser --password=passw0rd
+

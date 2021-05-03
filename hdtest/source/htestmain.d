@@ -1,8 +1,10 @@
 module htestmain;
 
+import std.algorithm;
 import std.stdio;
 import std.string;
 import std.conv;
+import std.getopt;
 import hibernated.core;
 import std.traits;
 
@@ -68,26 +70,34 @@ class MyGroup {
     }
 }
 
-void testHibernate() {
+void testHibernate(immutable string host, immutable ushort port, immutable string dbName, immutable string dbUser, immutable string dbPass) {
+
     // setup DB connection
     version( USE_SQLITE )
     {
         import ddbc.drivers.sqliteddbc;
-        SQLITEDriver driver = new SQLITEDriver();
         string[string] params;
-        DataSource ds = new ConnectionPoolDataSourceImpl(driver, "zzz.db", params);
+        DataSource ds = new ConnectionPoolDataSourceImpl(new SQLITEDriver(), "zzz.db", params);
         Dialect dialect = new SQLiteDialect();
+    }
+    else version( USE_MYSQL )
+    {
+        import ddbc.drivers.mysqlddbc;
+        immutable string url = MySQLDriver.generateUrl(host, port, dbName);
+        string[string] params = MySQLDriver.setUserAndPassword(dbUser, dbPass);
+        DataSource ds = new ConnectionPoolDataSourceImpl(new MySQLDriver(), url, params);
+        Dialect dialect = new MySQLDialect();
     }
     else version( USE_PGSQL )
     {
         import ddbc.drivers.pgsqlddbc;
-        string url = PGSQLDriver.generateUrl( "/tmp", 5432, "testdb" );
+        immutable string url = PGSQLDriver.generateUrl(host, port, dbName); // PGSQLDriver.generateUrl( "/tmp", 5432, "testdb" );
         string[string] params;
-        params["user"] = "hdtest";
-        params["password"] = "secret";
+        params["user"] = dbUser;
+        params["password"] = dbPass;
         params["ssl"] = "true";
-        PGSQLDriver driver = new PGSQLDriver();
-        DataSource ds = new ConnectionPoolDataSourceImpl(driver,url, params);
+        
+        DataSource ds = new ConnectionPoolDataSourceImpl(new PGSQLDriver(), url, params);
         Dialect dialect = new PGSQLDialect();
     }
 
@@ -238,7 +248,30 @@ void testHibernate() {
     //sess.remove(u11);
 }
 
-void main()
+struct ConnectionParams
 {
-    testHibernate();
+    string host;
+	ushort port;
+    string database;
+	string user;
+	string pass;
+}
+
+int main(string[] args)
+{
+    ConnectionParams par;
+    string URI;
+
+    try
+	{
+		getopt(args, "host",&par.host, "port",&par.port, "database",&par.database, "user",&par.user, "password",&par.pass);
+	}
+	catch (GetOptException)
+	{
+		stderr.writefln("Could not parse args");
+		return 1;
+	}
+    testHibernate(par.host, par.port, par.database, par.user, par.pass);
+
+    return 0;
 }
