@@ -3304,15 +3304,15 @@ abstract class SchemaInfo : EntityMetaData {
                 columnCount += columnsWritten;
             } else if (pi.oneToOne || pi.manyToOne) {
                 if (pi.columnName !is null) {
-                    Object obj = pi.getObjectFunc(obj);
-                    if (obj is null) {
+                    Object objFunc = pi.getObjectFunc(obj);
+                    if (objFunc is null) {
                         w.setNull(startColumn + columnCount);
                     } else {
                         //writeln("setting ID column for property " ~ pi.entity.name ~ "." ~ pi.propertyName);
                         //if (pi.lazyLoad)
                         //    writeln("property has lazy loader");
                         //writeln("reading ID variant " ~ pi.propertyName ~ " from object");
-                        Variant id = pi.referencedEntity.getKey(obj);
+                        Variant id = pi.referencedEntity.getKey(objFunc);
                         //writeln("setting parameter " ~ to!string(startColumn + columnCount));
                         w.setVariant(startColumn + columnCount, id);
                     }
