@@ -109,35 +109,35 @@ enum RelationType {
 class PropertyInfo {
 public:
     /// reads simple property value from data set to object
-    alias void function(Object, DataSetReader, int index) ReaderFunc;
+    alias ReaderFunc = void function(Object, DataSetReader, int index);
     /// writes simple property value to data set from object
-    alias void function(Object, DataSetWriter, int index) WriterFunc;
+    alias WriterFunc = void function(Object, DataSetWriter, int index);
     /// copy property from second passed object to first
-    alias void function(Object, Object) CopyFunc;
+    alias CopyFunc = void function(Object, Object);
     /// returns simple property as Variant
-    alias Variant function(Object) GetVariantFunc;
+    alias GetVariantFunc = Variant function(Object);
     /// sets simple property from Variant
-    alias void function(Object, Variant value) SetVariantFunc;
+    alias SetVariantFunc = void function(Object, Variant value);
     /// returns true if property value of object is not null
-    alias bool function(Object) IsNullFunc;
+    alias IsNullFunc = bool function(Object);
     /// returns true if key property of object is set (similar to IsNullFunc but returns true if non-nullable number is 0.
-    alias bool function(Object) KeyIsSetFunc;
+    alias KeyIsSetFunc = bool function(Object);
     /// returns OneToOne, ManyToOne or Embedded property as Object
-    alias Object function(Object) GetObjectFunc;
+    alias GetObjectFunc = Object function(Object);
     /// sets OneToOne, ManyToOne or Embedded property as Object
-    alias void function(Object, Object) SetObjectFunc;
+    alias SetObjectFunc = void function(Object, Object);
     /// sets lazy loader delegate for OneToOne, or ManyToOne property if it's Lazy! template instance
-    alias void function(Object, Object delegate()) SetObjectDelegateFunc;
+    alias SetObjectDelegateFunc = void function(Object, Object delegate());
     /// sets lazy loader delegate for OneToMany, or ManyToMany property if it's LazyCollection! template instance
-    alias void function(Object, Object[] delegate()) SetCollectionDelegateFunc;
+    alias SetCollectionDelegateFunc = void function(Object, Object[] delegate());
     /// returns OneToMany or ManyToMany property value as object array
-    alias Object[] function(Object) GetCollectionFunc;
+    alias GetCollectionFunc = Object[] function(Object);
     /// sets OneToMany or ManyToMany property value from object array
-    alias void function(Object, Object[]) SetCollectionFunc;
+    alias SetCollectionFunc = void function(Object, Object[]);
     /// returns true if Lazy! or LazyCollection! property is loaded (no loader delegate set).
-    alias bool function(Object) IsLoadedFunc;
+    alias IsLoadedFunc = bool function(Object);
     /// returns new generated primary key for property
-    alias Variant function(Connection conn, const PropertyInfo prop) GeneratorFunc;
+    alias GeneratorFunc = Variant function(Connection conn, const PropertyInfo prop);
 
     package EntityInfo _entity;
     @property const(EntityInfo) entity() const { return _entity; }
@@ -894,7 +894,8 @@ int getColumnLength(T, string m)() {
 }
 
 string getPropertyName(T, string m)() {
-    alias typeof(__traits(getMember, T, m)) ti;
+    alias ti = typeof(__traits(getMember, T, m));
+
     static if (is(ti == function)) {
         return getterNameToFieldName(m);
     } else
@@ -985,7 +986,8 @@ static immutable string[] PropertyMemberKind_ReadCode =
 
 PropertyMemberKind getPropertyMemberKind(T : Object, string m)() {
     auto memberKind = PropertyMemberKind.UNSUPPORTED_MEMBER;
-    alias typeof(__traits(getMember, T, m)) ti;
+    alias ti = typeof(__traits(getMember, T, m));
+
     static if (is(ti == function)) {
         // interate through all overloads
         //return checkGetterOverload!(T, m);
@@ -1012,7 +1014,8 @@ PropertyMemberKind getPropertyMemberKind(T : Object, string m)() {
 }
 
 string getPropertyEmbeddedEntityName(T : Object, string m)() {
-    alias typeof(__traits(getMember, T, m)) ti;
+    alias ti = typeof(__traits(getMember, T, m));
+
     static if (is(ti == function)) {
         static if (isImplicitlyConvertible!(ReturnType!(ti), Object)) {
             static assert(hasAnnotation!(ReturnType!(ti), Embeddable), "@Embedded property class should have @Embeddable annotation");
@@ -1062,7 +1065,8 @@ template isObject(T) {
 
 /// member is field or function or property with SomeClass type
 template isObjectMember(T : Object, string m) {
-    alias typeof(__traits(getMember, T, m)) ti;
+    alias ti = typeof(__traits(getMember, T, m));
+
     static if (is(ti == function)) {
         enum bool isObjectMember = isImplicitlyConvertible!(ReturnType!(ti), Object);
     } else {
@@ -1160,8 +1164,9 @@ template isValidSetter(T : Object, string m, ParamType) {
 template isValidGetter(T : Object, string m) {
     // it's public member with get or is prefix
     static if ((m.startsWith("get") || m.startsWith("is")) && hasPublicMember!(T, m)) {
-        alias typeof(__traits(getMember, T, m)) ti;
-        alias ReturnType!ti rti;
+        alias ti = typeof(__traits(getMember, T, m));
+        alias rti = ReturnType!ti;
+
         // it's function
         static if (is(typeof(__traits(getMember, T, m)) == function)) {
             // function has no parameters
@@ -1193,7 +1198,8 @@ template isValidGetterWithAnnotation(T : Object, string m) {
 bool isMainMemberForProperty(T : Object, string m)() {
     // skip non-public members
     static if (hasPublicMember!(T, m)) {
-        alias typeof(__traits(getMember, T, m)) ti;
+        alias ti = typeof(__traits(getMember, T, m));
+
         immutable bool thisMemberHasAnnotation = hasHibernatedPropertyAnnotation!(T,m);
         static if (is(ti == function)) {
             // function or property
@@ -1230,13 +1236,14 @@ bool isMainMemberForProperty(T : Object, string m)() {
 
 /// member is field or function or property returing SomeClass[] or LazyCollection!SomeClass
 template isCollectionMember(T : Object, string m) {
-    alias typeof(__traits(getMember, T, m)) ti;
+    alias ti = typeof(__traits(getMember, T, m));
+
     static if (is(ti == function)) {
         static if (is(ReturnType!(typeof(__traits(getMember, T, m))) x == LazyCollection!Args, Args...))
             enum bool isCollectionMember = true;
         else {
             //pragma(msg, typeof(__traits(getMember, T, m).init[0]));
-            alias ReturnType!ti rti;
+            alias rti = ReturnType!ti;
             static if (isArray!rti && isImplicitlyConvertible!(typeof(rti.init[0]), Object))
                 enum bool isCollectionMember = true;
             else
@@ -1312,7 +1319,7 @@ unittest {
 
 template getLazyInstanceType(T) {
     static if (is(T x == Lazy!Args, Args...))
-        alias Args[0] getLazyInstanceType;
+        alias getLazyInstanceType = Args[0];
     else {
         static assert(false, "Not a Lazy! instance");
     }
@@ -1320,7 +1327,7 @@ template getLazyInstanceType(T) {
 
 template getLazyCollectionInstanceType(T) {
     static if (is(T x == LazyCollection!Args, Args...))
-        alias Args[0] getLazyInstanceType;
+        alias getLazyInstanceType = Args[0];
     else {
         static assert(false, "Not a LazyCollection! instance");
     }
@@ -1331,40 +1338,40 @@ template getReferencedInstanceType(T) {
     static if (is(T == delegate)) {
         //pragma(msg, "is delegate");
         static if (isImplicitlyConvertible!(ReturnType!(T), Object)) {
-            alias ReturnType!(T) getReferencedInstanceType;
+            alias getReferencedInstanceType = ReturnType!(T);
         } else
             static assert(false, "@OneToOne, @ManyToOne, @OneToMany, @ManyToMany property can be only class or Lazy!class");
     } else static if (is(T == function)) {
         //pragma(msg, "is function");
         static if (isImplicitlyConvertible!(ReturnType!(T), Object)) {
-            alias ReturnType!(T) getReferencedInstanceType;
+            alias getReferencedInstanceType = ReturnType!(T);
         } else {
             static if (is(ReturnType!(T) x == Lazy!Args, Args...))
-                alias Args[0] getReferencedInstanceType;
+                alias getReferencedInstanceType = Args[0];
             else
                 static assert(false, "Type cannot be used as relation " ~ T.stringof);
         }
     } else {
         //pragma(msg, "is not function");
         static if (is(T x == LazyCollection!Args, Args...)) {
-            alias Args[0] getReferencedInstanceType;
+            alias getReferencedInstanceType = Args[0];
         } else {
             static if (is(T x == Lazy!Args, Args...)) {
-                alias Args[0] getReferencedInstanceType;
+                alias getReferencedInstanceType = Args[0];
             } else {
                 static if (isArray!(T)) {
                     static if (isImplicitlyConvertible!(typeof(T.init[0]), Object)) {
                         //pragma(msg, "isImplicitlyConvertible!(T, Object)");
-                        alias typeof(T.init[0]) getReferencedInstanceType;
+                        alias getReferencedInstanceType = typeof(T.init[0]);
                     } else {
                         static assert(false, "Type cannot be used as relation " ~ T.stringof);
                     }
                 } else static if (isImplicitlyConvertible!(T, Object)) {
                     //pragma(msg, "isImplicitlyConvertible!(T, Object)");
-                    alias T getReferencedInstanceType;
+                    alias getReferencedInstanceType = T;
                 } else static if (isImplicitlyConvertible!(T, Object[])) {
                     //pragma(msg, "isImplicitlyConvertible!(T, Object)");
-                    alias T getReferencedInstanceType;
+                    alias getReferencedInstanceType = T;
                 } else {
                     static assert(false, "Type cannot be used as relation " ~ T.stringof);
                 }
@@ -1374,12 +1381,13 @@ template getReferencedInstanceType(T) {
 }
 
 string getPropertyReferencedEntityName(T : Object, string m)() {
-    alias typeof(__traits(getMember, T, m)) ti;
+    alias ti = typeof(__traits(getMember, T, m));
     return getEntityName!(getReferencedInstanceType!ti);
 }
 
 string getPropertyEmbeddedClassName(T : Object, string m)() {
-    alias typeof(__traits(getMember, T, m)) ti;
+    alias ti = typeof(__traits(getMember, T, m));
+    
     static if (is(ti == function)) {
         static if (isImplicitlyConvertible!(ReturnType!(ti), Object)) {
             static assert(hasAnnotation!(ReturnType!(ti), Embeddable), "@Embedded property class should have @Embeddable annotation");
@@ -1396,7 +1404,7 @@ string getPropertyEmbeddedClassName(T : Object, string m)() {
 }
 
 string getPropertyReferencedClassName(T : Object, string m)() {
-    alias typeof(__traits(getMember, T, m)) ti;
+    alias ti = typeof(__traits(getMember, T, m));
     return fullyQualifiedName!(getReferencedInstanceType!ti);
 }
 
@@ -1439,7 +1447,8 @@ enum PropertyMemberType : int {
 }
 
 template isSupportedSimpleType(T, string m) {
-    alias typeof(__traits(getMember, T, m)) ti;
+    alias ti = typeof(__traits(getMember, T, m));
+    
     static if (is(ti == function)) {
         static if (is(ReturnType!(ti) == bool)) {
             enum bool isSupportedSimpleType = true;
@@ -1574,7 +1583,8 @@ template isSupportedSimpleType(T, string m) {
 }
 
 PropertyMemberType getPropertyMemberType(T, string m)() {
-    alias typeof(__traits(getMember, T, m)) ti;
+    alias ti = typeof(__traits(getMember, T, m));
+
     static if (is(ti == function)) {
 		static if (is(ReturnType!(ti) == bool)) {
 			return PropertyMemberType.BOOL_TYPE;
@@ -1620,7 +1630,7 @@ PropertyMemberType getPropertyMemberType(T, string m)() {
             return PropertyMemberType.NULLABLE_DOUBLE_TYPE;
         } else if (is(ReturnType!(ti) == string)) {
             return PropertyMemberType.STRING_TYPE;
-        } else if (is(ReturnType!(ti) == String)) {
+        } else if (is(ReturnType!(ti) == hibernated.type.String)) {
             return PropertyMemberType.NULLABLE_STRING_TYPE;
         } else if (is(ReturnType!(ti) == DateTime)) {
             return PropertyMemberType.DATETIME_TYPE;
@@ -1906,6 +1916,7 @@ string getPropertyWriteCode(T, string m)() {
     immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
     immutable string nullValueCode = ColumnTypeSetNullCode[getPropertyMemberType!(T,m)()];
     immutable string datasetReader = "(!r.isNull(index) ? " ~ getColumnTypeDatasetReadCode!(T, m)() ~ " : nv)";
+
     final switch (kind) {
         case PropertyMemberKind.FIELD_MEMBER:
             return nullValueCode ~ "entity." ~ m ~ " = " ~ datasetReader ~ ";";
@@ -1922,6 +1933,7 @@ string getPropertyWriteCode(T, string m)() {
 
 string getPropertyCopyCode(T, string m)() {
     immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
+
     final switch (kind) {
         case PropertyMemberKind.FIELD_MEMBER:
             return "toentity." ~ m ~ " = fromentity." ~ m ~ ";";
@@ -1940,6 +1952,7 @@ string getPropertyVariantWriteCode(T, string m)() {
     immutable memberType = getPropertyMemberType!(T,m)();
     immutable string nullValueCode = ColumnTypeSetNullCode[memberType];
     immutable string variantReadCode = ColumnTypeVariantReadCode[memberType];
+
     static if (getPropertyMemberKind!(T, m)() == PropertyMemberKind.GETTER_MEMBER) {
         return nullValueCode ~ "entity." ~ getterNameToSetterName(m) ~ "(" ~ variantReadCode ~ ");";
     } else {
@@ -2108,7 +2121,8 @@ static immutable string[] DatasetWriteCode =
      ];
 
 string getColumnTypeDatasetWriteCode(T, string m)() {
-    alias typeof(__traits(getMember, T, m)) ti;
+    alias ti = typeof(__traits(getMember, T, m));
+
     immutable string isNullCode = getColumnTypeIsNullCode!(T,m)();
     immutable string readCode = getPropertyReadCode!(T,m)();
     immutable string setDataCode = DatasetWriteCode[getPropertyMemberType!(T,m)()];
@@ -2986,7 +3000,7 @@ string getEntityDef(T)() {
             // skip non-public members
             static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
 
-                alias typeof(__traits(getMember, T, m)) ti;
+                alias ti = typeof(__traits(getMember, T, m));
 
                 // hasHibernatedPropertyAnnotation!(T, m) &&
                 // automatically treat all public members of supported types as persistent
