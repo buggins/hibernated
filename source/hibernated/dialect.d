@@ -14,10 +14,60 @@
  */
 module hibernated.dialect;
 
+import std.algorithm.iteration : uniq;
+import std.array;
 import std.stdio;
 import std.string;
 
 import hibernated.metadata;
+
+/// Reserved words in the international SQL standard (ISO/IEC 9075) from 2016
+// See the SQL-2016 list on https://en.wikipedia.org/wiki/SQL_reserved_words
+const string[] SQL_RESERVED_WORDS = uniq([
+    "ABS", "ACOS", "ALL", "ALLOCATE", "ALTER", "AND", "ANY", "ARE", "ARRAY", "ARRAY_AGG", "ARRAY_MAX_CARDINALITY",
+    "AS", "ASENSITIVE", "ASIN", "ASYMMETRIC", "AT",
+    "BEGIN", "BEGIN_FRAME", "BEGIN_PARTITION", "BETWEEN", "BIGINT", "BINARY", "BLOB", "BOOLEAN", "BOTH", "BY",
+    "CALL", "CASE", "CHECK", "COLUMN",
+    "CONSTRAINT", "CREATE",
+    "DATABASE", "DEFAULT", "DELETE", "DESC", "DISTENCT", "DROP",
+    "EXEC", "EXISTS",
+    "FROM",
+    "HAVING",
+    "IN", "INDEX",
+    "JOIN",
+    "LIKE", "LIMIT",
+    "NOT",
+    "OR",
+    "ROWNUM",
+    "SELECT", "SET",
+    "TABLE", "TOP",
+    "UNION", "UNIQUE", "UPDATE",
+    "VALUES", "VIEW",
+    "WHERE"
+]).array;
+
+unittest {
+    import std.algorithm.searching : canFind;
+    assert(canFind(SQL_RESERVED_WORDS, "AND"));
+    assert(canFind(SQL_RESERVED_WORDS, "BIGINT"));
+    assert(canFind(SQL_RESERVED_WORDS, "COLUMN"));
+    assert(canFind(SQL_RESERVED_WORDS, "DATABASE"));
+    assert(canFind(SQL_RESERVED_WORDS, "DELETE"));
+    assert(canFind(SQL_RESERVED_WORDS, "INDEX"));
+    assert(canFind(SQL_RESERVED_WORDS, "NOT"));
+    assert(canFind(SQL_RESERVED_WORDS, "OR"));
+    assert(canFind(SQL_RESERVED_WORDS, "JOIN"));
+    assert(canFind(SQL_RESERVED_WORDS, "SELECT"));
+    assert(canFind(SQL_RESERVED_WORDS, "UNION"));
+    assert(canFind(SQL_RESERVED_WORDS, "WHERE"));
+
+    assert(!canFind(SQL_RESERVED_WORDS, "ABSOLUTE"));
+    assert(!canFind(SQL_RESERVED_WORDS, "ADD"));    // this in MySQL, Oracle, SQL Server
+    assert(!canFind(SQL_RESERVED_WORDS, "ASC"));    // this in MySQL, PostgreSQL, Oracle, SQL Server
+    assert(!canFind(SQL_RESERVED_WORDS, "LONG"));
+    assert(!canFind(SQL_RESERVED_WORDS, "PRIVILEGES")); // PRIVILEGES is an ODBC thing
+    assert(!canFind(SQL_RESERVED_WORDS, "VARCHAR2"));
+}
 
 /// Represents a dialect of SQL implemented by a particular RDBMS. -- generated from JavaDocs on org.hibernate.dialect.Dialect
 abstract class Dialect {
@@ -56,7 +106,7 @@ abstract class Dialect {
 
 	protected int[string] keywordList;
 
-	protected void addKeywords(string[] keywords) {
+	protected void addKeywords(const(string[]) keywords) {
 		foreach(s; keywords) {
 			keywordList[s] = 1;
 		}
@@ -406,7 +456,9 @@ abstract class Dialect {
 version (USE_MYSQL) {
 } else version (USE_SQLITE) {
 } else version (USE_PGSQL) {
+} else version (USE_PLSQL) {
+} else version (USE_TSQL) {
 } else {
-    pragma(msg, "No DB type version definition specified. Add one or more versions to command line: USE_MYSQL, USE_PGSQL, USE_SQLITE");
+    pragma(msg, "No DB type version definition specified. Add one or more versions to command line: USE_SQLITE, USE_MYSQL, USE_PGSQL, USE_PLSQL, USE_TSQL");
 }
 

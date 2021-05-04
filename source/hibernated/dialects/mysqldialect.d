@@ -11,6 +11,8 @@
  */
 module hibernated.dialects.mysqldialect;
 
+import std.algorithm.iteration : uniq;
+import std.array;
 import std.conv;
 
 import hibernated.dialect;
@@ -18,15 +20,11 @@ import hibernated.metadata;
 import hibernated.type;
 import ddbc.core;
 
-string[] MYSQL_RESERVED_WORDS = 
-	[
-	"ACCESSIBLE", "ADD", "ALL",
-	"ALTER", "ANALYZE", "AND",
-	"AS", "ASC", "ASENSITIVE",
-	"BEFORE", "BETWEEN", "BIGINT",
-	"BINARY", "BLOB", "BOTH",
-	"BY", "CALL", "CASCADE",
-	"CASE", "CHANGE", "CHAR",
+const string[] MYSQL_RESERVED_WORDS = uniq(SQL_RESERVED_WORDS ~ 
+    [
+	"ACCESSIBLE", "ADD", "ALTER", "ANALYZE", "AS", "ASC", "ASENSITIVE",
+	"BEFORE", "BOTH", "BY",
+    "CALL", "CASCADE", "CASE", "CHANGE", "CHAR",
 	"CHARACTER", "CHECK", "COLLATE",
 	"COLUMN", "CONDITION", "CONSTRAINT",
 	"CONTINUE", "CONVERT", "CREATE",
@@ -100,7 +98,7 @@ string[] MYSQL_RESERVED_WORDS =
 	"GET", "IO_AFTER_GTIDS", "IO_BEFORE_GTIDS",
 	"MASTER_BIND", "ONE_SHOT", "PARTITION",
 	"SQL_AFTER_GTIDS", "SQL_BEFORE_GTIDS",
-];
+]).array;
 
 class MySQLDialect : Dialect {
     ///The character specific to this dialect used to close a quoted identifier.

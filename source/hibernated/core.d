@@ -26,7 +26,9 @@ module hibernated.core;
 //public import std.typetuple;
 //public import std.variant;
 
-public import ddbc;
+public import ddbc; // pulls in core, common, and pods. Possibly better to only import core & common:
+//public import ddbc.core;
+//public import ddbc.common;
 
 public import hibernated.annotations;
 public import hibernated.session;
@@ -46,4 +48,12 @@ version( USE_PGSQL )
 version( USE_MYSQL )
 {
     public import hibernated.dialects.mysqldialect;
+}
+version( USE_PLSQL )
+{
+    public import hibernated.dialects.oracledialect;
+}
+version( USE_TSQL )
+{
+    public import hibernated.dialects.sqlserverdialect;
 }

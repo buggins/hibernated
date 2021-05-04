@@ -70,7 +70,7 @@ class MyGroup {
     }
 }
 
-void testHibernate(immutable string host, immutable ushort port, immutable string dbName, immutable string dbUser, immutable string dbPass) {
+void testHibernate(immutable string host, immutable ushort port, immutable string dbName, immutable string dbUser, immutable string dbPass, immutable string driver) {
 
     // setup DB connection
     version( USE_SQLITE )
@@ -98,7 +98,29 @@ void testHibernate(immutable string host, immutable ushort port, immutable strin
         params["ssl"] = "true";
         
         DataSource ds = new ConnectionPoolDataSourceImpl(new PGSQLDriver(), url, params);
-        Dialect dialect = new PGSQLDialect();
+        Dialect dialect = new PGSQLDialect(); // should be called PostgreSQLDialect
+    }
+    else version( USE_TSQL )
+    {
+        // T-SQL is SQL Server
+        import ddbc.drivers.odbcddbc;
+        string[string] params = ODBCDriver.setUserAndPassword(par.user, par.password);
+		params["driver"] = par.odbcdriver;
+        immutable string url = ODBCDriver.generateUrl(par.host, par.port, params);
+
+        DataSource ds = new ConnectionPoolDataSourceImpl(new ODBCDriver(), url, params);
+        Dialect dialect = new SQLServerDialect();
+    }
+    else version( USE_PLSQL )
+    {
+        // PL/SQL is Oracle
+        import ddbc.drivers.odbcddbc;
+        string[string] params = ODBCDriver.setUserAndPassword(par.user, par.password);
+		params["driver"] = par.odbcdriver;
+        immutable string url = ODBCDriver.generateUrl(par.host, par.port, params);
+
+        DataSource ds = new ConnectionPoolDataSourceImpl(new ODBCDriver(), url, params);
+        Dialect dialect = new OracleDialect();
     }
 
     // create metadata from annotations
@@ -255,6 +277,7 @@ struct ConnectionParams
     string database;
 	string user;
 	string pass;
+    string driver;
 }
 
 int main(string[] args)
@@ -264,14 +287,14 @@ int main(string[] args)
 
     try
 	{
-		getopt(args, "host",&par.host, "port",&par.port, "database",&par.database, "user",&par.user, "password",&par.pass);
+		getopt(args, "host",&par.host, "port",&par.port, "database",&par.database, "user",&par.user, "password",&par.pass, "driver",&par.driver);
 	}
 	catch (GetOptException)
 	{
 		stderr.writefln("Could not parse args");
 		return 1;
 	}
-    testHibernate(par.host, par.port, par.database, par.user, par.pass);
+    testHibernate(par.host, par.port, par.database, par.user, par.pass, par.driver);
 
     return 0;
 }

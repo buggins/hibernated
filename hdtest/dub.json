@@ -11,30 +11,48 @@
     "configurations": [
         {
             "name": "full",
-            "versions": ["USE_MYSQL", "USE_SQLITE", "USE_PGSQL"],
+            "versions": ["USE_MYSQL", "USE_SQLITE", "USE_PGSQL", "USE_PLSQL", "USE_TSQL"],
             "subConfigurations": {
                 "hibernated": "full"
             }
         },
         {
-            "name": "MySQL",
+            "name": "mysql",
             "versions": ["USE_MYSQL"],
             "subConfigurations": {
                 "hibernated": "MySQL"
             }
         },
         {
-            "name": "SQLite",
+            "name": "sqlite",
             "versions": ["USE_SQLITE"],
             "subConfigurations": {
                 "hibernated": "SQLite"
             }
         },
         {
-            "name": "PGSQL",
+            "name": "postgres",
             "versions": ["USE_PGSQL"],
             "subConfigurations": {
                 "hibernated": "PGSQL"
+            }
+        },
+        {
+            "name": "oracle",
+            "versions": ["USE_PLSQL"],
+            "libs-posix": ["odbc"],
+            "libs-windows": ["odbc32"],
+            "subConfigurations": {
+                "ddbc": "ODBC"
+            }
+        },
+        {
+            "name": "mssql",
+            "versions": ["USE_TSQL"],
+            "libs-posix": ["odbc"],
+            "libs-windows": ["odbc32"],
+            "subConfigurations": {
+                "ddbc": "ODBC"
             }
         }
     ]

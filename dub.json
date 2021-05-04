@@ -12,24 +12,20 @@
     "buildRequirements": [
 		"allowWarnings"
     ],
+    "toolchainRequirements": {
+		"frontend": ">=2.068"
+	},
     "systemDependencies": "Depending on configuration: ODBC, PostgreSQL and/or SQLite v3",
     "configurations": [
         {
             "name": "full",
-            "versions": ["USE_MYSQL", "USE_SQLITE", "USE_PGSQL"],
+            "versions": ["USE_MYSQL", "USE_SQLITE", "USE_PGSQL", "USE_PLSQL", "USE_TSQL"],
             "subConfigurations": {
                 "ddbc": "full"
             }
         },
         {
-            "name": "MySQL",
-            "versions": ["USE_MYSQL"],
-            "subConfigurations": {
-                "ddbc": "MySQL"
-            }
-        },
-        {
-            "name": "SQLite",
+            "name": "test",
             "versions": ["USE_SQLITE"],
             "libs-posix": ["sqlite3"],
             "libs-windows": ["sqlite3"],
@@ -38,12 +34,46 @@
             }
         },
         {
-            "name": "PGSQL",
+            "name": "mysql",
+            "versions": ["USE_MYSQL"],
+            "subConfigurations": {
+                "ddbc": "MySQL"
+            }
+        },
+        {
+            "name": "sqlite",
+            "versions": ["USE_SQLITE"],
+            "libs-posix": ["sqlite3"],
+            "libs-windows": ["sqlite3"],
+            "subConfigurations": {
+                "ddbc": "SQLite"
+            }
+        },
+        {
+            "name": "postgres",
             "versions": ["USE_PGSQL"],
             "libs-posix": ["pq"],
             "libs-windows": ["libpq"],
             "subConfigurations": {
                 "ddbc": "PGSQL"
+            }
+        },
+        {
+            "name": "oracle",
+            "versions": ["USE_PLSQL"],
+            "libs-posix": ["odbc"],
+            "libs-windows": ["odbc32"],
+            "subConfigurations": {
+                "ddbc": "ODBC"
+            }
+        },
+        {
+            "name": "mssql",
+            "versions": ["USE_TSQL"],
+            "libs-posix": ["odbc"],
+            "libs-windows": ["odbc32"],
+            "subConfigurations": {
+                "ddbc": "ODBC"
             }
         }
     ]

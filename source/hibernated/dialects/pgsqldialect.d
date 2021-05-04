@@ -11,6 +11,8 @@
  */
 module hibernated.dialects.pgsqldialect;
 
+import std.algorithm.iteration : uniq;
+import std.array;
 import std.conv;
 
 import hibernated.dialect;
@@ -19,55 +21,13 @@ import hibernated.type;
 import ddbc.core;
 
 
-string[] PGSQL_RESERVED_WORDS = 
+const string[] PGSQL_RESERVED_WORDS = uniq(SQL_RESERVED_WORDS ~ 
     [
-     "ABORT",
-     "ACTION",
-     "ADD",
-     "AFTER",
-     "ALL",
-     "ALTER",
-     "ANALYZE",
-     "AND",
-     "AS",
-     "ASC",
-     "ATTACH",
-     "AUTOINCREMENT",
+     "ABORT", "ACTION", "ADD", "AFTER", "ALL", "ALTER", "ANALYZE", "ASC", "ATTACH", "AUTOINCREMENT",
      "BEFORE",
-     "BEGIN",
-     "BETWEEN",
-     "BY",
-     "CASCADE",
-     "CASE",
-     "CAST",
-     "CHECK",
-     "COLLATE",
-     "COLUMN",
-     "COMMIT",
-     "CONFLICT",
-     "CONSTRAINT",
-     "CREATE",
-     "CROSS",
-     "CURRENT_DATE",
-     "CURRENT_TIME",
-     "CURRENT_TIMESTAMP",
-     "DATABASE",
-     "DEFAULT",
-     "DEFERRABLE",
-     "DEFERRED",
-     "DELETE",
-     "DESC",
-     "DETACH",
-     "DISTINCT",
-     "DROP",
-     "EACH",
-     "ELSE",
-     "END",
-     "ESCAPE",
-     "EXCEPT",
-     "EXCLUSIVE",
-     "EXISTS",
-     "EXPLAIN",
+     "CASCADE", "CAST", "COLLATE", "COMMIT", "CONFLICT", "CREATE", "CROSS", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP",
+     "DEFERRABLE", "DEFERRED", "DELETE", "DETACH",
+     "EACH", "ELSE", "END", "ESCAPE", "EXCEPT", "EXCLUSIVE", "EXISTS", "EXPLAIN",
      "FAIL",
      "FOR",
      "FOREIGN",
@@ -143,8 +103,36 @@ string[] PGSQL_RESERVED_WORDS =
      "VIRTUAL",
      "WHEN",
      "WHERE",
-     ];
+     ]).array;
 
+
+unittest {
+    import std.algorithm.searching : canFind;
+    
+    // these words in SQL_RESERVED_WORDS should definately be in PGSQL reserved words
+    assert(canFind(PGSQL_RESERVED_WORDS, "AND"));
+    assert(canFind(PGSQL_RESERVED_WORDS, "BIGINT"));
+    assert(canFind(PGSQL_RESERVED_WORDS, "COLUMN"));
+    assert(canFind(PGSQL_RESERVED_WORDS, "DATABASE"));
+    assert(canFind(PGSQL_RESERVED_WORDS, "DELETE"));
+    assert(canFind(PGSQL_RESERVED_WORDS, "INDEX"));
+    assert(canFind(PGSQL_RESERVED_WORDS, "NOT"));
+    assert(canFind(PGSQL_RESERVED_WORDS, "OR"));
+    assert(canFind(PGSQL_RESERVED_WORDS, "JOIN"));
+    assert(canFind(PGSQL_RESERVED_WORDS, "SELECT"));
+    assert(canFind(PGSQL_RESERVED_WORDS, "UNION"));
+    assert(canFind(PGSQL_RESERVED_WORDS, "WHERE"));
+
+    // check that these Postgres specific keywords also exist
+    assert(canFind(PGSQL_RESERVED_WORDS, "SAVEPOINT"));
+    assert(canFind(PGSQL_RESERVED_WORDS, "TEMPORARY"));
+    assert(canFind(PGSQL_RESERVED_WORDS, "VACUUM"));
+    assert(canFind(PGSQL_RESERVED_WORDS, "VIRTUAL"));
+
+    // check that these keywords for other dialects don't exist
+    assert(!canFind(PGSQL_RESERVED_WORDS, "PRIVILEGES")); // PRIVILEGES is an ODBC thing
+    assert(!canFind(PGSQL_RESERVED_WORDS, "VARCHAR2")); // PRIVILEGES is an ODBC thing
+}
 
 class PGSQLDialect : Dialect {
     ///The character specific to this dialect used to close a quoted identifier.

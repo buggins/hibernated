@@ -22,9 +22,19 @@ import std.typecons;
 import std.exception;
 import std.variant;
 
+//import ddbc; // pulls in core, common, and pods
+// import ddbc.core;
+// import ddbc.common;
+// import ddbc.drivers.sqliteddbc; // defines SQLITE_TESTS_ENABLED
+
+
 import hibernated.core;
 
 version(unittest) {
+
+    //import ddbc; // pulls in core, common, and pods
+    //import ddbc.core;
+    //import ddbc.common;
     
     //@Entity
     @Table("users") // to override table name - "users" instead of default "user"
@@ -279,7 +289,6 @@ version(unittest) {
 
     immutable bool DB_TESTS_ENABLED = SQLITE_TESTS_ENABLED || MYSQL_TESTS_ENABLED || PGSQL_TESTS_ENABLED;
 
-
     package DataSource _unitTestConnectionPool;
     /// will return null if DB tests are disabled
     DataSource getUnitTestDataSource() {
@@ -297,6 +306,7 @@ version(unittest) {
         }
         return _unitTestConnectionPool;
     }
+
     Dialect getUnitTestDialect() {
 
         static if (SQLITE_TESTS_ENABLED) {

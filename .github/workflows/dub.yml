@@ -56,7 +56,7 @@ jobs:
       #   run: brew bundle
 
       - name: build with SQLite config
-        run: dub build --config=SQLite
+        run: dub build --config=sqlite
   
   build-examples:
     name: Test ${{ matrix.compiler }} on ${{ matrix.os }}
@@ -123,6 +123,20 @@ jobs:
           --health-timeout 3s
           --health-retries 3
 
+      mssql:
+        #image: microsoft/mssql-server-linux:2017-latest
+        image: mcr.microsoft.com/mssql/server:2019-latest
+        ports: [1433]
+        env:
+          MSSQL_PID: Developer
+          SA_PASSWORD: MSbbk4k77JKH88g54
+          ACCEPT_EULA: Y
+#        options: >-
+#          --health-cmd "sqlcmd -S localhost -U sa -P MSbbk4k77JKH88g54 -Q 'SELECT 1' || exit 1"
+#          --health-interval 10s
+#          --health-timeout 3s
+#          --health-retries 3
+
     steps:
       - uses: actions/checkout@v2
 
@@ -134,19 +148,28 @@ jobs:
       - name: HD Test (SQLite)
         working-directory: ./hdtest
         run: |
-          dub build --config=SQLite && ./bin/hdtest
+          dub build --config=sqlite && ./bin/hdtest
 
       - name: HD Test (MySQL)
         working-directory: ./hdtest
         env:
           PORT: ${{ job.services.mysql.ports[3306] }}
         run: |
-          dub build --config=MySQL && ./bin/hdtest --host=127.0.0.1 --port=$PORT --database=hdtest --user=testuser --password=passw0rd
+          dub build --config=mysql && ./bin/hdtest --host=127.0.0.1 --port=$PORT --database=hdtest --user=testuser --password=passw0rd
 
       - name: HD Test (Postgres)
         working-directory: ./hdtest
         env:
           PORT: ${{ job.services.postgres.ports[5432] }}
         run: |
-          dub build --config=PGSQL && ./bin/hdtest --host=127.0.0.1 --port=$PORT --database=hdtest --user=testuser --password=passw0rd
+          dub build --config=postgres && ./bin/hdtest --host=127.0.0.1 --port=$PORT --database=hdtest --user=testuser --password=passw0rd
+
+      - name: HD Test (SQL Server)
+        working-directory: ./hdtest
+        env:
+          PORT: ${{ job.services.mssql.ports[1433] }}
+        run: |
+          sudo ACCEPT_EULA=Y apt-get install msodbcsql17 -y
+          dub build --config=mssql
+          ./bin/hdtest --host=127.0.0.1 --port=$PORT --database=dbo --user=SA --password=MSbbk4k77JKH88g54 --driver="ODBC Driver 17 for SQL Server"
 
