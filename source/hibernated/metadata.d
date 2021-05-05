@@ -1387,7 +1387,7 @@ string getPropertyReferencedEntityName(T : Object, string m)() {
 
 string getPropertyEmbeddedClassName(T : Object, string m)() {
     alias ti = typeof(__traits(getMember, T, m));
-    
+
     static if (is(ti == function)) {
         static if (isImplicitlyConvertible!(ReturnType!(ti), Object)) {
             static assert(hasAnnotation!(ReturnType!(ti), Embeddable), "@Embedded property class should have @Embeddable annotation");
@@ -1877,6 +1877,9 @@ static immutable string[] ColumnTypeSetNullCode =
      "ubyte[] nv = null;", //UBYTE_ARRAY_TYPE, // ubyte[]
      ];
 
+/*
+ * Due to to change in dmd [issue #72] "Implicit conversion with alias Nullable.get this will be removed after 2.096", nullable types (except string) have to make call to .get
+*/
 static immutable string[] ColumnTypePropertyToVariant = 
     [
      "Variant(%s)", //BOOL_TYPE     // bool
@@ -1888,26 +1891,26 @@ static immutable string[] ColumnTypePropertyToVariant =
      "Variant(%s)", //USHORT_TYPE,  // ushort
      "Variant(%s)", //UINT_TYPE,    // uint
      "Variant(%s)", //ULONG_TYPE,   // ulong
-     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_BYTE_TYPE,  // Nullable!byte
-     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_SHORT_TYPE, // Nullable!short
-     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_INT_TYPE,   // Nullable!int
-     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_LONG_TYPE,  // Nullable!long
-     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
-     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_USHORT_TYPE,// Nullable!ushort
-     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_UINT_TYPE,  // Nullable!uint
-     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+     "(%s.isNull ? Variant(null) : Variant(%s.get))", //NULLABLE_BYTE_TYPE,  // Nullable!byte
+     "(%s.isNull ? Variant(null) : Variant(%s.get))", //NULLABLE_SHORT_TYPE, // Nullable!short
+     "(%s.isNull ? Variant(null) : Variant(%s.get))", //NULLABLE_INT_TYPE,   // Nullable!int
+     "(%s.isNull ? Variant(null) : Variant(%s.get))", //NULLABLE_LONG_TYPE,  // Nullable!long
+     "(%s.isNull ? Variant(null) : Variant(%s.get))", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
+     "(%s.isNull ? Variant(null) : Variant(%s.get))", //NULLABLE_USHORT_TYPE,// Nullable!ushort
+     "(%s.isNull ? Variant(null) : Variant(%s.get))", //NULLABLE_UINT_TYPE,  // Nullable!uint
+     "(%s.isNull ? Variant(null) : Variant(%s.get))", //NULLABLE_ULONG_TYPE, // Nullable!ulong
      "Variant(%s)",//FLOAT_TYPE,   // float
      "Variant(%s)",//DOUBLE_TYPE,   // double
-     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_FLOAT_TYPE, // Nullable!float
-     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_DOUBLE_TYPE,// Nullable!double
+     "(%s.isNull ? Variant(null) : Variant(%s.get))", //NULLABLE_FLOAT_TYPE, // Nullable!float
+     "(%s.isNull ? Variant(null) : Variant(%s.get))", //NULLABLE_DOUBLE_TYPE,// Nullable!double
      "Variant(%s)", //STRING_TYPE   // string
      "Variant(%s)", //NULLABLE_STRING_TYPE   // String
      "Variant(%s)", //DATETIME_TYPE, // std.datetime.DateTime
      "Variant(%s)", //DATE_TYPE, // std.datetime.Date
      "Variant(%s)", //TIME_TYPE, // std.datetime.TimeOfDay
-     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
-     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
-     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
+     "(%s.isNull ? Variant(null) : Variant(%s.get))", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
+     "(%s.isNull ? Variant(null) : Variant(%s.get))", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
+     "(%s.isNull ? Variant(null) : Variant(%s.get))", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
      "Variant(%s)", //BYTE_ARRAY_TYPE, // byte[]
      "Variant(%s)", //UBYTE_ARRAY_TYPE, // ubyte[]
      ];
@@ -2050,6 +2053,9 @@ string getColumnTypeDatasetReadCode(T, string m)() {
     return ColumnTypeDatasetReaderCode[getPropertyMemberType!(T,m)()];
 }
 
+/*
+ * Due to to change in dmd [issue #72] "Implicit conversion with alias Nullable.get this will be removed after 2.096", nullable types (except string) have to make call to .get
+*/
 static immutable string[] ColumnTypeVariantReadCode = 
     [
      "(value == null ? nv : value.get!(bool))", //BOOL_TYPE,    // bool
@@ -2061,30 +2067,33 @@ static immutable string[] ColumnTypeVariantReadCode =
      "(value == null ? nv : (value.convertsTo!(ushort) ? value.get!(ushort) : (value.convertsTo!(ulong) ? to!ushort(value.get!(ulong)) : to!ushort((value.get!(long))))))", //USHORT_TYPE,  // ushort
      "(value == null ? nv : (value.convertsTo!(uint) ? value.get!(uint) : (value.convertsTo!(ulong) ? to!uint(value.get!(ulong)) : to!uint((value.get!(long))))))", //UINT_TYPE,    // uint
      "(value == null ? nv : (value.convertsTo!(ulong) ? value.get!(ulong) : to!ulong(value.get!(long))))", //ULONG_TYPE,   // ulong
-     "(value == null ? nv : (value.convertsTo!(byte) ? value.get!(byte) : (value.convertsTo!(long) ? to!byte(value.get!(long)) : to!byte((value.get!(ulong))))))", //NULLABLE_BYTE_TYPE,  // Nullable!byte
-     "(value == null ? nv : (value.convertsTo!(short) ? value.get!(short) : (value.convertsTo!(long) ? to!short(value.get!(long)) : to!short((value.get!(ulong))))))", //NULLABLE_SHORT_TYPE, // Nullable!short
-     "(value == null ? nv : (value.convertsTo!(int) ? value.get!(int) : (value.convertsTo!(long) ? to!int(value.get!(long)) : to!int((value.get!(ulong))))))", //NULLABLE_INT_TYPE,   // Nullable!int
-     "(value == null ? nv : (value.convertsTo!(long) ? value.get!(long) : to!long(value.get!(ulong))))", //NULLABLE_LONG_TYPE,  // Nullable!long
-     "(value == null ? nv : (value.convertsTo!(ubyte) ? value.get!(ubyte) : (value.convertsTo!(ulong) ? to!ubyte(value.get!(ulong)) : to!ubyte((value.get!(long))))))", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
-     "(value == null ? nv : (value.convertsTo!(ushort) ? value.get!(ushort) : (value.convertsTo!(ulong) ? to!ushort(value.get!(ulong)) : to!ushort((value.get!(long))))))", //NULLABLE_USHORT_TYPE,// Nullable!ushort
-     "(value == null ? nv : (value.convertsTo!(uint) ? value.get!(uint) : (value.convertsTo!(ulong) ? to!uint(value.get!(ulong)) : to!uint((value.get!(long))))))", //NULLABLE_UINT_TYPE,  // Nullable!uint
-     "(value == null ? nv : (value.convertsTo!(ulong) ? value.get!(ulong) : to!ulong(value.get!(long))))", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+     "(value == null ? nv.get : (value.convertsTo!(byte) ? value.get!(byte) : (value.convertsTo!(long) ? to!byte(value.get!(long)) : to!byte((value.get!(ulong))))))", //NULLABLE_BYTE_TYPE,  // Nullable!byte
+     "(value == null ? nv.get : (value.convertsTo!(short) ? value.get!(short) : (value.convertsTo!(long) ? to!short(value.get!(long)) : to!short((value.get!(ulong))))))", //NULLABLE_SHORT_TYPE, // Nullable!short
+     "(value == null ? nv.get : (value.convertsTo!(int) ? value.get!(int) : (value.convertsTo!(long) ? to!int(value.get!(long)) : to!int((value.get!(ulong))))))", //NULLABLE_INT_TYPE,   // Nullable!int
+     "(value == null ? nv.get : (value.convertsTo!(long) ? value.get!(long) : to!long(value.get!(ulong))))", //NULLABLE_LONG_TYPE,  // Nullable!long
+     "(value == null ? nv.get : (value.convertsTo!(ubyte) ? value.get!(ubyte) : (value.convertsTo!(ulong) ? to!ubyte(value.get!(ulong)) : to!ubyte((value.get!(long))))))", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
+     "(value == null ? nv.get : (value.convertsTo!(ushort) ? value.get!(ushort) : (value.convertsTo!(ulong) ? to!ushort(value.get!(ulong)) : to!ushort((value.get!(long))))))", //NULLABLE_USHORT_TYPE,// Nullable!ushort
+     "(value == null ? nv.get : (value.convertsTo!(uint) ? value.get!(uint) : (value.convertsTo!(ulong) ? to!uint(value.get!(ulong)) : to!uint((value.get!(long))))))", //NULLABLE_UINT_TYPE,  // Nullable!uint
+     "(value == null ? nv.get : (value.convertsTo!(ulong) ? value.get!(ulong) : to!ulong(value.get!(long))))", //NULLABLE_ULONG_TYPE, // Nullable!ulong
      "(value == null ? nv : (value.convertsTo!(float) ? value.get!(float) : to!float(value.get!(double))))",//FLOAT_TYPE,   // float
      "(value == null ? nv : (value.convertsTo!(double) ? value.get!(double) : to!double(value.get!(double))))",//DOUBLE_TYPE,   // double
-     "(value == null ? nv : (value.convertsTo!(float) ? value.get!(float) : to!float(value.get!(double))))", //NULLABLE_FLOAT_TYPE, // Nullable!float
-     "(value == null ? nv : (value.convertsTo!(double) ? value.get!(double) : to!double(value.get!(double))))", //NULLABLE_DOUBLE_TYPE,// Nullable!double
+     "(value == null ? nv.get : (value.convertsTo!(float) ? value.get!(float) : to!float(value.get!(double))))", //NULLABLE_FLOAT_TYPE, // Nullable!float
+     "(value == null ? nv.get : (value.convertsTo!(double) ? value.get!(double) : to!double(value.get!(double))))", //NULLABLE_DOUBLE_TYPE,// Nullable!double
      "(value == null ? nv : value.get!(string))", //STRING_TYPE   // string
      "(value == null ? nv : value.get!(string))", //NULLABLE_STRING_TYPE   // String
      "(value == null ? nv : value.get!(DateTime))", //DATETIME_TYPE, // std.datetime.DateTime
      "(value == null ? nv : value.get!(Date))", //DATE_TYPE, // std.datetime.Date
      "(value == null ? nv : value.get!(TimeOfDay))", //TIME_TYPE, // std.datetime.TimeOfDay
-     "(value == null ? nv : value.get!(DateTime))", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
-     "(value == null ? nv : value.get!(Date))", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
-     "(value == null ? nv : value.get!(TimeOfDay))", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
+     "(value == null ? nv.get : value.get!(DateTime))", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
+     "(value == null ? nv.get : value.get!(Date))", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
+     "(value == null ? nv.get : value.get!(TimeOfDay))", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
      "(value == null ? nv : value.get!(byte[]))", //BYTE_ARRAY_TYPE, // byte[]
      "(value == null ? nv : value.get!(ubyte[]))", //UBYTE_ARRAY_TYPE, // ubyte[]
      ];
 
+/*
+ * Due to to change in dmd [issue #72] "Implicit conversion with alias Nullable.get this will be removed after 2.096", nullable types (except string) have to make call to .get
+*/
 static immutable string[] DatasetWriteCode = 
     [
      "r.setBoolean(index, %s);", //BOOL_TYPE,    // bool
@@ -2096,26 +2105,26 @@ static immutable string[] DatasetWriteCode =
      "r.setUshort(index, %s);", //USHORT_TYPE,  // ushort
      "r.setUint(index, %s);", //UINT_TYPE,    // uint
      "r.setUlong(index, %s);", //ULONG_TYPE,   // ulong
-     "r.setByte(index, %s);", //NULLABLE_BYTE_TYPE,  // Nullable!byte
-     "r.setShort(index, %s);", //NULLABLE_SHORT_TYPE, // Nullable!short
-     "r.setInt(index, %s);", //NULLABLE_INT_TYPE,   // Nullable!int
-     "r.setLong(index, %s);", //NULLABLE_LONG_TYPE,  // Nullable!long
-     "r.setUbyte(index, %s);", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
-     "r.setUshort(index, %s);", //NULLABLE_USHORT_TYPE,// Nullable!ushort
-     "r.setUint(index, %s);", //NULLABLE_UINT_TYPE,  // Nullable!uint
-     "r.setUlong(index, %s);", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+     "r.setByte(index, %s.get);", //NULLABLE_BYTE_TYPE,  // Nullable!byte
+     "r.setShort(index, %s.get);", //NULLABLE_SHORT_TYPE, // Nullable!short
+     "r.setInt(index, %s.get);", //NULLABLE_INT_TYPE,   // Nullable!int
+     "r.setLong(index, %s.get);", //NULLABLE_LONG_TYPE,  // Nullable!long
+     "r.setUbyte(index, %s.get);", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
+     "r.setUshort(index, %s.get);", //NULLABLE_USHORT_TYPE,// Nullable!ushort
+     "r.setUint(index, %s.get);", //NULLABLE_UINT_TYPE,  // Nullable!uint
+     "r.setUlong(index, %s.get);", //NULLABLE_ULONG_TYPE, // Nullable!ulong
      "r.setFloat(index, %s);",//FLOAT_TYPE,   // float
      "r.setDouble(index, %s);",//DOUBLE_TYPE,   // double
-     "r.setFloat(index, %s);", //NULLABLE_FLOAT_TYPE, // Nullable!float
-     "r.setDouble(index, %s);", //NULLABLE_DOUBLE_TYPE,// Nullable!double
+     "r.setFloat(index, %s.get);", //NULLABLE_FLOAT_TYPE, // Nullable!float
+     "r.setDouble(index, %s.get);", //NULLABLE_DOUBLE_TYPE,// Nullable!double
      "r.setString(index, %s);", //STRING_TYPE   // string
-     "r.setString(index, %s);", //NULLABLE_STRING_TYPE   // String
+     "r.setString(index, %s);", //NULLABLE_STRING_TYPE   // String (don't need to call .get on this one as string is already nullable)
      "r.setDateTime(index, %s);", //DATETIME_TYPE, // std.datetime.DateTime
      "r.setDate(index, %s);", //DATE_TYPE, // std.datetime.Date
      "r.setTime(index, %s);", //TIME_TYPE, // std.datetime.TimeOfDay
-     "r.setDateTime(index, %s);", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
-     "r.setDate(index, %s);", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
-     "r.setTime(index, %s);", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
+     "r.setDateTime(index, %s.get);", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
+     "r.setDate(index, %s.get);", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
+     "r.setTime(index, %s.get);", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
      "r.setBytes(index, %s);", //BYTE_ARRAY_TYPE, // byte[]
      "r.setUbytes(index, %s);", //UBYTE_ARRAY_TYPE, // ubyte[]
      ];
