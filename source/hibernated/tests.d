@@ -98,9 +98,9 @@ version(unittest) {
     
     @Embeddable
     class Address {
-        String zip;
-        String city;
-        String streetAddress;
+        hibernated.type.String zip;
+        hibernated.type.String city;
+        hibernated.type.String streetAddress;
         @Transient // mark field with @Transient to avoid creating column for it
         string someNonPersistentField;
 
@@ -168,7 +168,7 @@ version(unittest) {
         //@Generated
         int id;
         string string_field;
-        String nullable_string_field;
+        hibernated.type.String nullable_string_field;
         byte byte_field;
         short short_field;
         int int_field;
