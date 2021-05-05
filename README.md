@@ -1,23 +1,28 @@
 HibernateD
 ==========
 
-[![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/buggins/hibernated?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-
-[![Build Status](https://travis-ci.org/buggins/hibernated.svg?branch=master)](https://travis-ci.org/buggins/hibernated)
+[![DUB Package](https://img.shields.io/dub/v/hibernated.svg)](https://code.dlang.org/packages/hibernated) [![GitHub CI](https://github.com/buggins/hibernated/actions/workflows/dub.yml/badge.svg)](https://github.com/buggins/hibernated/actions/workflows/dub.yml) [![Build Status](https://travis-ci.org/buggins/hibernated.svg?branch=master)](https://travis-ci.org/buggins/hibernated) [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/buggins/hibernated?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 HibernateD is ORM for D language (similar to Hibernate)
 
-Project home page: https://github.com/buggins/hibernated
-Documentation: https://github.com/buggins/hibernated/wiki
+The project is hosted on [github](https://github.com/buggins/hibernated) with documentation available on the [wiki](https://github.com/buggins/hibernated/wiki).
 
-Uses DDBC as DB abstraction layer: https://github.com/buggins/ddbc
+Uses [DDBC](https://github.com/buggins/ddbc) as an abstraction layer for the underlying database. DDBC currently supports SQLite, MySQL, Postgres, SQL Server, and potentially Oracle.
 
-Available as DUB package
+## SQL dialects supported by Hibernated
 
-Use SQLite 3.7.11 or later. In older versions syntax INSERT INTO (col1, col2) VALUES (1, 2), (3, 4) is not supported.
+Currently hiberanted supports:
 
-Sample code:
---------------------
+ - SQLite (requires SQLite v3.7.11 or later)
+ - MySQL (tests are run against mysql v5.7)
+ - Postgres
+
+But since the underlying DDBC library now has ODBC support some work is underway to also add
+
+ - SQL Server (2017 & 2019)
+ - Oracle (due to the size of the docker image for Oracle this may not be tested during CI)
+
+## Sample code:
 
 ```D
 import hibernated.core;
