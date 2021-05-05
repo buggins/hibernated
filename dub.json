@@ -5,7 +5,7 @@
     "homepage": "https://github.com/buggins/hibernated",
     "license": "BSL-1.0",
     "dependencies": {
-        "ddbc": "~>0.5.1"
+        "ddbc": "~>0.5.2"
     },
     "targetType": "staticLibrary",
     "targetPath": "lib",
