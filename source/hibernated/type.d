@@ -24,19 +24,19 @@ import ddbc.core;
 
 // convenient aliases for Nullable types
 
-alias Nullable!byte Byte;
-alias Nullable!ubyte Ubyte;
-alias Nullable!short Short;
-alias Nullable!ushort Ushort;
-alias Nullable!int Int;
-alias Nullable!uint Uint;
-alias Nullable!long Long;
-alias Nullable!ulong Ulong;
-alias Nullable!float Float;
-alias Nullable!double Double;
-alias Nullable!DateTime NullableDateTime;
-alias Nullable!Date NullableDate;
-alias Nullable!TimeOfDay NullableTimeOfDay;
+alias Byte = Nullable!byte;
+alias Ubyte = Nullable!ubyte;
+alias Short = Nullable!short;
+alias Ushort = Nullable!ushort;
+alias Int = Nullable!int;
+alias Uint = Nullable!uint;
+alias Long = Nullable!long;
+alias Ulong = Nullable!ulong;
+alias Float = Nullable!float;
+alias Double = Nullable!double;
+alias NullableDateTime = Nullable!DateTime;
+alias NullableDate = Nullable!Date;
+alias NullableTimeOfDay = Nullable!TimeOfDay;
 
 /// Wrapper around string, to distinguish between Null and NotNull fields: string is NotNull, String is Null -- same interface as in Nullable
 // Looks ugly, but I tried `typedef string String`, but it is deprecated; `alias string String` cannot be distinguished from just string. How to define String better?
@@ -313,7 +313,7 @@ public:
  * 
  */
 struct Lazy(T) {
-    alias Object delegate() delegate_t;
+    alias delegate_t = Object delegate();
     private T _value;
     private delegate_t _delegate;
 
@@ -370,7 +370,7 @@ struct Lazy(T) {
  * Lazy entity collection loader. 
  */
 struct LazyCollection(T) {
-    alias Object[] delegate() delegate_t;
+    alias delegate_t = Object[] delegate();
     private T[] _value;
     private delegate_t _delegate;
     
