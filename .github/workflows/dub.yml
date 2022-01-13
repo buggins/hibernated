@@ -20,6 +20,7 @@ jobs:
         compiler:
           - dmd-latest
           - ldc-latest
+          - dmd-2.097.2
           - dmd-2.096.1
           - dmd-2.095.1
           - dmd-2.094.2

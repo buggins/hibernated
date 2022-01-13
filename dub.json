@@ -12,6 +12,10 @@
     "buildRequirements": [
 		"allowWarnings"
     ],
+    "toolchainRequirements": {
+        "dub": ">=1.14.0",
+        "frontend": ">=2.086"
+    },
     "systemDependencies": "Depending on configuration: ODBC, PostgreSQL and/or SQLite v3",
     "configurations": [
         {
