@@ -1,7 +1,7 @@
 HibernateD
 ==========
 
-[![DUB Package](https://img.shields.io/dub/v/hibernated.svg)](https://code.dlang.org/packages/hibernated) [![GitHub CI](https://github.com/buggins/hibernated/actions/workflows/dub.yml/badge.svg)](https://github.com/buggins/hibernated/actions/workflows/dub.yml) [![Build Status](https://travis-ci.org/buggins/hibernated.svg?branch=master)](https://travis-ci.org/buggins/hibernated) [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/buggins/hibernated?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![DUB Package](https://img.shields.io/dub/v/hibernated.svg)](https://code.dlang.org/packages/hibernated) [![GitHub CI](https://github.com/buggins/hibernated/actions/workflows/dub.yml/badge.svg)](https://github.com/buggins/hibernated/actions/workflows/dub.yml) [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/buggins/hibernated?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 HibernateD is ORM for D language (similar to Hibernate)
 
