@@ -12,33 +12,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest ] # don't bother with macOS-latest
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
         compiler:
           - dmd-latest
           - ldc-latest
-          - dmd-2.098.1
-          - dmd-2.097.2
-          - dmd-2.096.1
-          - dmd-2.095.1
-          - dmd-2.094.2
-          - dmd-2.093.1
-          - dmd-2.092.1
-          - dmd-2.091.1
-          - dmd-2.090.1
-          - dmd-2.088.1
-          - dmd-2.087.1
-          - dmd-2.086.1
-          - ldc-1.25.1 # eq to dmd v2.095.1
-          - ldc-1.24.0 # eq to dmd v2.094.1
-          - ldc-1.23.0 # eq to dmd v2.093.1
-          - ldc-1.22.0 # eq to dmd v2.092.1
-          - ldc-1.21.0 # eq to dmd v2.091.1
-          - ldc-1.18.0 # eq to dmd v2.088.1
-          - ldc-1.17.0 # eq to dmd v2.087
-          - ldc-1.16.0 # eq to dmd v2.086.1
+        include:
+          - { os: 'ubuntu-latest', compiler: 'dmd-2.099.1' }
+          - { os: 'ubuntu-latest', compiler: 'dmd-2.098.1' }
+          - { os: 'ubuntu-latest', compiler: 'dmd-2.097.2' }
+          - { os: 'ubuntu-latest', compiler: 'ldc-1.28.1' }
+          - { os: 'ubuntu-latest', compiler: 'ldc-1.27.1' }
+
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v3
 
       - name: Install D compiler
         uses: dlang-community/setup-dlang@v1
@@ -67,7 +54,7 @@ jobs:
           - dmd-latest
           - ldc-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Install D ${{ matrix.compiler }}
         uses: dlang-community/setup-dlang@v1
@@ -122,7 +109,7 @@ jobs:
           --health-retries 3
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Install latest DMD
         uses: dlang-community/setup-dlang@v1

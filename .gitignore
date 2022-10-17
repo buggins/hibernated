@@ -39,7 +39,8 @@ examples/example1/example1
 .*.lst
 
 # Ignore Intellij IDEA folder:
-.idea
+.idea/
+*.iml
 
 # Ignore Sublime Text workspace (project file is ok):
 *.sublime-workspace
