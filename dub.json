@@ -5,7 +5,7 @@
     "homepage": "https://github.com/buggins/hibernated",
     "license": "BSL-1.0",
     "dependencies": {
-        "ddbc": "~>0.5.4"
+        "ddbc": "~>0.5.5"
     },
     "targetType": "staticLibrary",
     "targetPath": "lib",
@@ -14,7 +14,7 @@
     ],
     "toolchainRequirements": {
         "dub": ">=1.14.0",
-        "frontend": ">=2.086"
+        "frontend": ">=2.097"
     },
     "systemDependencies": "Depending on configuration: ODBC, PostgreSQL and/or SQLite v3",
     "configurations": [
