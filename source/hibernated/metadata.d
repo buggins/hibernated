@@ -18,7 +18,7 @@ import std.ascii;
 import std.conv;
 import std.datetime;
 import std.exception;
-import std.stdio;
+//import std.stdio : writeln;
 import std.string;
 import std.traits;
 import std.typecons;
@@ -42,6 +42,13 @@ static if(__VERSION__ < 2080) {
     alias enforceHelper = enforceEx;
 } else {
     alias enforceHelper = enforce;
+}
+
+// For backwards compatibily (since D 2.101, logger is no longer in std.experimental)
+static if (__traits(compiles, (){ import std.logger; } )) {
+    import std.logger : trace, warning;
+} else {
+    import std.experimental.logger : trace, warning;
 }
 
 abstract class EntityMetaData {
@@ -3596,8 +3603,9 @@ class DBInfo {
         }
         tables = list;
         hasCircularRefs = hasCircularReferences();
-        if (hasCircularRefs)
-            writeln("has circular references");
+        if (hasCircularRefs) {
+            warning("has circular references");
+        }
     }
     private bool hasCircularReferences() {
         for (int i=0; i<tables.length; i++)

@@ -15,7 +15,7 @@
 module hibernated.type;
 
 import std.datetime;
-import std.stdio;
+//import std.stdio : writeln;
 import std.traits;
 import std.typecons;
 

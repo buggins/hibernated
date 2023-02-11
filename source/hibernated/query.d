@@ -20,7 +20,7 @@ import std.exception;
 import std.array;
 import std.string;
 import std.conv;
-import std.stdio;
+//import std.stdio : writeln;
 import std.variant;
 
 import ddbc.core;
@@ -39,6 +39,13 @@ static if(__VERSION__ < 2080) {
     alias enforceHelper = enforceEx;
 } else {
     alias enforceHelper = enforce;
+}
+
+// For backwards compatibily (since D 2.101, logger is no longer in std.experimental)
+static if (__traits(compiles, (){ import std.logger; } )) {
+    import std.logger : trace;
+} else {
+    import std.experimental.logger : trace;
 }
 
 enum JoinType {
@@ -155,17 +162,17 @@ class QueryParser {
 		this.metadata = metadata;
 		this.query = query;
         fromClause = new FromClause();
-		//writeln("tokenizing query: " ~ query);
+		//trace("tokenizing query: " ~ query);
 		tokens = tokenize(query);
-        //writeln("parsing query: " ~ query);
+        //trace("parsing query: " ~ query);
         parse();
-        //writeln("parsing done");
+        //trace("parsing done");
     }
 	
 	void parse() {
 		processParameterNames(0, cast(int)tokens.length); // replace pairs {: Ident} with single Parameter token
 		int len = cast(int)tokens.length;
-		//writeln("Query tokens: " ~ to!string(len));
+		//trace("Query tokens: " ~ to!string(len));
 		int fromPos = findKeyword(KeywordType.FROM);
 		int selectPos = findKeyword(KeywordType.SELECT);
 		int wherePos = findKeyword(KeywordType.WHERE);
@@ -222,7 +229,7 @@ class QueryParser {
     private FromClauseItem ensureItemFetched(FromClauseItem a, const PropertyInfo p) {
         FromClauseItem res;
         string path = a.pathString ~ "." ~ p.propertyName;
-        //writeln("ensureItemFetched " ~ path);
+        //trace("ensureItemFetched " ~ path);
         res = fromClause.findByPath(path);
         if (res is null) {
             // autoadd join
@@ -293,7 +300,7 @@ class QueryParser {
 	}
 	
 	private void splitCommaDelimitedList(int start, int end, void delegate(int, int) callback) {
-		//writeln("SPLIT " ~ to!string(start) ~ " .. " ~ to!string(end));
+		//trace("SPLIT " ~ to!string(start) ~ " .. " ~ to!string(end));
 		int len = cast(int)tokens.length;
 		int p = start;
 		for (int i = start; i < end; i++) {
@@ -429,7 +436,7 @@ class QueryParser {
 	}
 	
 	void addSelectClauseItem(string aliasName, string[] propertyNames) {
-		//writeln("addSelectClauseItem alias=" ~ aliasName ~ " properties=" ~ to!string(propertyNames));
+		//trace("addSelectClauseItem alias=" ~ aliasName ~ " properties=" ~ to!string(propertyNames));
 		FromClauseItem from = aliasName == null ? fromClause.first : findFromClauseByAlias(aliasName);
 		SelectClauseItem item;
 		item.from = from;
@@ -439,7 +446,7 @@ class QueryParser {
 			item.prop = cast(PropertyInfo)ei.findProperty(propertyNames[0]);
 			propertyNames.popFront();
 			while (item.prop.embedded) {
-				//writeln("Embedded property " ~ item.prop.propertyName ~ " of type " ~ item.prop.referencedEntityName);
+				//trace("Embedded property " ~ item.prop.propertyName ~ " of type " ~ item.prop.referencedEntityName);
                 ei = cast(EntityInfo)item.prop.referencedEntity;
 			    enforceHelper!QuerySyntaxException(propertyNames.length > 0, "@Embedded field property name should be specified when selecting " ~ aliasName ~ "." ~ item.prop.propertyName);
                 item.prop = cast(PropertyInfo)ei.findProperty(propertyNames[0]);
@@ -465,7 +472,7 @@ class QueryParser {
 		// for each comma delimited item
 		// in current version it can only be
 		// {property}  or  {alias . property} optionally followed by ASC or DESC
-		//writeln("ORDER BY ITEM: " ~ to!string(start) ~ " .. " ~ to!string(end));
+		//trace("ORDER BY ITEM: " ~ to!string(start) ~ " .. " ~ to!string(end));
 		bool asc = true;
 		if (tokens[end - 1].type == TokenType.Keyword && tokens[end - 1].keyword == KeywordType.ASC) {
 			end--;
@@ -484,7 +491,7 @@ class QueryParser {
 			enforceHelper!QuerySyntaxException(tokens[start + 2].type == TokenType.Ident, "Property name expected after entity alias in ORDER BY clause" ~ errorContext(tokens[start]));
 			addOrderByClauseItem(cast(string)tokens[start].text, cast(string)tokens[start + 2].text, asc);
 		} else {
-			//writeln("range: " ~ to!string(start) ~ " .. " ~ to!string(end));
+			//trace("range: " ~ to!string(start) ~ " .. " ~ to!string(end));
 			enforceHelper!QuerySyntaxException(false, "Invalid ORDER BY clause (expected {property [ASC | DESC]} or {alias.property [ASC | DESC]} )" ~ errorContext(tokens[start]));
 		}
 	}
@@ -493,19 +500,19 @@ class QueryParser {
 		// for each comma delimited item
 		// in current version it can only be
 		// {property}  or  {alias . property}
-		//writeln("SELECT ITEM: " ~ to!string(start) ~ " .. " ~ to!string(end));
+		//trace("SELECT ITEM: " ~ to!string(start) ~ " .. " ~ to!string(end));
 		enforceHelper!QuerySyntaxException(tokens[start].type == TokenType.Ident || tokens[start].type == TokenType.Alias, "Property name or alias expected in SELECT clause in query " ~ query ~ errorContext(tokens[start]));
 		string aliasName;
 		int p = start;
 		if (tokens[p].type == TokenType.Alias) {
-            //writeln("select clause alias: " ~ tokens[p].text ~ " query: " ~ query);
+            //trace("select clause alias: " ~ tokens[p].text ~ " query: " ~ query);
 			aliasName = cast(string)tokens[p].text;
 			p++;
 			enforceHelper!QuerySyntaxException(p == end || tokens[p].type == TokenType.Dot, "SELECT clause item is invalid (only  [alias.]field{[.field2]}+ allowed) " ~ errorContext(tokens[start]));
 			if (p < end - 1 && tokens[p].type == TokenType.Dot)
 				p++;
 		} else {
-            //writeln("select clause non-alias: " ~ tokens[p].text ~ " query: " ~ query);
+            //trace("select clause non-alias: " ~ tokens[p].text ~ " query: " ~ query);
         }
 		string[] fieldNames;
 		while (p < end && tokens[p].type == TokenType.Ident) {
@@ -516,7 +523,7 @@ class QueryParser {
 			// skipping dot
 			p++;
 		}
-		//writeln("parseSelectClauseItem pos=" ~ to!string(p) ~ " end=" ~ to!string(end));
+		//trace("parseSelectClauseItem pos=" ~ to!string(p) ~ " end=" ~ to!string(end));
 		enforceHelper!QuerySyntaxException(p >= end, "SELECT clause item is invalid (only  [alias.]field{[.field2]}+ allowed) " ~ errorContext(tokens[start]));
 		addSelectClauseItem(aliasName, fieldNames);
 	}
@@ -547,19 +554,19 @@ class QueryParser {
 	void parseWhereClause(int start, int end) {
 		enforceHelper!QuerySyntaxException(start < end, "Invalid WHERE clause" ~ errorContext(tokens[start]));
 		whereClause = new Token(tokens[start].pos, TokenType.Expression, tokens, start, end);
-		//writeln("before convert fields:\n" ~ whereClause.dump(0));
+		//trace("before convert fields:\n" ~ whereClause.dump(0));
 		convertFields(whereClause.children);
-		//writeln("after convertFields before convertIsNullIsNotNull:\n" ~ whereClause.dump(0));
+		//trace("after convertFields before convertIsNullIsNotNull:\n" ~ whereClause.dump(0));
 		convertIsNullIsNotNull(whereClause.children);
-		//writeln("after convertIsNullIsNotNull\n" ~ whereClause.dump(0));
+		//trace("after convertIsNullIsNotNull\n" ~ whereClause.dump(0));
 		convertUnaryPlusMinus(whereClause.children);
-		//writeln("after convertUnaryPlusMinus\n" ~ whereClause.dump(0));
+		//trace("after convertUnaryPlusMinus\n" ~ whereClause.dump(0));
 		foldBraces(whereClause.children);
-		//writeln("after foldBraces\n" ~ whereClause.dump(0));
+		//trace("after foldBraces\n" ~ whereClause.dump(0));
 		foldOperators(whereClause.children);
-		//writeln("after foldOperators\n" ~ whereClause.dump(0));
+		//trace("after foldOperators\n" ~ whereClause.dump(0));
 		dropBraces(whereClause.children);
-		//writeln("after dropBraces\n" ~ whereClause.dump(0));
+		//trace("after dropBraces\n" ~ whereClause.dump(0));
 	}
 	
 	void foldBraces(ref Token[] items) {
@@ -578,7 +585,7 @@ class QueryParser {
 			}
 			if (lastOpen == -1 && firstClose == -1)
 				return;
-			//writeln("folding braces " ~ to!string(lastOpen) ~ " .. " ~ to!string(firstClose));
+			//trace("folding braces " ~ to!string(lastOpen) ~ " .. " ~ to!string(firstClose));
 			enforceHelper!QuerySyntaxException(lastOpen >= 0 && lastOpen < firstClose, "Unpaired braces in WHERE clause" ~ errorContext(tokens[lastOpen]));
 			Token folded = new Token(items[lastOpen].pos, TokenType.Braces, items, lastOpen + 1, firstClose);
 			//			size_t oldlen = items.length;
@@ -689,7 +696,7 @@ class QueryParser {
                 }
             }
 			enforceHelper!QuerySyntaxException(idents.length == 0, "Unexpected extra field name " ~ idents[0] ~ errorContext(items[p]));
-			//writeln("full name = " ~ fullName);
+			//trace("full name = " ~ fullName);
 			Token t = new Token(items[p].pos, TokenType.Field, fullName);
             t.entity = cast(EntityInfo)ei;
             t.field = cast(PropertyInfo)pi;
@@ -763,7 +770,7 @@ class QueryParser {
 			}
 			if (bestOpPrecedency == -1)
 				return;
-			//writeln("Found op " ~ items[bestOpPosition].toString() ~ " at position " ~ to!string(bestOpPosition) ~ " with priority " ~ to!string(bestOpPrecedency));
+			//trace("Found op " ~ items[bestOpPosition].toString() ~ " at position " ~ to!string(bestOpPosition) ~ " with priority " ~ to!string(bestOpPrecedency));
 			if (t == OperatorType.NOT || t == OperatorType.UNARY_PLUS || t == OperatorType.UNARY_MINUS) {
 				// fold unary
 				enforceHelper!QuerySyntaxException(bestOpPosition < items.length && items[bestOpPosition + 1].isExpression(), "Syntax error in WHERE condition " ~ errorContext(items[bestOpPosition]));
@@ -794,12 +801,12 @@ class QueryParser {
                 foldCommaSeparatedList(items[bestOpPosition + 1]);
                 replaceInPlace(items, bestOpPosition - 1, bestOpPosition + 2, [folded]);
                 // fold value list
-                //writeln("IN operator found: " ~ folded.dump(3));
+                //trace("IN operator found: " ~ folded.dump(3));
             } else {
 				// fold binary
 				enforceHelper!QuerySyntaxException(bestOpPosition > 0, "Syntax error in WHERE condition - no left arg for binary operator " ~ errorContext(items[bestOpPosition]));
 				enforceHelper!QuerySyntaxException(bestOpPosition < items.length - 1, "Syntax error in WHERE condition - no right arg for binary operator " ~ errorContext(items[bestOpPosition]));
-				//writeln("binary op " ~ items[bestOpPosition - 1].toString() ~ " " ~ items[bestOpPosition].toString() ~ " " ~ items[bestOpPosition + 1].toString());
+				//trace("binary op " ~ items[bestOpPosition - 1].toString() ~ " " ~ items[bestOpPosition].toString() ~ " " ~ items[bestOpPosition + 1].toString());
 				enforceHelper!QuerySyntaxException(items[bestOpPosition - 1].isExpression(), "Syntax error in WHERE condition - wrong type of left arg for binary operator " ~ errorContext(items[bestOpPosition]));
 				enforceHelper!QuerySyntaxException(items[bestOpPosition + 1].isExpression(), "Syntax error in WHERE condition - wrong type of right arg for binary operator " ~ errorContext(items[bestOpPosition]));
 				Token folded = new Token(items[bestOpPosition - 1].pos, t, items[bestOpPosition].text, items[bestOpPosition - 1], items[bestOpPosition + 1]);
@@ -859,7 +866,7 @@ class QueryParser {
         }
 		if (selectClause[0].prop is null) {
 			// object alias is specified: add all properties of object
-            //writeln("selected entity count: " ~ to!string(selectClause.length));
+            //trace("selected entity count: " ~ to!string(selectClause.length));
             res.setEntity(selectClause[0].from.entity);
             for(int i = 0; i < fromClause.length; i++) {
                 FromClauseItem from = fromClause[i];
@@ -930,11 +937,11 @@ class QueryParser {
                 res.appendSQL(join.joinType == JoinType.LeftJoin ? "LEFT JOIN " : "INNER JOIN ");
                 res.appendSQL(dialect.quoteIfNeeded(join.entity.tableName) ~ " AS " ~ join.sqlAlias);
                 res.appendSQL(" ON ");
-                //writeln("adding ON");
+                //trace("adding ON");
                 if (join.baseProperty.oneToOne) {
                     assert(join.baseProperty.columnName !is null || join.baseProperty.referencedProperty !is null);
                     if (join.baseProperty.columnName !is null) {
-                        //writeln("fk is in base");
+                        //trace("fk is in base");
                         res.appendSQL(base.sqlAlias);
                         res.appendSQL(".");
                         res.appendSQL(dialect.quoteIfNeeded(join.baseProperty.columnName));
@@ -943,7 +950,7 @@ class QueryParser {
                         res.appendSQL(".");
                         res.appendSQL(dialect.quoteIfNeeded(join.entity.getKeyProperty().columnName));
                     } else {
-                        //writeln("fk is in join");
+                        //trace("fk is in join");
                         res.appendSQL(base.sqlAlias);
                         res.appendSQL(".");
                         res.appendSQL(dialect.quoteIfNeeded(base.entity.getKeyProperty().columnName));
@@ -954,7 +961,7 @@ class QueryParser {
                     }
                 } else if (join.baseProperty.manyToOne) {
                     assert(join.baseProperty.columnName !is null, "ManyToOne should have JoinColumn as well");
-                    //writeln("fk is in base");
+                    //trace("fk is in base");
                     res.appendSQL(base.sqlAlias);
                     res.appendSQL(".");
                     res.appendSQL(dialect.quoteIfNeeded(join.baseProperty.columnName));
@@ -1682,14 +1689,14 @@ unittest {
 
 unittest {
 
-	//writeln("query unittest");
+	//trace("query unittest");
     import hibernated.tests;
 
     EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, Address, Person, MoreInfo, EvenMoreInfo, Role);
 	QueryParser parser = new QueryParser(schema, "SELECT a FROM User AS a WHERE id = :Id AND name != :skipName OR name IS NULL  AND a.flags IS NOT NULL ORDER BY name, a.flags DESC");
 	assert(parser.parameterNames.length == 2);
-	//writeln("param1=" ~ parser.parameterNames[0]);
-	//writeln("param2=" ~ parser.parameterNames[1]);
+	//trace("param1=" ~ parser.parameterNames[0]);
+	//trace("param2=" ~ parser.parameterNames[1]);
 	assert(parser.parameterNames[0] == "Id");
 	assert(parser.parameterNames[1] == "skipName");
 	assert(parser.fromClause.length == 1);
@@ -1708,7 +1715,7 @@ unittest {
 	
 	parser = new QueryParser(schema, "SELECT a FROM User AS a WHERE ((id = :Id) OR (name LIKE 'a%' AND flags = (-5 + 7))) AND name != :skipName AND flags BETWEEN 2*2 AND 42/5 ORDER BY name, a.flags DESC");
 	assert(parser.whereClause !is null);
-	//writeln(parser.whereClause.dump(0));
+	//trace(parser.whereClause.dump(0));
 	Dialect dialect = new MySQLDialect();
 	
 	assert(dialect.quoteSqlString("abc") == "'abc'");
@@ -1717,11 +1724,11 @@ unittest {
 	
 	parser = new QueryParser(schema, "FROM User AS u WHERE id = :Id and u.name like '%test%'");
 	ParsedQuery q = parser.makeSQL(dialect);
-	//writeln(parser.whereClause.dump(0));
-	//writeln(q.hql ~ "\n=>\n" ~ q.sql);
+	//trace(parser.whereClause.dump(0));
+	//trace(q.hql ~ "\n=>\n" ~ q.sql);
 
-	//writeln(q.hql);
-	//writeln(q.sql);
+	//trace(q.hql);
+	//trace(q.sql);
     parser = new QueryParser(schema, "SELECT a FROM Person AS a LEFT JOIN a.moreInfo as b LEFT JOIN b.evenMore c WHERE a.id = :Id AND b.flags > 0 AND c.flags > 0");
     assert(parser.fromClause.hasAlias("a"));
     assert(parser.fromClause.hasAlias("b"));
@@ -1745,9 +1752,9 @@ unittest {
     assert(parser.fromClause.length == 3);
     assert(parser.fromClause[0].entity.tableName == "person");
     assert(parser.fromClause[0].fetch == true);
-    //writeln("select fields [" ~ to!string(parser.fromClause[0].startColumn) ~ ", " ~ to!string(parser.fromClause[0].selectedColumns) ~ "]");
-    //writeln("select fields [" ~ to!string(parser.fromClause[1].startColumn) ~ ", " ~ to!string(parser.fromClause[1].selectedColumns) ~ "]");
-    //writeln("select fields [" ~ to!string(parser.fromClause[2].startColumn) ~ ", " ~ to!string(parser.fromClause[2].selectedColumns) ~ "]");
+    //trace("select fields [" ~ to!string(parser.fromClause[0].startColumn) ~ ", " ~ to!string(parser.fromClause[0].selectedColumns) ~ "]");
+    //trace("select fields [" ~ to!string(parser.fromClause[1].startColumn) ~ ", " ~ to!string(parser.fromClause[1].selectedColumns) ~ "]");
+    //trace("select fields [" ~ to!string(parser.fromClause[2].startColumn) ~ ", " ~ to!string(parser.fromClause[2].selectedColumns) ~ "]");
     assert(parser.fromClause[0].selectedColumns == 4);
     assert(parser.fromClause[1].entity.tableName == "person_info");
     assert(parser.fromClause[1].joinType == JoinType.InnerJoin);
@@ -1761,55 +1768,55 @@ unittest {
     assert(parser.fromClause[2].selectedColumns == 3);
 
     q = parser.makeSQL(dialect);
-    //writeln(q.hql);
-    //writeln(q.sql);
+    //trace(q.hql);
+    //trace(q.sql);
 
     parser = new QueryParser(schema, "FROM User WHERE id in (1, 2, (3 - 1 * 25) / 2, 4 + :Id, 5)");
-    //writeln(parser.whereClause.dump(0));
+    //trace(parser.whereClause.dump(0));
     q = parser.makeSQL(dialect);
-    //writeln(q.hql);
-    //writeln(q.sql);
+    //trace(q.hql);
+    //trace(q.sql);
 
     parser = new QueryParser(schema, "FROM Customer WHERE users.id = 1");
     q = parser.makeSQL(dialect);
-//    writeln(q.hql);
-//    writeln(q.sql);
+//    trace(q.hql);
+//    trace(q.sql);
     assert(q.sql == "SELECT _t1.id, _t1.name, _t1.zip, _t1.city, _t1.street_address, _t1.account_type_fk FROM customers AS _t1 LEFT JOIN users AS _t2 ON _t1.id=_t2.customer_fk WHERE _t2.id = 1");
 
     parser = new QueryParser(schema, "FROM Customer WHERE id = 1");
     q = parser.makeSQL(dialect);
-//    writeln(q.hql);
-//    writeln(q.sql);
+//    trace(q.hql);
+//    trace(q.sql);
     assert(q.sql == "SELECT _t1.id, _t1.name, _t1.zip, _t1.city, _t1.street_address, _t1.account_type_fk FROM customers AS _t1 WHERE _t1.id = 1");
 
     parser = new QueryParser(schema, "FROM User WHERE roles.id = 1");
     q = parser.makeSQL(dialect);
-    //writeln(q.hql);
-    //writeln(q.sql);
+    //trace(q.hql);
+    //trace(q.sql);
     assert(q.sql == "SELECT _t1.id, _t1.name, _t1.flags, _t1.comment, _t1.customer_fk FROM users AS _t1 LEFT JOIN role_users AS _t1_t2 ON _t1.id=_t1_t2.user_fk LEFT JOIN role AS _t2 ON _t1_t2.role_fk=_t2.id WHERE _t2.id = 1");
 
     parser = new QueryParser(schema, "FROM Role WHERE users.id = 1");
     q = parser.makeSQL(dialect);
-//    writeln(q.hql);
-//    writeln(q.sql);
+//    trace(q.hql);
+//    trace(q.sql);
     assert(q.sql == "SELECT _t1.id, _t1.name FROM role AS _t1 LEFT JOIN role_users AS _t1_t2 ON _t1.id=_t1_t2.role_fk LEFT JOIN users AS _t2 ON _t1_t2.user_fk=_t2.id WHERE _t2.id = 1");
     
     parser = new QueryParser(schema, "FROM User WHERE customer.id = 1");
     q = parser.makeSQL(dialect);
-//    writeln(q.hql);
-//    writeln(q.sql);
+//    trace(q.hql);
+//    trace(q.sql);
     assert(q.sql == "SELECT _t1.id, _t1.name, _t1.flags, _t1.comment, _t1.customer_fk FROM users AS _t1 LEFT JOIN customers AS _t2 ON _t1.customer_fk=_t2.id WHERE _t2.id = 1");
 
     parser = new QueryParser(schema, "SELECT a2 FROM User AS a1 JOIN a1.roles AS a2 WHERE a1.id = 1");
     q = parser.makeSQL(dialect);
-    //writeln(q.hql);
-    //writeln(q.sql);
+    //trace(q.hql);
+    //trace(q.sql);
     assert(q.sql == "SELECT _t2.id, _t2.name FROM users AS _t1 INNER JOIN role_users AS _t1_t2 ON _t1.id=_t1_t2.user_fk INNER JOIN role AS _t2 ON _t1_t2.role_fk=_t2.id WHERE _t1.id = 1");
 
     parser = new QueryParser(schema, "SELECT a2 FROM Customer AS a1 JOIN a1.users AS a2 WHERE a1.id = 1");
     q = parser.makeSQL(dialect);
-    //writeln(q.hql);
-    //writeln(q.sql);
+    //trace(q.hql);
+    //trace(q.sql);
     assert(q.sql == "SELECT _t2.id, _t2.name, _t2.flags, _t2.comment, _t2.customer_fk FROM customers AS _t1 INNER JOIN users AS _t2 ON _t1.id=_t2.customer_fk WHERE _t1.id = 1");
     
 }
