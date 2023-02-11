@@ -16,8 +16,11 @@ jobs:
         compiler:
           - dmd-latest
           - ldc-latest
+          - dmd-2.101.2
+          - dmd-2.100.2
+          - dmd-2.099.1
+          - ldc-1.29.0 # eq to dmd v2.099.1
         include:
-          - { os: 'ubuntu-latest', compiler: 'dmd-2.099.1' }
           - { os: 'ubuntu-latest', compiler: 'dmd-2.098.1' }
           - { os: 'ubuntu-latest', compiler: 'dmd-2.097.2' }
           - { os: 'ubuntu-latest', compiler: 'ldc-1.28.1' }
