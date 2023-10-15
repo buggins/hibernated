@@ -6,21 +6,30 @@
     // Annotations of entity classes
 
     class User {
-        long id;
+        @Id @Generated
+        long userId;
         string name;
+
+        // This annotation may be left out, as it can be inferred.
+        @ManyToOne @JoinColumn("customer_id")
         Customer customer;
+
         @ManyToMany // cannot be inferred, requires annotation
         LazyCollection!Role roles;
     }
 
     class Customer {
-        int id;
+        @Id @Generated
+        int customerId;
         string name;
         // Embedded is inferred from type of Address
         Address address;
 
         Lazy!AccountType accountType; // ManyToOne inferred
 
+        // This annotation may be left out, as it can be inferred if `User` contains a member of
+        // type `Customer`.
+        @OneToMany("customer")
         User[] users; // OneToMany inferred
 
         this() {
@@ -50,7 +59,7 @@
     int main() {
 
         // create metadata from annotations
-        EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, 
+        EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType,
                                          Address, Role);
 
 
@@ -134,6 +143,10 @@
         assert(u11.customer.users[0] == u10);
         assert(u11.roles[0].users.length == 1);
         assert(u11.roles[0].users[0] == u10);
+
+        Customer cq1 = sess.createQuery("FROM Customer WHERE name=:Name")
+            .setParameter("Name", "Customer 10").uniqueResult!Customer();
+        assert(cq1.address.zip == "12345");
 
         // remove reference
         u11.roles = u11.roles().remove(0);
