@@ -1,8 +1,8 @@
 name: CI
 
 on:
-  schedule:
-    - cron: '40 7 1 * *'
+  #schedule:
+  #  - cron: '40 7 1 * *'
   push:
   pull_request:
 
@@ -12,24 +12,36 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, windows-latest, macos-latest ]
+        os: [ ubuntu-latest, windows-latest]
         compiler:
           - dmd-latest
           - ldc-latest
-          - dmd-2.102.2
-          - dmd-2.101.2
-          - dmd-2.100.2
-          - dmd-2.099.1
+          - dmd-2.103.1 # (released in 2023)
+          - dmd-2.102.2 # (released in 2023)
+          - dmd-2.101.2 # (released in 2023)
+          - dmd-2.100.2 # (released in 2022) ## GDC 12 can support 2.100
+          - dmd-2.099.1 # (released in 2022)
+          - dmd-2.098.1 # (released in 2021) ## Has issue re: phobos/std/variant.d (exclude on Windows)
+          - dmd-2.097.2 # (released in 2021) (exclude on Windows)
+          - ldc-1.33.0 # eq to dmd v2.103.1
+          - ldc-1.32.2 # eq to dmd v2.102.2
           - ldc-1.29.0 # eq to dmd v2.099.1
+          - ldc-1.28.1 # eq to dmd v2.098.1 (exclude on Windows)
+          - ldc-1.27.1 # eq to dmd v2.097.2 (exclude on Windows)
         include:
-          - { os: 'ubuntu-latest', compiler: 'dmd-2.098.1' }
-          - { os: 'ubuntu-latest', compiler: 'dmd-2.097.2' }
+          - { os: macos-latest, compiler: dmd-latest }
+          - { os: macos-latest, compiler: ldc-latest }
           - { os: 'ubuntu-latest', compiler: 'ldc-1.28.1' }
           - { os: 'ubuntu-latest', compiler: 'ldc-1.27.1' }
+        exclude:
+          - { os: windows-latest, compiler: dmd-2.098.1 }
+          - { os: windows-latest, compiler: dmd-2.097.2 }
+          - { os: windows-latest, compiler: ldc-1.28.1 }
+          - { os: windows-latest, compiler: ldc-1.27.1 }
 
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Install D compiler
         uses: dlang-community/setup-dlang@v1
@@ -58,7 +70,7 @@ jobs:
           - dmd-latest
           - ldc-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Install D ${{ matrix.compiler }}
         uses: dlang-community/setup-dlang@v1
