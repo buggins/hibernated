@@ -20,11 +20,8 @@ import std.conv;
 import std.exception;
 import std.variant;
 
-import ddbc.core;
-import ddbc.common;
-
 import hibernated.type;
-import hibernated.dialect;
+import hibernated.dialect : Dialect;
 import hibernated.core;
 import hibernated.metadata;
 import hibernated.query;

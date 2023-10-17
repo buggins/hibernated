@@ -19,7 +19,7 @@ import std.datetime;
 import std.traits;
 import std.typecons;
 
-import ddbc.core;
+import ddbc.core : SqlType;
 
 
 // convenient aliases for Nullable types

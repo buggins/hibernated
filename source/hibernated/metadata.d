@@ -26,14 +26,11 @@ import std.typetuple;
 import std.variant;
 import std.uuid;
 
-import ddbc.core;
-import ddbc.common;
-
 import hibernated.annotations;
 import hibernated.core;
 import hibernated.type;
 import hibernated.session;
-import hibernated.dialect;
+import hibernated.dialect : Dialect;
 import hibernated.dialects.mysqldialect;
 
 // For backwards compatibily

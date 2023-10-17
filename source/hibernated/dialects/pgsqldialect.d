@@ -13,10 +13,10 @@ module hibernated.dialects.pgsqldialect;
 
 import std.conv;
 
-import hibernated.dialect;
+import hibernated.dialect : Dialect;
 import hibernated.metadata;
 import hibernated.type;
-import ddbc.core;
+import ddbc.core : SqlType;
 
 
 string[] PGSQL_RESERVED_WORDS = 

@@ -23,13 +23,13 @@ import std.conv;
 //import std.stdio : writeln;
 import std.variant;
 
-import ddbc.core;
+// import ddbc.core;
 
 import hibernated.annotations;
 import hibernated.metadata;
 import hibernated.type;
 import hibernated.core;
-import hibernated.dialect;
+import hibernated.dialect : Dialect;
 import hibernated.dialects.mysqldialect;
 
 

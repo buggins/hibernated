@@ -33,7 +33,7 @@ public import hibernated.session;
 public import hibernated.metadata;
 public import hibernated.core;
 public import hibernated.type;
-public import hibernated.dialect;
+public import hibernated.dialect : Dialect;
 
 version( USE_SQLITE )
 {

@@ -13,10 +13,10 @@ module hibernated.dialects.sqlitedialect;
 
 import std.conv;
 
-import hibernated.dialect;
+import hibernated.dialect : Dialect;
 import hibernated.metadata;
 import hibernated.type;
-import ddbc.core;
+import ddbc.core : SqlType;
 
 
 string[] SQLITE_RESERVED_WORDS = 
