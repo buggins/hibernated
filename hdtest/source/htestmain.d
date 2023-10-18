@@ -41,14 +41,14 @@ class Role {
 }
 
 class Address {
-    @Generated @Id int id;
+    @Generated @Id int addressId;
     User user;
     string street;
     string town;
     string country;
 
     override string toString() {
-        return format("{id:%s, user:%s, street:%s, town:%s, country:%s}", id, user, street, town, country);
+        return format("{id:%s, user:%s, street:%s, town:%s, country:%s}", addressId, user, street, town, country);
     }
 }
 

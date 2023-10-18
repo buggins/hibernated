@@ -250,7 +250,7 @@ public:
     }
 
     bool opEquals(ref const PropertyInfo s) const {
-        return this == s;
+        return this is s;
     }
 
     int opCmp(ref const PropertyInfo s) const {
