@@ -1034,7 +1034,8 @@ class QueryImpl : Query
                     assert(false, "Delayed loader for non-join column is not yet implemented for OneToOne and ManyToOne");
                 }
             } else if (pi.oneToMany || pi.manyToMany) {
-                string hql = "FROM " ~ pi.referencedEntity.name ~ " WHERE " ~ pi.referencedPropertyName ~ "." ~ pi.referencedEntity.keyProperty.propertyName ~ " IN (" ~ keys ~ ")";
+                // The referenced property has a column referring back to this entity.
+                string hql = "FROM " ~ pi.referencedEntity.name ~ " WHERE " ~ pi.referencedPropertyName ~ "." ~ pi.entity.keyProperty.propertyName ~ " IN (" ~ keys ~ ")";
                 trace("delayedLoadRelations: loading " ~ pi.propertyName ~ " HQL: " ~ hql);
                 QueryImpl q = cast(QueryImpl)sess.createQuery(hql);
                 assert(q !is null);
