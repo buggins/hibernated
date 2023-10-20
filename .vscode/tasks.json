@@ -1,0 +1,71 @@
+{
+  // See https://go.microsoft.com/fwlink/?LinkId=733558
+  // for the documentation about the tasks.json format
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Dub Build (Full)",
+      "type": "shell",
+      "command": "dub",
+      "args": ["build", "--config=full"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "clear": true,
+        "panel": "shared",
+        "group": "db"
+      }
+    },
+    {
+      "label": "Dub Build (SQLite)",
+      "type": "shell",
+      "command": "dub",
+      "args": ["build", "--config=SQLite"],
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      },
+      "presentation": {
+        "reveal": "always",
+        "clear": true,
+        "panel": "shared",
+        "group": "db"
+      }
+    },
+    {
+      "label": "Dub Build (MySQL)",
+      "type": "shell",
+      "command": "dub",
+      "args": ["build", "--config=MySQL"],
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      },
+      "presentation": {
+        "reveal": "always",
+        "clear": true,
+        "panel": "shared",
+        "group": "db"
+      }
+    },
+    {
+      "label": "Dub Build (PGSQL)",
+      "type": "shell",
+      "command": "dub",
+      "args": ["build", "--config=PGSQL"],
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      },
+      "presentation": {
+        "reveal": "always",
+        "clear": true,
+        "panel": "shared",
+        "group": "db"
+      }
+    }
+  ]
+}
