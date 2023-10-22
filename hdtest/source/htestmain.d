@@ -25,7 +25,7 @@ class User {
     Asset[] assets;
 
     override string toString() {
-        return format("{id:%s, name:%s, roles:%s, group:%s}", id, name, roles, group);
+        return format("{id: %s, name: %s, roles: %s, group: %s}", id, name, roles, group);
     }
 }
 
@@ -36,7 +36,7 @@ class Role {
     LazyCollection!User users;
 
     override string toString() {
-        return format("{id:%s, name:%s}", id, name);
+        return format("{id: %s, name: %s}", id, name);
     }
 }
 
@@ -48,7 +48,7 @@ class Address {
     string country;
 
     override string toString() {
-        return format("{id:%s, user:%s, street:%s, town:%s, country:%s}", addressId, user, street, town, country);
+        return format("{id: %s, user: %s, street: %s, town: %s, country: %s}", addressId, user, street, town, country);
     }
 }
 
@@ -56,6 +56,10 @@ class Asset {
     @Generated @Id int id;
     User user;
     string name;
+
+    override string toString() {
+        return format("{id: %s, name: %s}", id, name);
+    }
 }
 
 @Entity
@@ -66,7 +70,7 @@ class MyGroup {
     LazyCollection!User users;
 
     override string toString() {
-        return format("{id:%s, name:%s}", id, name);
+        return format("{id: %s, name: %s}", id, name);
     }
 }
 
@@ -132,6 +136,7 @@ void testHibernate(immutable string host, immutable ushort port, immutable strin
     Query q = sess.createQuery("FROM User ORDER BY name");
     User[] list = q.list!User();
     writeln("Result size is " ~ to!string(list.length));
+    assert(list.length == 0);
 
     // create sample data
     writeln("Creating sample schema");
@@ -141,7 +146,7 @@ void testHibernate(immutable string host, immutable ushort port, immutable strin
     grp2.name = "Group-2";
     MyGroup grp3 = new MyGroup();
     grp3.name = "Group-3";
-    //
+
     Role r10 = new Role();
     r10.name = "role10";
     Role r11 = new Role();
@@ -152,6 +157,7 @@ void testHibernate(immutable string host, immutable ushort port, immutable strin
     u10.name = "Alex";
     u10.roles = [r10, r11];
     u10.group = grp3;
+
     auto address = new Address();
     address.street = "Some Street";
     address.town = "Big Town";
@@ -161,6 +167,7 @@ void testHibernate(immutable string host, immutable ushort port, immutable strin
     sess.save(address);
 
     u10.addresses = [address];
+
     auto asset = new Asset();
     asset.name = "Something Precious";
     asset.user = u10;
@@ -189,22 +196,33 @@ void testHibernate(immutable string host, immutable ushort port, immutable strin
     writeln("Saving Role r11: " ~ r11.name);
     sess.save(r11);
 
-    writeln("Saving User u10: " ~ u10.name);
-    sess.save(u10);
+    {
+        writeln("Saving User u10: " ~ u10.name ~ "...");
+        long id = sess.save(u10).get!long;
+        assert(id > 0L);
+        writeln("\tuser saved with id: " ~ to!string(id));
+    }
 
-    writeln("Saving User u12: " ~ u12.name);
-    sess.save(u12);
+    {
+        writeln("Saving User u12: " ~ u12.name ~ "...");
+        long id = sess.save(u12).get!long;
+        assert(id > 0L);
+        writeln("\tuser saved with id: " ~ to!string(id));
+    }
 
-    writeln("Saving User u13: " ~ u13.name);
-    sess.save(u13);
+    {
+        writeln("Saving User u13: " ~ u13.name ~ "...");
+        long id = sess.save(u13).get!long;
+        assert(id > 0L);
+        writeln("\tuser saved with id: " ~ to!string(id));
+    }
 
-    writeln("Loading User");
+    writeln("Querying User by name 'Alex'...");
     // load and check data
     auto qresult = sess.createQuery("FROM User WHERE name=:Name and some_field_with_underscore != 42").setParameter("Name", "Alex");
-    writefln( "query result: %s", qresult.listRows() );
+    writefln( "\tquery result: %s", qresult.listRows() );
     User u11 = qresult.uniqueResult!User();
-    //User u11 = sess.createQuery("FROM User WHERE name=:Name and some_field_with_underscore != 42").setParameter("Name", "Alex").uniqueResult!User();
-    writefln("Checking User 11 : %s", u11);
+    writefln("\tChecking fields for User 11 : %s", u11);
     assert(u11.roles.length == 2);
     assert(u11.roles[0].name == "role10" || u11.roles.get()[0].name == "role11");
     assert(u11.roles[1].name == "role10" || u11.roles.get()[1].name == "role11");
@@ -239,17 +257,36 @@ void testHibernate(immutable string host, immutable ushort port, immutable strin
     User[] usersByGroup = qUsersByGroup.list!User();
     assert(usersByGroup.length == 2); // user 2 and user 2
 
-    //writeln("Removing User");
+    {
+        writeln("Updating User u10 name (from Alex to Alexander)...");
+        u10.name = "Alexander";
+        sess.update(u10);
+
+        User u = sess.createQuery("FROM User WHERE id=:uid")
+            .setParameter("uid", u10.id)
+            .uniqueResult!User();
+        assert(u.id == u10.id);
+        assert(u.name == "Alexander");
+    }
+
     // remove reference
     //std.algorithm.remove(u11.roles.get(), 0);
     //sess.update(u11);
 
-    // remove entity
-    //sess.remove(u11);
+    {
+        auto allUsers = sess.createQuery("FROM User").list!User();
+        assert(allUsers.length == 3); // Should be 3 user nows
+    }
+    writeln("Removing User u11");
+    sess.remove(u11);
+
+    {
+        auto allUsers = sess.createQuery("FROM User").list!User();
+        assert(allUsers.length == 2); // Should only be 2 users now
+    }
 }
 
-struct ConnectionParams
-{
+struct ConnectionParams {
     string host;
 	ushort port;
     string database;
@@ -257,21 +294,18 @@ struct ConnectionParams
 	string pass;
 }
 
-int main(string[] args)
-{
+int main(string[] args) {
     ConnectionParams par;
     string URI;
 
-    try
-	{
+    try {
 		getopt(args, "host",&par.host, "port",&par.port, "database",&par.database, "user",&par.user, "password",&par.pass);
-	}
-	catch (GetOptException)
-	{
+	} catch (GetOptException) {
 		stderr.writefln("Could not parse args");
 		return 1;
 	}
     testHibernate(par.host, par.port, par.database, par.user, par.pass);
 
+    writeln("All scenarios worked successfully");
     return 0;
 }
