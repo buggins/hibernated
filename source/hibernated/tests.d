@@ -14,18 +14,20 @@
  */
 module hibernated.tests;
 
-import std.algorithm;
-import std.conv;
-import std.stdio;
-import std.datetime;
-import std.typecons;
-import std.exception;
-import std.variant;
+private import std.algorithm;
+private import std.conv;
+private import std.stdio;
+private import std.datetime;
+private import std.typecons;
+private import std.exception;
+private import std.variant;
 
-import hibernated.core;
+private import ddbc.core : Connection, DataSource, Statement;
+
+private import hibernated.core;
 
 version(unittest) {
-    
+
     //@Entity
     @Table("users") // to override table name - "users" instead of default "user"
     class User {

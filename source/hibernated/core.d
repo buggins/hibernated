@@ -26,8 +26,6 @@ module hibernated.core;
 //public import std.typetuple;
 //public import std.variant;
 
-public import ddbc;
-
 public import hibernated.annotations;
 public import hibernated.session;
 public import hibernated.metadata;

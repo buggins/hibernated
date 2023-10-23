@@ -14,16 +14,16 @@
  */
 module hibernated.query;
 
-import std.ascii;
-import std.algorithm;
-import std.exception;
-import std.array;
-import std.string;
-import std.conv;
-//import std.stdio : writeln;
-import std.variant;
+private import std.ascii;
+private import std.algorithm;
+private import std.exception;
+private import std.array;
+private import std.string;
+private import std.conv;
+//private import std.stdio : writeln;
+private import std.variant;
 
-// import ddbc.core;
+private import ddbc.core : DataSetWriter;
 
 import hibernated.annotations;
 import hibernated.metadata;

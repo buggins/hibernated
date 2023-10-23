@@ -14,17 +14,19 @@
  */
 module hibernated.metadata;
 
-import std.ascii;
-import std.conv;
-import std.datetime;
-import std.exception;
-//import std.stdio : writeln;
-import std.string;
-import std.traits;
-import std.typecons;
-import std.typetuple;
-import std.variant;
-import std.uuid;
+private import std.ascii;
+private import std.conv;
+private import std.datetime;
+private import std.exception;
+//private import std.stdio : writeln;
+private import std.string;
+private import std.traits;
+private import std.typecons;
+private import std.typetuple;
+private import std.variant;
+private import std.uuid;
+
+private import ddbc.core : Connection, DataSetReader, DataSetWriter, ResultSet, SqlType, Statement;
 
 import hibernated.annotations;
 import hibernated.core;

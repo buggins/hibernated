@@ -14,11 +14,13 @@
  */
 module hibernated.session;
 
-import std.algorithm;
-import std.conv;
-//import std.stdio : writeln;
-import std.exception;
-import std.variant;
+private import std.algorithm;
+private import std.conv;
+//private import std.stdio : writeln;
+private import std.exception;
+private import std.variant;
+
+private import ddbc.core : Connection, DataSource, DataSetReader, DataSetWriter, PreparedStatement, ResultSet, Statement;
 
 import hibernated.type;
 import hibernated.dialect : Dialect;
