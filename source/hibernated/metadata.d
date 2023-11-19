@@ -2747,6 +2747,22 @@ string getManyToManyPropertyDef(T, immutable string m)() {
             ")";
 }
 
+/**
+ * For a given class type `T` and property name `m`, determine the column prefix to add for an
+ * embedded property. This is is either the value from `Embedded.columnPrefix` or "".
+ */
+string getEmbeddedPropertyColumnPrefix(T : Object, string m)() {
+  alias embeddedUDAs = getUDAs!(__traits(getMember, T, m), Embedded);
+  static if (embeddedUDAs.length == 0) {
+    return "";
+  } else static if (embeddedUDAs.length == 1) {
+    return embeddedUDAs[0].columnPrefix;
+  } else {
+    assert(false, "Only one `@Embedded` annotation is permitted per property.");
+  }
+}
+
+
 /// generate source code for creation of Embedded definition
 string getEmbeddedPropertyDef(T, immutable string m)() {
     immutable string referencedEntityName = getPropertyEmbeddedEntityName!(T,m);
@@ -2755,7 +2771,8 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
     immutable string propertyName = getPropertyName!(T,m);
     static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
     static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, Generator, ManyToOne, ManyToMany, OneToOne), entityClassName ~ "." ~ propertyName ~ ": Embedded property cannot have Column, Id, Generated, OneToOne, ManyToOne, ManyToMany annotation");
-    immutable string columnName = getColumnName!(T, m);
+    // While embedded properties have no column themselves, they can have a prefix for embedded properties.
+    immutable string columnName = getEmbeddedPropertyColumnPrefix!(T, m);  // getColumnName!(T, m);
     immutable length = getColumnLength!(T, m);
     immutable bool hasNull = hasMemberAnnotation!(T, m, Null);
     immutable bool hasNotNull = hasMemberAnnotation!(T, m, NotNull);
@@ -3666,12 +3683,14 @@ class TableInfo {
         return columnNameMap[columnName];
     }
 
-    private void appendColumns(const EntityInfo entity) {
+    private void appendColumns(const EntityInfo entity, string columnPrefix="") {
         foreach(pi; entity) {
             if (pi.embedded) {
-                appendColumns(pi.referencedEntity);
+                import std.stdio;
+                writeln("TableInfo::appendColumns 1: Embedded - pi.columnName=", pi.columnName);
+                appendColumns(pi.referencedEntity, pi.columnName);
             } else if (pi.simple || (pi.columnName !is null)) {
-                addColumn(new ColumnInfo(this, pi));
+                addColumn(new ColumnInfo(this, pi, columnPrefix));
                 if (pi.simple && pi.uniqueIndex !is null) //pi.unique)
                     addUniqueColumnIndex(pi);
             } else if (pi.manyToMany) {
@@ -3735,6 +3754,8 @@ class TableInfo {
         foreach(col; columns) {
             if (res.length > 0)
                 res ~= ", ";
+            import std.stdio;
+            writeln("getCreaetTableSql 0: col.columnDefinition=", col.columnDefinition);
             res ~= col.columnDefinition;
         }
         if (pkDef !is null)
@@ -3795,17 +3816,20 @@ class ColumnInfo {
         this.columnDefinition = table.schema.dialect.quoteIfNeeded(columnName) ~ " " ~ 
                 table.schema.dialect.getColumnTypeDefinition(null, referencedEntity.getKeyProperty());
     }
-    this(TableInfo table, const PropertyInfo property) {
+    this(TableInfo table, const PropertyInfo property, string columnPrefix="") {
+        import std.stdio;
+        writeln("ColumnInfo::this() 0: property.columnName=", property.columnName, ", columnPrefix=", columnPrefix);
         this.table = table;
         this.property = property;
-        this.columnName = property.columnName;
+        this.columnName = columnPrefix == "" ? property.columnName : columnPrefix ~ "_" ~ property.columnName;
+        writeln("ColumnInfo::this() 1: this.columnName=", this.columnName);
         assert(columnName !is null);
         if (property.manyToOne || property.oneToOne) {
             assert(property.columnName !is null);
             assert(property.referencedEntity !is null);
-            this.columnDefinition = table.schema.dialect.quoteIfNeeded(property.columnName) ~ " " ~ table.schema.dialect.getColumnTypeDefinition(property, property.referencedEntity.getKeyProperty());
+            this.columnDefinition = table.schema.dialect.quoteIfNeeded(this.columnName) ~ " " ~ table.schema.dialect.getColumnTypeDefinition(property, property.referencedEntity.getKeyProperty());
         } else {
-            this.columnDefinition = table.schema.dialect.getColumnDefinition(property);
+            this.columnDefinition = table.schema.dialect.quoteIfNeeded(this.columnName) ~ " " ~ table.schema.dialect.getColumnTypeDefinition(property);
         }
     }
 }

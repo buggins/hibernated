@@ -1,5 +1,6 @@
 module htestmain;
 
+import std.typecons;
 import std.algorithm;
 import std.stdio;
 import std.string;
@@ -24,9 +25,28 @@ class User {
 
     Asset[] assets;
 
+    @Embedded("t1")
+    Thing t1;
+
+    @Embedded("t2")
+    Thing t2;
+
     override string toString() {
-        return format("{id: %s, name: %s, roles: %s, group: %s}", id, name, roles, group);
+        return format("{id: %s, name: %s, roles: %s, group: %s, t1_a: %d, t1_b: %d, t2_a: %d, t2_b: %d}",
+            id, name, roles, group,
+            t1.a.get(0), t1.b.get(1),
+            t2.a.get(0), t2.b.get(1));
     }
+}
+
+@Embeddable
+class Thing {
+    this(int a, int b) {
+      this.a = a;
+      this.b = b;
+    }
+    Nullable!int a;
+    Nullable!int b;
 }
 
 class Role {
@@ -107,7 +127,7 @@ void testHibernate(immutable string host, immutable ushort port, immutable strin
 
     // create metadata from annotations
     writeln("Creating schema from class list");
-    EntityMetaData schema = new SchemaInfoImpl!(User, Role, Address, Asset, MyGroup);
+    EntityMetaData schema = new SchemaInfoImpl!(User, Role, Address, Asset, MyGroup, Thing);
     //writeln("Creating schema from module list");
     //EntityMetaData schema2 = new SchemaInfoImpl!(htestmain);
 
@@ -157,6 +177,8 @@ void testHibernate(immutable string host, immutable ushort port, immutable strin
     u10.name = "Alex";
     u10.roles = [r10, r11];
     u10.group = grp3;
+    u10.t1 = new Thing(2, 3);
+    u10.t2 = new Thing(20, 30);
 
     auto address = new Address();
     address.street = "Some Street";
@@ -179,11 +201,15 @@ void testHibernate(immutable string host, immutable ushort port, immutable strin
     u12.name = "Arjan";
     u12.roles = [r10, r11];
     u12.group = grp2;
+    u12.t1 = new Thing(4, 5);
+    u12.t2 = new Thing(40, 50);
 
     User u13 = new User();
     u13.name = "Wessel";
     u13.roles = [r10, r11];
     u13.group = grp2;
+    u13.t1 = new Thing(6, 7);
+    u13.t2 = new Thing(60, 70);
 
     writeln("saving group 1-2-3" );
     sess.save( grp1 );

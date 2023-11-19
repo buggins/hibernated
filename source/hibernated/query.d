@@ -831,14 +831,16 @@ class QueryParser {
 		return -1;
 	}
 	
-    int addSelectSQL(Dialect dialect, ParsedQuery res, string tableName, bool first, const EntityInfo ei) {
+    int addSelectSQL(Dialect dialect, ParsedQuery res, string tableName, bool first,
+            const EntityInfo ei, string prefix="") {
         int colCount = 0;
         for(int j = 0; j < ei.getPropertyCount(); j++) {
             PropertyInfo f = cast(PropertyInfo)ei.getProperty(j);
             string fieldName = f.columnName;
             if (f.embedded) {
                 // put embedded cols here
-                colCount += addSelectSQL(dialect, res, tableName, first && colCount == 0, f.referencedEntity);
+                colCount += addSelectSQL(dialect, res, tableName, first && colCount == 0, f.referencedEntity,
+                        f.columnName ~ "_");
                 continue;
             } else if (f.oneToOne) {
             } else {
