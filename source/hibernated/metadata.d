@@ -3686,8 +3686,6 @@ class TableInfo {
     private void appendColumns(const EntityInfo entity, string columnPrefix="") {
         foreach(pi; entity) {
             if (pi.embedded) {
-                import std.stdio;
-                writeln("TableInfo::appendColumns 1: Embedded - pi.columnName=", pi.columnName);
                 appendColumns(pi.referencedEntity, pi.columnName);
             } else if (pi.simple || (pi.columnName !is null)) {
                 addColumn(new ColumnInfo(this, pi, columnPrefix));
@@ -3754,8 +3752,6 @@ class TableInfo {
         foreach(col; columns) {
             if (res.length > 0)
                 res ~= ", ";
-            import std.stdio;
-            writeln("getCreaetTableSql 0: col.columnDefinition=", col.columnDefinition);
             res ~= col.columnDefinition;
         }
         if (pkDef !is null)
@@ -3817,12 +3813,9 @@ class ColumnInfo {
                 table.schema.dialect.getColumnTypeDefinition(null, referencedEntity.getKeyProperty());
     }
     this(TableInfo table, const PropertyInfo property, string columnPrefix="") {
-        import std.stdio;
-        writeln("ColumnInfo::this() 0: property.columnName=", property.columnName, ", columnPrefix=", columnPrefix);
         this.table = table;
         this.property = property;
         this.columnName = columnPrefix == "" ? property.columnName : columnPrefix ~ "_" ~ property.columnName;
-        writeln("ColumnInfo::this() 1: this.columnName=", this.columnName);
         assert(columnName !is null);
         if (property.manyToOne || property.oneToOne) {
             assert(property.columnName !is null);

@@ -848,14 +848,14 @@ class QueryImpl : Query
 	ParameterValues params;
 	this(SessionImpl sess, string queryString) {
 		this.sess = sess;
-        //trace("QueryImpl(): HQL: " ~ queryString);
-        QueryParser parser = new QueryParser(sess.metaData, queryString);
-        //trace("parsing");
+		//trace("QueryImpl(): HQL: " ~ queryString);
+		QueryParser parser = new QueryParser(sess.metaData, queryString);
+		//trace("parsing");
 		this.query = parser.makeSQL(sess.dialect);
-        //trace("SQL: " ~ this.query.sql);
-        params = query.createParams();
-        //trace("exiting QueryImpl()");
-    }
+		//trace("SQL: " ~ this.query.sql);
+		params = query.createParams();
+		//trace("exiting QueryImpl()");
+	}
 
 	///Get the query string.
 	override string getQueryString() {

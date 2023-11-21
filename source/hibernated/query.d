@@ -836,11 +836,11 @@ class QueryParser {
         int colCount = 0;
         for(int j = 0; j < ei.getPropertyCount(); j++) {
             PropertyInfo f = cast(PropertyInfo)ei.getProperty(j);
-            string fieldName = f.columnName;
+            string fieldName = prefix ~ f.columnName;
             if (f.embedded) {
                 // put embedded cols here
                 colCount += addSelectSQL(dialect, res, tableName, first && colCount == 0, f.referencedEntity,
-                        f.columnName ~ "_");
+                        /*prefix*/ fieldName == "" ? "" : fieldName ~ "_");
                 continue;
             } else if (f.oneToOne) {
             } else {

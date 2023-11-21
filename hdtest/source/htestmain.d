@@ -25,7 +25,7 @@ class User {
 
     Asset[] assets;
 
-    @Embedded("t1")
+    //@Embedded("t1")
     Thing t1;
 
     @Embedded("t2")
