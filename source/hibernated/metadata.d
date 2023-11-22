@@ -1019,6 +1019,10 @@ PropertyMemberKind getPropertyMemberKind(T : Object, string m)() {
     return memberKind;
 }
 
+/**
+ * Given a class `T` and the name `m` of a property inside that class, return the name of the type
+ * of `m` if it is `@Embeddable`, otherwise a static assertion will fail.
+ */
 string getPropertyEmbeddedEntityName(T : Object, string m)() {
     alias ti = typeof(__traits(getMember, T, m));
 
@@ -1339,6 +1343,10 @@ template getLazyCollectionInstanceType(T) {
     }
 }
 
+/**
+ * Given the type of a class attribute, whether it is a function, delegate, collection,
+ * etc. determine its basic property type. E.g. `@property int[] myData() {...}` becomes `int`.
+ */
 template getReferencedInstanceType(T) {
     //pragma(msg, T.stringof);
     static if (is(T == delegate)) {
@@ -1386,6 +1394,11 @@ template getReferencedInstanceType(T) {
     }
 }
 
+/**
+ * Returns as a string the name of the type of property of an entity.
+ *
+ * E.g. given `class A { Thing b; }`, `getPropertyReferencedEntityName!(A, "b")` would be `"Thing"`.
+ */
 string getPropertyReferencedEntityName(T : Object, string m)() {
     alias ti = typeof(__traits(getMember, T, m));
     return getEntityName!(getReferencedInstanceType!ti);
@@ -2993,6 +3006,10 @@ string getPropertyDef(T, string m)() {
     }
 }
 
+/**
+ * Given a class T, generate D code as a string that defines an `EntityInfo` object that describes
+ * the class.
+ */
 string getEntityDef(T)() {
     string res;
     string generatedGettersSetters;
@@ -3209,6 +3226,7 @@ abstract class SchemaInfo : EntityMetaData {
         buf ~= data;
     }
 
+    // Obtains an SQL compatible list of all feldis for a given entity type.
     public string getAllFieldListForUpdate(
             Dialect dialect, const EntityInfo ei, bool exceptKey = false,
             string columnPrefix="") const {
