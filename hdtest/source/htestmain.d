@@ -25,14 +25,16 @@ class User {
 
     Asset[] assets;
 
-    //@Embedded("t1")
+    // @Embedded can be inferred, but it will not use a prefix.
     Thing t1;
 
+    // Explicitly setting @Embeddable can be used to distinguish multiple instances of the same
+    // entity type.
     @Embedded("t2")
     Thing t2;
 
     override string toString() {
-        return format("{id: %s, name: %s, roles: %s, group: %s, t1_a: %d, t1_b: %d, t2_a: %d, t2_b: %d}",
+        return format("{id: %s, name: %s, roles: %s, group: %s, a: %d, b: %d, t2_a: %d, t2_b: %d}",
             id, name, roles, group,
             t1.a.get(0), t1.b.get(1),
             t2.a.get(0), t2.b.get(1));
@@ -259,6 +261,9 @@ void testHibernate(immutable string host, immutable ushort port, immutable strin
     assert(u11.addresses[0].street == "Some Street");
     assert(u11.addresses[0].town == "Big Town");
     assert(u11.addresses[0].country == "Alaska");
+
+    assert(u11.t1.a == 2);
+    assert(u11.t2.b == 30);
 
     assert(u11.assets.length == 1);
     assert(u11.assets[0].name == "Something Precious");

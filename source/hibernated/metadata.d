@@ -87,7 +87,7 @@ abstract class EntityMetaData {
 
     public int getFieldCount(const EntityInfo ei, bool exceptKey) const;
 
-    public string getAllFieldList(Dialect dialect, const EntityInfo ei, bool exceptKey = false) const;
+    public string getAllFieldList(Dialect dialect, const EntityInfo ei, bool exceptKey = false, string columnPrefix = "") const;
     public string getAllFieldList(Dialect dialect, string entityName, bool exceptKey = false) const;
 
     public string generateFindByPkForEntity(Dialect dialect, const EntityInfo ei) const;
@@ -3209,14 +3209,18 @@ abstract class SchemaInfo : EntityMetaData {
         buf ~= data;
     }
 
-    public string getAllFieldListForUpdate(Dialect dialect, const EntityInfo ei, bool exceptKey = false) const {
+    public string getAllFieldListForUpdate(
+            Dialect dialect, const EntityInfo ei, bool exceptKey = false,
+            string columnPrefix="") const {
+        import std.stdio;
+        writeln("getAllFieldListForUpdate 0: columnPrefix=", columnPrefix);
         string query;
         foreach(pi; ei) {
             if (pi.key && exceptKey)
                 continue;
             if (pi.embedded) {
                 auto emei = pi.referencedEntity;
-                appendCommaDelimitedList(query, getAllFieldListForUpdate(dialect, emei, exceptKey));
+                appendCommaDelimitedList(query, getAllFieldListForUpdate(dialect, emei, exceptKey, pi.columnName == "" ? "" : pi.columnName ~ "_"));
             } else if (pi.oneToOne || pi.manyToOne) {
                 if (pi.columnName != null) {
                     // read FK column
@@ -3225,20 +3229,20 @@ abstract class SchemaInfo : EntityMetaData {
             } else if (pi.oneToMany || pi.manyToMany) {
                 // skip
             } else {
-                appendCommaDelimitedList(query, dialect.quoteIfNeeded(pi.columnName) ~ "=?");
+                appendCommaDelimitedList(query, dialect.quoteIfNeeded(columnPrefix ~ pi.columnName) ~ "=?");
             }
         }
         return query;
     }
     
-    override public string getAllFieldList(Dialect dialect, const EntityInfo ei, bool exceptKey = false) const {
+    override public string getAllFieldList(Dialect dialect, const EntityInfo ei, bool exceptKey = false, string columnPrefix="") const {
         string query;
         foreach(pi; ei) {
             if (pi.key && exceptKey)
                 continue;
             if (pi.embedded) {
                 auto emei = pi.referencedEntity;
-                appendCommaDelimitedList(query, getAllFieldList(dialect, emei, exceptKey));
+                appendCommaDelimitedList(query, getAllFieldList(dialect, emei, exceptKey, pi.columnName == "" ? "" : pi.columnName ~ "_"));
             } else if (pi.oneToOne || pi.manyToOne) {
                 if (pi.columnName != null) {
                     // read FK column
@@ -3247,7 +3251,7 @@ abstract class SchemaInfo : EntityMetaData {
             } else if (pi.oneToMany || pi.manyToMany) {
                 // skip
             } else {
-                appendCommaDelimitedList(query, dialect.quoteIfNeeded(pi.columnName));
+                appendCommaDelimitedList(query, dialect.quoteIfNeeded(columnPrefix ~ pi.columnName));
             }
         }
         return query;
