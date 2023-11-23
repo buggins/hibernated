@@ -44,3 +44,7 @@ examples/example1/example1
 
 # Ignore Sublime Text workspace (project file is ok):
 *.sublime-workspace
+
+# Emacs/Vim
+*~
+\#*\#

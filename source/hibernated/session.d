@@ -547,8 +547,6 @@ class SessionImpl : Session {
 
     /// Persist the given transient instance, first assigning a generated identifier if not assigned; returns generated value
     override Variant save(Object obj) {
-        import std.stdio;
-        writeln("Saving object...");
         auto info = metaData.findEntityForObject(obj);
         if (!info.isKeySet(obj)) {
             if (info.getKeyProperty().generated) {
