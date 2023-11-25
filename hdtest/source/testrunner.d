@@ -42,7 +42,7 @@ void runTests(TestClass)(TestClass testClass) {
 
   // Search for member functions annotated with @Test and run them.
   static foreach (alias method; getSymbolsByUDA!(TestClass, Test)) {
-    writeln("Running Test: ", getUDAs!(method, Test)[0].name);
+    writeln("▶ Running Test: ", getUDAs!(method, Test)[0].name);
     __traits(getMember, testClass, __traits(identifier, method))();
   }
 

@@ -61,18 +61,56 @@ class EmbeddedTest : HibernateTest {
     auto r2 = sess.createQuery("FROM Customer WHERE billingAddress.city = :City")
         .setParameter("City", "Lametown");
     Customer c2 = r2.uniqueResult!Customer();
-    assert(c2 !is null);  // TODO: This is failing.
+    assert(c2 !is null);
     assert(c2.billingAddress.street == "101001 Robotface");
   }
 
   @Test("embedded.update")
   void updateTest() {
-    // TODO
+    Session sess = sessionFactory.openSession();
+
+    auto r1 = sess.createQuery("FROM Customer WHERE billingAddress.city = :City")
+        .setParameter("City", "Lametown");
+    Customer c1 = r1.uniqueResult!Customer();
+    assert(c1 !is null);
+
+    c1.billingAddress.street = "17 Neat Street";
+    sess.update(c1);
+
+    // Create a new session to prevent caching.
+    sess.close();
+    sess = sessionFactory.openSession();
+
+    r1 = sess.createQuery("FROM Customer WHERE billingAddress.city = :City")
+        .setParameter("City", "Lametown");
+    c1 = r1.uniqueResult!Customer();
+    assert(c1 !is null);
+    assert(c1.billingAddress.street == "17 Neat Street");
+
+    sess.close();
   }
 
   @Test("embedded.delete")
   void deleteTest() {
-    // TODO
+    Session sess = sessionFactory.openSession();
+
+    auto r1 = sess.createQuery("FROM Customer WHERE billingAddress.city = :City")
+        .setParameter("City", "Lametown");
+    Customer c1 = r1.uniqueResult!Customer();
+    assert(c1 !is null);
+
+    sess.remove(c1);
+
+    // Create a new session to prevent caching.
+    sess.close();
+    sess = sessionFactory.openSession();
+
+    r1 = sess.createQuery("FROM Customer WHERE billingAddress.city = :City")
+        .setParameter("City", "Lametown");
+    c1 = r1.uniqueResult!Customer();
+    assert(c1 is null);
+
+    sess.close();
   }
 
 }

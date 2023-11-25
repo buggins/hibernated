@@ -26,30 +26,10 @@ class User {
 
   Asset[] assets;
 
-  // @Embedded can be inferred, but it will not use a prefix.
-  Thing t1;
-
-  // Explicitly setting @Embedded can be used to distinguish multiple instances of the same
-  // entity type.
-  @Embedded("t2")
-  Thing t2;
-
   override string toString() {
-    return format("{id: %s, name: %s, roles: %s, group: %s, a: %d, b: %d, t2_a: %d, t2_b: %d}",
-        id, name, roles, group,
-        t1.a.get(0), t1.b.get(1),
-        t2.a.get(0), t2.b.get(1));
+    return format("{id: %s, name: %s, roles: %s, group: %s}",
+        id, name, roles, group);
   }
-}
-
-@Embeddable
-class Thing {
-  this(int a, int b) {
-    this.a = a;
-    this.b = b;
-  }
-  Nullable!int a;
-  Nullable!int b;
 }
 
 class Role {
@@ -100,7 +80,7 @@ class MyGroup {
 class GeneralTest : HibernateTest {
   override
   EntityMetaData buildSchema() {
-    return new SchemaInfoImpl!(User, Role, Address, Asset, MyGroup, Thing);
+    return new SchemaInfoImpl!(User, Role, Address, Asset, MyGroup);
   }
 
   @Test("general test")
@@ -136,8 +116,6 @@ class GeneralTest : HibernateTest {
     u10.name = "Alex";
     u10.roles = [r10, r11];
     u10.group = grp3;
-    u10.t1 = new Thing(2, 3);
-    u10.t2 = new Thing(20, 30);
 
     auto address = new Address();
     address.street = "Some Street";
@@ -160,15 +138,11 @@ class GeneralTest : HibernateTest {
     u12.name = "Arjan";
     u12.roles = [r10, r11];
     u12.group = grp2;
-    u12.t1 = new Thing(4, 5);
-    u12.t2 = new Thing(40, 50);
 
     User u13 = new User();
     u13.name = "Wessel";
     u13.roles = [r10, r11];
     u13.group = grp2;
-    u13.t1 = new Thing(6, 7);
-    u13.t2 = new Thing(60, 70);
 
     writeln("saving group 1-2-3" );
     sess.save( grp1 );
@@ -218,9 +192,6 @@ class GeneralTest : HibernateTest {
     assert(u11.addresses[0].street == "Some Street");
     assert(u11.addresses[0].town == "Big Town");
     assert(u11.addresses[0].country == "Alaska");
-
-    assert(u11.t1.a == 2);
-    assert(u11.t2.b == 30);
 
     assert(u11.assets.length == 1);
     assert(u11.assets[0].name == "Something Precious");

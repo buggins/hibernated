@@ -3230,8 +3230,6 @@ abstract class SchemaInfo : EntityMetaData {
     public string getAllFieldListForUpdate(
             Dialect dialect, const EntityInfo ei, bool exceptKey = false,
             string columnPrefix="") const {
-        import std.stdio;
-        writeln("getAllFieldListForUpdate 0: columnPrefix=", columnPrefix);
         string query;
         foreach(pi; ei) {
             if (pi.key && exceptKey)
