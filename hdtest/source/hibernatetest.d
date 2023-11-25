@@ -50,7 +50,7 @@ abstract class HibernateTest {
     {
         import ddbc.drivers.mysqlddbc;
         immutable string url = MySQLDriver.generateUrl(
-            connectionParams.host, connectionParams.port, connectionParams.dbName);
+            connectionParams.host, connectionParams.port, connectionParams.database);
         string[string] params = MySQLDriver.setUserAndPassword(
             connectionParams.user, connectionParams.pass);
         DataSource ds = new ConnectionPoolDataSourceImpl(new MySQLDriver(), url, params);
