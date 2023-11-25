@@ -62,7 +62,7 @@ abstract class HibernateTest {
             connectionParams.host, connectionParams.port, connectionParams.database); // PGSQLDriver.generateUrl( "/tmp", 5432, "testdb" );
         string[string] params;
         params["user"] = connectionParams.user;
-        params["password"] = connectionParasm.pass;
+        params["password"] = connectionParams.pass;
         params["ssl"] = "true";
 
         DataSource ds = new ConnectionPoolDataSourceImpl(new PGSQLDriver(), url, params);
