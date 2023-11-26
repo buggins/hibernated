@@ -550,7 +550,7 @@ class QueryParser {
 		enforceHelper!QuerySyntaxException((aliasCount == 1 && fieldCount == 0) || (aliasCount == 0 && fieldCount > 0), "You should either use single entity alias or one or more properties in SELECT clause. Don't mix objects with primitive fields");
         return aliasCount > 0;
 	}
-	
+
 	void parseWhereClause(int start, int end) {
 		enforceHelper!QuerySyntaxException(start < end, "Invalid WHERE clause" ~ errorContext(tokens[start]));
 		whereClause = new Token(tokens[start].pos, TokenType.Expression, tokens, start, end);
@@ -568,7 +568,7 @@ class QueryParser {
 		dropBraces(whereClause.children);
 		//trace("after dropBraces\n" ~ whereClause.dump(0));
 	}
-	
+
 	void foldBraces(ref Token[] items) {
 		while (true) {
 			if (items.length == 0)
@@ -631,7 +631,11 @@ class QueryParser {
 			}
 		}
 	}
-	
+
+    /**
+     * During the parsing of an HQL query, populates Tokens with contextual information such as
+     * EntityInfo, PropertyInfo, and more.
+     */
 	void convertFields(ref Token[] items) {
 		while(true) {
 			int p = -1;
@@ -655,6 +659,7 @@ class QueryParser {
 				idents ~= items[i + 1].text;
 			}
 			string fullName;
+            string columnPrefix;
 			FromClauseItem a;
 			if (items[p].type == TokenType.Alias) {
 				a = findFromClauseByAlias(idents[0]);
@@ -675,6 +680,7 @@ class QueryParser {
                 pi = cast(PropertyInfo)ei.findProperty(propertyName);
     			while (pi.embedded) { // loop to allow nested @Embedded
     				enforceHelper!QuerySyntaxException(idents.length > 0, "Syntax error in WHERE condition - @Embedded property reference should include reference to @Embeddable property " ~ aliasName ~ errorContext(items[p]));
+                    columnPrefix ~= pi.columnName == "" ? pi.columnName : pi.columnName ~ "_";
     				propertyName = idents[0];
     				idents.popFront();
                     pi = cast(PropertyInfo)pi.referencedEntity.findProperty(propertyName);
@@ -697,9 +703,10 @@ class QueryParser {
             }
 			enforceHelper!QuerySyntaxException(idents.length == 0, "Unexpected extra field name " ~ idents[0] ~ errorContext(items[p]));
 			//trace("full name = " ~ fullName);
-			Token t = new Token(items[p].pos, TokenType.Field, fullName);
+			Token t = new Token(/+pos+/ items[p].pos, /+type+/ TokenType.Field, /+text+/ fullName);
             t.entity = cast(EntityInfo)ei;
             t.field = cast(PropertyInfo)pi;
+            t.columnPrefix = columnPrefix;
 			t.from = a;
 			replaceInPlace(items, p, lastp + 1, [t]);
 		}
@@ -831,14 +838,16 @@ class QueryParser {
 		return -1;
 	}
 	
-    int addSelectSQL(Dialect dialect, ParsedQuery res, string tableName, bool first, const EntityInfo ei) {
+    int addSelectSQL(Dialect dialect, ParsedQuery res, string tableName, bool first,
+            const EntityInfo ei, string prefix="") {
         int colCount = 0;
         for(int j = 0; j < ei.getPropertyCount(); j++) {
             PropertyInfo f = cast(PropertyInfo)ei.getProperty(j);
-            string fieldName = f.columnName;
+            string fieldName = prefix ~ f.columnName;
             if (f.embedded) {
                 // put embedded cols here
-                colCount += addSelectSQL(dialect, res, tableName, first && colCount == 0, f.referencedEntity);
+                colCount += addSelectSQL(dialect, res, tableName, first && colCount == 0, f.referencedEntity,
+                        /*prefix*/ fieldName == "" ? "" : fieldName ~ "_");
                 continue;
             } else if (f.oneToOne) {
             } else {
@@ -984,13 +993,14 @@ class QueryParser {
             }
         }
 	}
-	
+
+    // Converts a token into SQL and appends it to a WHERE section of a query.
 	void addWhereCondition(Token t, int basePrecedency, Dialect dialect, ParsedQuery res) {
 		if (t.type == TokenType.Expression) {
 			addWhereCondition(t.children[0], basePrecedency, dialect, res);
 		} else if (t.type == TokenType.Field) {
 			string tableName = t.from.sqlAlias;
-			string fieldName = t.field.columnName;
+			string fieldName = t.columnPrefix ~ t.field.columnName;
 			res.appendSpace();
 			res.appendSQL(tableName ~ "." ~ dialect.quoteIfNeeded(fieldName));
 		} else if (t.type == TokenType.Number) {
@@ -1323,6 +1333,9 @@ class Token {
 	EntityInfo entity;
     PropertyInfo field;
 	FromClauseItem from;
+    // Embedded fields may have a prefix derived from `@Embedded` annotations on properties that
+    // contain them.
+    string columnPrefix;
 	Token[] children;
 	this(int pos, TokenType type, string text) {
 		this.pos = pos;

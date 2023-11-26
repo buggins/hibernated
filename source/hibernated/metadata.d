@@ -87,7 +87,7 @@ abstract class EntityMetaData {
 
     public int getFieldCount(const EntityInfo ei, bool exceptKey) const;
 
-    public string getAllFieldList(Dialect dialect, const EntityInfo ei, bool exceptKey = false) const;
+    public string getAllFieldList(Dialect dialect, const EntityInfo ei, bool exceptKey = false, string columnPrefix = "") const;
     public string getAllFieldList(Dialect dialect, string entityName, bool exceptKey = false) const;
 
     public string generateFindByPkForEntity(Dialect dialect, const EntityInfo ei) const;
@@ -1019,6 +1019,10 @@ PropertyMemberKind getPropertyMemberKind(T : Object, string m)() {
     return memberKind;
 }
 
+/**
+ * Given a class `T` and the name `m` of a property inside that class, return the name of the type
+ * of `m` if it is `@Embeddable`, otherwise a static assertion will fail.
+ */
 string getPropertyEmbeddedEntityName(T : Object, string m)() {
     alias ti = typeof(__traits(getMember, T, m));
 
@@ -1339,6 +1343,10 @@ template getLazyCollectionInstanceType(T) {
     }
 }
 
+/**
+ * Given the type of a class attribute, whether it is a function, delegate, collection,
+ * etc. determine its basic property type. E.g. `@property int[] myData() {...}` becomes `int`.
+ */
 template getReferencedInstanceType(T) {
     //pragma(msg, T.stringof);
     static if (is(T == delegate)) {
@@ -1386,6 +1394,11 @@ template getReferencedInstanceType(T) {
     }
 }
 
+/**
+ * Returns as a string the name of the type of property of an entity.
+ *
+ * E.g. given `class A { Thing b; }`, `getPropertyReferencedEntityName!(A, "b")` would be `"Thing"`.
+ */
 string getPropertyReferencedEntityName(T : Object, string m)() {
     alias ti = typeof(__traits(getMember, T, m));
     return getEntityName!(getReferencedInstanceType!ti);
@@ -2747,6 +2760,22 @@ string getManyToManyPropertyDef(T, immutable string m)() {
             ")";
 }
 
+/**
+ * For a given class type `T` and property name `m`, determine the column prefix to add for an
+ * embedded property. This is is either the value from `Embedded.columnPrefix` or "".
+ */
+string getEmbeddedPropertyColumnPrefix(T : Object, string m)() {
+  alias embeddedUDAs = getUDAs!(__traits(getMember, T, m), Embedded);
+  static if (embeddedUDAs.length == 0) {
+    return "";
+  } else static if (embeddedUDAs.length == 1) {
+    return embeddedUDAs[0].columnPrefix;
+  } else {
+    assert(false, "Only one `@Embedded` annotation is permitted per property.");
+  }
+}
+
+
 /// generate source code for creation of Embedded definition
 string getEmbeddedPropertyDef(T, immutable string m)() {
     immutable string referencedEntityName = getPropertyEmbeddedEntityName!(T,m);
@@ -2755,7 +2784,8 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
     immutable string propertyName = getPropertyName!(T,m);
     static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
     static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, Generator, ManyToOne, ManyToMany, OneToOne), entityClassName ~ "." ~ propertyName ~ ": Embedded property cannot have Column, Id, Generated, OneToOne, ManyToOne, ManyToMany annotation");
-    immutable string columnName = getColumnName!(T, m);
+    // While embedded properties have no column themselves, they can have a prefix for embedded properties.
+    immutable string columnName = getEmbeddedPropertyColumnPrefix!(T, m);  // getColumnName!(T, m);
     immutable length = getColumnLength!(T, m);
     immutable bool hasNull = hasMemberAnnotation!(T, m, Null);
     immutable bool hasNotNull = hasMemberAnnotation!(T, m, NotNull);
@@ -2976,6 +3006,10 @@ string getPropertyDef(T, string m)() {
     }
 }
 
+/**
+ * Given a class T, generate D code as a string that defines an `EntityInfo` object that describes
+ * the class.
+ */
 string getEntityDef(T)() {
     string res;
     string generatedGettersSetters;
@@ -3192,14 +3226,17 @@ abstract class SchemaInfo : EntityMetaData {
         buf ~= data;
     }
 
-    public string getAllFieldListForUpdate(Dialect dialect, const EntityInfo ei, bool exceptKey = false) const {
+    // Obtains an SQL compatible list of all feldis for a given entity type.
+    public string getAllFieldListForUpdate(
+            Dialect dialect, const EntityInfo ei, bool exceptKey = false,
+            string columnPrefix="") const {
         string query;
         foreach(pi; ei) {
             if (pi.key && exceptKey)
                 continue;
             if (pi.embedded) {
                 auto emei = pi.referencedEntity;
-                appendCommaDelimitedList(query, getAllFieldListForUpdate(dialect, emei, exceptKey));
+                appendCommaDelimitedList(query, getAllFieldListForUpdate(dialect, emei, exceptKey, pi.columnName == "" ? "" : pi.columnName ~ "_"));
             } else if (pi.oneToOne || pi.manyToOne) {
                 if (pi.columnName != null) {
                     // read FK column
@@ -3208,20 +3245,20 @@ abstract class SchemaInfo : EntityMetaData {
             } else if (pi.oneToMany || pi.manyToMany) {
                 // skip
             } else {
-                appendCommaDelimitedList(query, dialect.quoteIfNeeded(pi.columnName) ~ "=?");
+                appendCommaDelimitedList(query, dialect.quoteIfNeeded(columnPrefix ~ pi.columnName) ~ "=?");
             }
         }
         return query;
     }
     
-    override public string getAllFieldList(Dialect dialect, const EntityInfo ei, bool exceptKey = false) const {
+    override public string getAllFieldList(Dialect dialect, const EntityInfo ei, bool exceptKey = false, string columnPrefix="") const {
         string query;
         foreach(pi; ei) {
             if (pi.key && exceptKey)
                 continue;
             if (pi.embedded) {
                 auto emei = pi.referencedEntity;
-                appendCommaDelimitedList(query, getAllFieldList(dialect, emei, exceptKey));
+                appendCommaDelimitedList(query, getAllFieldList(dialect, emei, exceptKey, pi.columnName == "" ? "" : pi.columnName ~ "_"));
             } else if (pi.oneToOne || pi.manyToOne) {
                 if (pi.columnName != null) {
                     // read FK column
@@ -3230,7 +3267,7 @@ abstract class SchemaInfo : EntityMetaData {
             } else if (pi.oneToMany || pi.manyToMany) {
                 // skip
             } else {
-                appendCommaDelimitedList(query, dialect.quoteIfNeeded(pi.columnName));
+                appendCommaDelimitedList(query, dialect.quoteIfNeeded(columnPrefix ~ pi.columnName));
             }
         }
         return query;
@@ -3666,12 +3703,12 @@ class TableInfo {
         return columnNameMap[columnName];
     }
 
-    private void appendColumns(const EntityInfo entity) {
+    private void appendColumns(const EntityInfo entity, string columnPrefix="") {
         foreach(pi; entity) {
             if (pi.embedded) {
-                appendColumns(pi.referencedEntity);
+                appendColumns(pi.referencedEntity, pi.columnName);
             } else if (pi.simple || (pi.columnName !is null)) {
-                addColumn(new ColumnInfo(this, pi));
+                addColumn(new ColumnInfo(this, pi, columnPrefix));
                 if (pi.simple && pi.uniqueIndex !is null) //pi.unique)
                     addUniqueColumnIndex(pi);
             } else if (pi.manyToMany) {
@@ -3795,17 +3832,17 @@ class ColumnInfo {
         this.columnDefinition = table.schema.dialect.quoteIfNeeded(columnName) ~ " " ~ 
                 table.schema.dialect.getColumnTypeDefinition(null, referencedEntity.getKeyProperty());
     }
-    this(TableInfo table, const PropertyInfo property) {
+    this(TableInfo table, const PropertyInfo property, string columnPrefix="") {
         this.table = table;
         this.property = property;
-        this.columnName = property.columnName;
+        this.columnName = columnPrefix == "" ? property.columnName : columnPrefix ~ "_" ~ property.columnName;
         assert(columnName !is null);
         if (property.manyToOne || property.oneToOne) {
             assert(property.columnName !is null);
             assert(property.referencedEntity !is null);
-            this.columnDefinition = table.schema.dialect.quoteIfNeeded(property.columnName) ~ " " ~ table.schema.dialect.getColumnTypeDefinition(property, property.referencedEntity.getKeyProperty());
+            this.columnDefinition = table.schema.dialect.quoteIfNeeded(this.columnName) ~ " " ~ table.schema.dialect.getColumnTypeDefinition(property, property.referencedEntity.getKeyProperty());
         } else {
-            this.columnDefinition = table.schema.dialect.getColumnDefinition(property);
+            this.columnDefinition = table.schema.dialect.quoteIfNeeded(this.columnName) ~ " " ~ table.schema.dialect.getColumnTypeDefinition(property);
         }
     }
 }

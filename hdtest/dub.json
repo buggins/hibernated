@@ -8,6 +8,7 @@
         "hibernated": {"version": "~master", "path": "../"}
     },
     "buildRequirements": ["allowWarnings"],
+    "mainSourceFile": "source/htestmain.d",
     "configurations": [
         {
             "name": "full",
