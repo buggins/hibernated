@@ -633,7 +633,8 @@ class QueryParser {
 	}
 
     /**
-     * During the parsing of an HQL query, transforms tokens into... ??? TODO
+     * During the parsing of an HQL query, populates Tokens with contextual information such as
+     * EntityInfo, PropertyInfo, and more.
      */
 	void convertFields(ref Token[] items) {
 		while(true) {
@@ -998,7 +999,6 @@ class QueryParser {
 		if (t.type == TokenType.Expression) {
 			addWhereCondition(t.children[0], basePrecedency, dialect, res);
 		} else if (t.type == TokenType.Field) {
-            // TODO: Make use of either columnPrefix or t.text.
 			string tableName = t.from.sqlAlias;
 			string fieldName = t.columnPrefix ~ t.field.columnName;
 			res.appendSpace();
