@@ -2,7 +2,7 @@ module embeddedtest;
 
 import hibernated.core;
 
-import testrunner : BeforeClass, Test, AfterClass, runTests;
+import testrunner : Test;
 import hibernatetest : HibernateTest;
 
 @Embeddable

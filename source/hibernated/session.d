@@ -1,13 +1,13 @@
 /**
- * HibernateD - Object-Relation Mapping for D programming language, with interface similar to Hibernate. 
- * 
+ * HibernateD - Object-Relation Mapping for D programming language, with interface similar to Hibernate.
+ *
  * Hibernate documentation can be found here:
  * $(LINK http://hibernate.org/docs)$(BR)
- * 
+ *
  * Source file hibernated/session.d.
  *
  * This module contains implementation of Hibernated SessionFactory and Session classes.
- * 
+ *
  * Copyright: Copyright 2013
  * License:   $(LINK www.boost.org/LICENSE_1_0.txt, Boost License 1.0).
  * Author:   Vadim Lopatin
@@ -19,6 +19,7 @@ private import std.conv;
 //private import std.stdio : writeln;
 private import std.exception;
 private import std.variant;
+private import std.traits : isCallable;
 
 private import ddbc.core : Connection, DataSource, DataSetReader, DataSetWriter, PreparedStatement, ResultSet, Statement;
 
@@ -45,7 +46,11 @@ static if (__traits(compiles, (){ import std.logger; } )) {
     import std.experimental.logger : trace;
 }
 
-/// Factory to create HibernateD Sessions - similar to org.hibernate.SessionFactory
+/**
+ * Factory to create HibernateD Sessions - similar to org.hibernate.SessionFactory
+ *
+ * See_Also: https://docs.jboss.org/hibernate/stable/orm/javadocs/org/hibernate/SessionFactory.html
+ */
 interface SessionFactory {
     /// close all active sessions
 	void close();
@@ -57,7 +62,11 @@ interface SessionFactory {
     DBInfo getDBMetaData();
 }
 
-/// Session - main interface to load and persist entities -- similar to org.hibernate.Session
+/**
+ * Session - main interface to load and persist entities -- similar to org.hibernate.Session
+ *
+ * See_Also: https://docs.jboss.org/hibernate/stable/orm/javadocs/org/hibernate/Session.html
+ */
 abstract class Session
 {
     /// returns metadata
@@ -93,7 +102,7 @@ abstract class Session
         Variant v = id;
         return cast(T)getObject(getEntityName(T.classinfo), v);
     }
-    
+
     /// Read the persistent state associated with the given identifier into the given transient instance.
     T load(T : Object, ID)(ID id) {
         Variant v = id;
@@ -105,7 +114,7 @@ abstract class Session
         Variant v = id;
         loadObject(obj, v);
     }
-    
+
     /// Return the persistent instance of the given named entity with the given identifier, or null if there is no such persistent instance.
 	Object getObject(string entityName, Variant id);
 
@@ -132,10 +141,121 @@ abstract class Session
 
 	/// Create a new instance of Query for the given HQL query string
 	Query createQuery(string queryString);
+
+    /// Execute a discrete piece of work using the supplied connection.
+    void doWork(void delegate(Connection) func);
+
+    // Templates are implicifly final, thus, we need to write the type explicitly.
+    //void doWork(F)(F func)
+    //if (isCallable!func && is(typeof(func(Connection.__init__)) == void));
 }
 
-/// Transaction interface: TODO
+/**
+ * Represents a transaction under the controll of HibernateD. Every transaction is associated with a
+ * [Session] and begins with an explicit call to [Session.beginTransaction()], or with
+ * `session.getTransaction().begin()`, and ends with a call to [commit()] or [rollback()].
+ *
+ * A single session may be associated with multiple transactions, however, there is only one
+ * uncommitted transaction associated with a given [Session] at a time.
+ *
+ * If shared, a [Transaction] object is not threadsafe.
+ *
+ * See_Also:
+ *   https://docs.jboss.org/hibernate/stable/orm/javadocs/org/hibernate/Transaction.html
+ *   https://jakarta.ee/specifications/platform/9/apidocs/jakarta/persistence/entitytransaction
+ */
 interface Transaction {
+  /**
+   * Start a transaction managed by HibernateD.
+   *
+   * Throws:
+   * - IllegalStateException if `isActive()` is true.
+   */
+  void begin();
+
+  /**
+   * Commit the current resource transaction, writing any unflushed changes to the database.
+   *
+   * Throws:
+   * - IllegalStateException if `isActive()` is false
+   * - RollbackException if the commit fails
+   */
+  void commit();
+
+  /**
+   * Indicates whether a transaction is currently in progress.
+   */
+  bool isActive();
+
+  /**
+   * Roll back the currently active transaction.
+   *
+   * Throws:
+   * - IllegalStateException if `isActive()` is false
+   * - PersistenceException if an unexpected error condition is encountered
+   */
+  void rollback();
+}
+
+class TransactionImpl : Transaction {
+    Session session;
+
+    enum Status {
+        INACTIVE,
+        ACTIVE,
+    }
+    Status status = Status.INACTIVE;
+
+    this(Session session) {
+        this.session = session;
+    }
+
+    override
+    void begin() {
+        if (!session.isOpen()) {
+            throw new HibernatedException("Cannot begin Transaction on closed Session.");
+        }
+        if (isActive()) {
+            throw new HibernatedException("Transaction is already active.");
+        }
+        session.doWork((conn) {
+            conn.setAutoCommit(false);
+            status = Status.ACTIVE;
+        });
+    }
+
+    override
+    void commit() {
+        if (!session.isOpen()) {
+            throw new HibernatedException("Cannot commit Transaction on closed Session.");
+        }
+        if (!isActive()) {
+            throw new HibernatedException("Cannot commit inactive Transaction.");
+        }
+        session.doWork((conn) {
+            conn.commit();
+            status = Status.INACTIVE;
+        });
+    }
+
+    override
+    bool isActive() {
+        return status == Status.ACTIVE;
+    }
+
+    override
+    void rollback() {
+        if (!session.isOpen()) {
+            throw new HibernatedException("Cannot commit Transaction on closed Session.");
+        }
+        if (!isActive()) {
+            throw new HibernatedException("Cannot commit inactive Transaction.");
+        }
+        session.doWork((conn) {
+            conn.rollback();
+            status = Status.INACTIVE;
+        });
+    }
 }
 
 /// Interface for usage of HQL queries.
@@ -166,7 +286,7 @@ abstract class Query
     }
     /// Return the query results as a List which each row as Variant array
 	Variant[][] listRows();
-	
+
 	/// Bind a value to a named query parameter (all :parameters used in query should be bound before executing query).
 	protected Query setParameterVariant(string name, Variant val);
 
@@ -278,6 +398,7 @@ class SessionImpl : Session {
     Dialect dialect;
     DataSource connectionPool;
     Connection conn;
+    Transaction currentTransaction;
 
     EntityCache[string] cache;
 
@@ -300,7 +421,7 @@ class SessionImpl : Session {
     package bool keyInCache(string entityName, Variant key) {
         return getCache(entityName).hasKey(normalize(key));
     }
-    
+
     package Object peekFromCache(string entityName, Variant key) {
         return getCache(entityName).peek(normalize(key));
     }
@@ -316,7 +437,7 @@ class SessionImpl : Session {
     package Object[] lookupCache(string entityName, Variant[] keys, out Variant[] unknownKeys) {
         return getCache(entityName).lookup(keys, unknownKeys);
     }
-    
+
     override EntityMetaData getMetaData() {
         return metaData;
     }
@@ -336,7 +457,13 @@ class SessionImpl : Session {
     }
 
     override Transaction beginTransaction() {
-        throw new HibernatedException("Method not implemented");
+        // See: hibernate/internal/AbstractSharedSessionContract.accessTransaction()
+        checkClosed();
+        if (currentTransaction is null) {
+            currentTransaction = new TransactionImpl(this);
+        }
+        currentTransaction.begin();
+        return currentTransaction;
     }
     override void cancelQuery() {
         throw new HibernatedException("Method not implemented");
@@ -412,8 +539,8 @@ class SessionImpl : Session {
         Object res = q.uniqueResult(obj);
         return res;
     }
-    
-    /// Read entities referenced by property 
+
+    /// Read entities referenced by property
     Object[] loadReferencedObjects(const EntityInfo info, string referencePropertyName, Variant fk) {
         string hql = "SELECT a2 FROM " ~ info.name ~ " AS a1 JOIN a1." ~ referencePropertyName ~ " AS a2 WHERE a1." ~ info.getKeyProperty().propertyName ~ "=:Fk";
         Query q = createQuery(hql).setParameter("Fk", fk);
@@ -471,7 +598,7 @@ class SessionImpl : Session {
             stmt.executeUpdate(sql);
         }
     }
-    
+
     private void updateRelations(const EntityInfo ei, Object obj) {
         foreach(p; ei) {
             if (p.manyToMany) {
@@ -487,7 +614,7 @@ class SessionImpl : Session {
             }
         }
     }
-    
+
     private Variant[] readRelationIds(const PropertyInfo p, Variant thisId) {
         Variant[] res;
         string q = p.joinTable.getOtherKeySelectSQL(dialect, createKeySQL(thisId));
@@ -530,7 +657,7 @@ class SessionImpl : Session {
             stmt.executeUpdate(p.joinTable.getDeleteSQL(dialect, createKeySQL(thisId), keysToDelete));
         }
     }
-    
+
     private void deleteRelations(const PropertyInfo p, Object obj) {
         Variant thisId = p.entity.getKey(obj);
         Variant[] oldRelIds = readRelationIds(p, thisId);
@@ -543,7 +670,7 @@ class SessionImpl : Session {
             stmt.executeUpdate(p.joinTable.getDeleteSQL(dialect, createKeySQL(thisId), ids));
         }
     }
-    
+
 
     /// Persist the given transient instance, first assigning a generated identifier if not assigned; returns generated value
     override Variant save(Object obj) {
@@ -626,6 +753,11 @@ class SessionImpl : Session {
 	override Query createQuery(string queryString) {
 		return new QueryImpl(this, queryString);
 	}
+
+    /// Execute a discrete piece of work using the supplied connection.
+    override void doWork(void delegate(Connection) func) {
+        func(conn);
+    }
 }
 
 /// Implementation of HibernateD SessionFactory
@@ -649,7 +781,7 @@ class SessionFactoryImpl : SessionFactory {
             _dbInfo = new DBInfo(dialect, metaData);
         return _dbInfo;
     }
-    
+
 
     void sessionClosed(SessionImpl session) {
         foreach(i, item; activeSessions) {
@@ -1090,7 +1222,7 @@ class QueryImpl : Query
         enforceHelper!SessionException(ei !is null, "No entity expected in result of query " ~ getQueryString());
         params.checkAllParametersSet();
         sess.checkClosed();
-        
+
         Object[] res;
 
 
@@ -1117,14 +1249,14 @@ class QueryImpl : Query
         trace("Exiting listObjects " ~ query.hql);
         return res.length > 0 ? res : null;
     }
-    
+
     /// Return the query results as a List which each row as Variant array
 	override Variant[][] listRows() {
 		params.checkAllParametersSet();
 		sess.checkClosed();
-		
+
 		Variant[][] res;
-		
+
 		//trace("SQL: " ~ query.sql);
 		PreparedStatement stmt = sess.conn.prepareStatement(query.sql);
 		scope(exit) stmt.close();
@@ -1139,7 +1271,7 @@ class QueryImpl : Query
 		}
 		return res.length > 0 ? res : null;
 	}
-	
+
 	/// Bind a value to a named query parameter.
 	override protected Query setParameterVariant(string name, Variant val) {
 		params.setParameter(name, val);
