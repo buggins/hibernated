@@ -786,7 +786,7 @@ class SessionFactoryImpl : SessionFactory {
     void sessionClosed(SessionImpl session) {
         foreach(i, item; activeSessions) {
             if (item == session) {
-                remove(activeSessions, i);
+                activeSessions = remove(activeSessions, i);
             }
         }
     }
