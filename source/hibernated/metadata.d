@@ -1,13 +1,13 @@
 /**
- * HibernateD - Object-Relation Mapping for D programming language, with interface similar to Hibernate. 
- * 
+ * HibernateD - Object-Relation Mapping for D programming language, with interface similar to Hibernate.
+ *
  * Hibernate documentation can be found here:
  * $(LINK http://hibernate.org/docs)$(BR)
- * 
+ *
  * Source file hibernated/metadata.d.
  *
  * This module contains implementation of Annotations parsing and ORM model metadata holder classes.
- * 
+ *
  * Copyright: Copyright 2013
  * License:   $(LINK www.boost.org/LICENSE_1_0.txt, Boost License 1.0).
  * Author:   Vadim Lopatin
@@ -50,6 +50,7 @@ static if (__traits(compiles, (){ import std.logger; } )) {
     import std.experimental.logger : trace, warning;
 }
 
+/// A container for a set of Entity types that have relationships to one-another.
 abstract class EntityMetaData {
 
     @property size_t length();
@@ -60,13 +61,13 @@ abstract class EntityMetaData {
     public string getEntityName(TypeInfo_Class type) const {
         return getClassMap()[type].name;
     }
-    
+
     public string getEntityNameForClass(T)() const {
         return getClassMap()[T.classinfo].name;
     }
 
     int opApply(int delegate(ref const EntityInfo) dg) const;
-    
+
 
     public const(EntityInfo[]) getEntities() const;
     public const(EntityInfo[string]) getEntityMap() const;
@@ -102,6 +103,7 @@ abstract class EntityMetaData {
     public void setPropertyValue(Object obj, string propertyName, Variant value) const;
 }
 
+/// Indicates how, if at all, a property relates to another entity.
 enum RelationType {
     None,
     Embedded,
@@ -198,15 +200,15 @@ public:
     @property bool manyToOne() const { return relation == RelationType.ManyToOne; };
     @property bool manyToMany() const { return relation == RelationType.ManyToMany; };
 
-    this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, string uniqueIndex, RelationType relation, string referencedEntityName, string referencedPropertyName, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, KeyIsSetFunc keyIsSetFunc, IsNullFunc isNullFunc, 
-            CopyFunc copyFieldFunc, 
+    this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, string uniqueIndex, RelationType relation, string referencedEntityName, string referencedPropertyName, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, KeyIsSetFunc keyIsSetFunc, IsNullFunc isNullFunc,
+            CopyFunc copyFieldFunc,
             GeneratorFunc generatorFunc = null,
-            GetObjectFunc getObjectFunc = null, 
-            SetObjectFunc setObjectFunc = null, 
-            GetCollectionFunc getCollectionFunc = null, 
+            GetObjectFunc getObjectFunc = null,
+            SetObjectFunc setObjectFunc = null,
+            GetCollectionFunc getCollectionFunc = null,
             SetCollectionFunc setCollectionFunc = null,
-            SetObjectDelegateFunc setObjectDelegateFunc = null, 
-            SetCollectionDelegateFunc setCollectionDelegateFunc = null, 
+            SetObjectDelegateFunc setObjectDelegateFunc = null,
+            SetCollectionDelegateFunc setCollectionDelegateFunc = null,
             IsLoadedFunc isLoadedFunc = null,
             bool lazyLoad = false, bool collection = false,
             JoinTableInfo joinTable = null) {
@@ -292,13 +294,14 @@ class EntityInfo {
     immutable bool embeddable;
 
 
-    int opApply(int delegate(ref const PropertyInfo) dg) const { 
-        int result = 0; 
-        for (int i = 0; i < _properties.length; i++) { 
-            result = dg(_properties[i]); 
-            if (result) break; 
-        } 
-        return result; 
+    /// Permits `foreach` looping over the properties within the entity.
+    int opApply(int delegate(ref const PropertyInfo) dg) const {
+        int result = 0;
+        for (int i = 0; i < _properties.length; i++) {
+            result = dg(_properties[i]);
+            if (result) break;
+        }
+        return result;
     }
 
     public this(string name, string tableName, bool embeddable, PropertyInfo [] properties, TypeInfo_Class classInfo) {
@@ -369,6 +372,9 @@ class EntityInfo {
     }
 }
 
+/// Information used to represent a join table, which is used to link entities in a @ManyToMany relationship.
+///
+/// TODO: Add support for @EmbeddedId via @JoinColumns
 class JoinTableInfo {
     package string _tableName;
     @property string tableName() const { return _tableName; }
@@ -403,7 +409,7 @@ class JoinTableInfo {
     static string generateJoinTableCode(string table, string column1, string column2) {
         return "new JoinTableInfo(" ~ quoteString(table) ~ ", " ~ quoteString(column1) ~ ", " ~ quoteString(column2) ~ ")";
     }
-    
+
     string getInsertSQL(const Dialect dialect) const {
         return "INSERT INTO " ~ dialect.quoteIfNeeded(_tableName) ~ "(" ~ dialect.quoteIfNeeded(_column1) ~ ", " ~ dialect.quoteIfNeeded(column2) ~ ") VALUES ";
     }
@@ -520,12 +526,14 @@ bool hasHibernatedClassOrPropertyAnnotation(T)() {
     }
 }
 
+/// Returns true if a property is annotated with `@Id` or `@EmbeddedId`, or if this is implied
+/// via `@Generated` or `@Generator`.
 bool hasAnyKeyPropertyAnnotation(T)() {
     auto hasAny = false;
     foreach (m; __traits(allMembers, T)) {
         static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
             static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
-                static if (hasOneOfMemberAnnotations!(T, m, Id, Generated, Generator))
+                static if (hasOneOfMemberAnnotations!(T, m, Id, EmbeddedId, Generated, Generator))
                     hasAny = true;
                     break;
             }
@@ -706,7 +714,7 @@ string getJoinColumnName(T, string m)() {
                         name = applyDefault(a.name, defValue);
                         break Louter;
                     } else static if (a.stringof == JoinColumn.stringof) {
-                        name = defValue;   
+                        name = defValue;
                         break Louter;
                     }
                 }
@@ -726,6 +734,7 @@ string getJoinColumnName(T, string m)() {
     return name;
 }
 
+/// Given an Entity class and a property annocated with @UniqueKey, determine a name to use for the index.
 string getUniqueIndexName(T, string m)() {
     string name = null;
     immutable string defValue = camelCaseToUnderscoreDelimited(getEntityName!T) ~ "_" ~ camelCaseToUnderscoreDelimited(getPropertyName!(T,m)()) ~ "_index";
@@ -913,7 +922,7 @@ enum PropertyMemberKind : int {
     GETTER_MEMBER,     // getField() + setField() or isField() and setField()
     PROPERTY_MEMBER,   // @property T field() { ... } + @property xxx field(T value) { ... }
     LAZY_MEMBER,       // Lazy!Object field;
-    UNSUPPORTED_MEMBER,// 
+    UNSUPPORTED_MEMBER,//
 }
 
 bool hasPercentSign(immutable string str) {
@@ -981,7 +990,7 @@ string substituteParamTwice(immutable string fmt, immutable string value) {
         return fmt;
 }
 
-static immutable string[] PropertyMemberKind_ReadCode = 
+static immutable string[] PropertyMemberKind_ReadCode =
     [
         "entity.%s",
         "entity.%s()",
@@ -1036,7 +1045,7 @@ string getPropertyEmbeddedEntityName(T : Object, string m)() {
         static if (isImplicitlyConvertible!(ti, Object)) {
             static assert(hasAnnotation!(ti, Embeddable), "@Embedded property class should have @Embeddable annotation");
             return getEntityName!ti;
-        } else 
+        } else
             static assert(false, "@Embedded property can be only class with @Embeddable annotation");
     }
 }
@@ -1167,7 +1176,7 @@ template isValidSetter(T : Object, string m, ParamType) {
                 ParameterTypeTuple!(typeof(__traits(getMember, T, m))).length == 1 &&
                 is(ParameterTypeTuple!(typeof(__traits(getMember, T, m)))[0] == ParamType);
     } else {
-        enum bool isValidSetter = false; 
+        enum bool isValidSetter = false;
     }
 }
 
@@ -1183,25 +1192,25 @@ template isValidGetter(T : Object, string m) {
             static if (ParameterTypeTuple!(typeof(__traits(getMember, T, m))).length == 0) {
                 // has paired setter function of the same type
                 static if (isValidSetter!(T, getterNameToSetterName(m), rti)) {
-                    enum bool isValidGetter = true; 
+                    enum bool isValidGetter = true;
                 } else {
                     enum bool isValidGetter = false;
                 }
             }
         } else {
-            enum bool isValidGetter = false; 
+            enum bool isValidGetter = false;
         }
     } else {
-        enum bool isValidGetter = false; 
+        enum bool isValidGetter = false;
     }
 }
 
 template isValidGetterWithAnnotation(T : Object, string m) {
     // it's public member with get or is prefix
     static if (isValidGetter!(T, m)) {
-        enum bool isValidGetterWithAnnotation = hasHibernatedPropertyAnnotation!(T,m); 
+        enum bool isValidGetterWithAnnotation = hasHibernatedPropertyAnnotation!(T,m);
     } else {
-        enum bool isValidGetterWithAnnotation = false; 
+        enum bool isValidGetterWithAnnotation = false;
     }
 }
 
@@ -1417,7 +1426,7 @@ string getPropertyEmbeddedClassName(T : Object, string m)() {
         static if (isImplicitlyConvertible!(ti, Object)) {
             static assert(hasAnnotation!(ti, Embeddable), "@Embedded property class should have @Embeddable annotation");
             return fullyQualifiedName!ti;
-        } else 
+        } else
             static assert(false, "@Embedded property can be only class with @Embeddable annotation");
     }
 }
@@ -1467,7 +1476,7 @@ enum PropertyMemberType : int {
 
 template isSupportedSimpleType(T, string m) {
     alias ti = typeof(__traits(getMember, T, m));
-    
+
     static if (is(ti == function)) {
         static if (is(ReturnType!(ti) == bool)) {
             enum bool isSupportedSimpleType = true;
@@ -1743,7 +1752,7 @@ string getPropertyReadCode(T, string m)() {
     return substituteParam(PropertyMemberKind_ReadCode[getPropertyMemberKind!(T,m)()], m);
 }
 
-static immutable bool[] ColumnTypeCanHoldNulls = 
+static immutable bool[] ColumnTypeCanHoldNulls =
     [
      false, //BOOL_TYPE     // bool
      false, //BYTE_TYPE,    // byte
@@ -1783,7 +1792,7 @@ bool isColumnTypeNullableByDefault(T, string m)() {
 }
 
 
-static immutable string[] ColumnTypeKeyIsSetCode = 
+static immutable string[] ColumnTypeKeyIsSetCode =
     [
      "(%s != 0)", //BOOL_TYPE     // bool
      "(%s != 0)", //BYTE_TYPE,    // byte
@@ -1822,7 +1831,7 @@ string getColumnTypeKeyIsSetCode(T, string m)() {
     return substituteParam(ColumnTypeKeyIsSetCode[getPropertyMemberType!(T,m)()], getPropertyReadCode!(T,m)());
 }
 
-static immutable string[] ColumnTypeIsNullCode = 
+static immutable string[] ColumnTypeIsNullCode =
     [
      "(false)", //BOOL_TYPE     // bool
      "(false)", //BYTE_TYPE,    // byte
@@ -1861,7 +1870,7 @@ string getColumnTypeIsNullCode(T, string m)() {
     return substituteParam(ColumnTypeIsNullCode[getPropertyMemberType!(T,m)()], getPropertyReadCode!(T,m)());
 }
 
-static immutable string[] ColumnTypeSetNullCode = 
+static immutable string[] ColumnTypeSetNullCode =
     [
      "bool nv;", // BOOL_TYPE   // bool
      "byte nv = 0;", //BYTE_TYPE,    // byte
@@ -1899,7 +1908,7 @@ static immutable string[] ColumnTypeSetNullCode =
 /*
  * Due to to change in dmd [issue #72] "Implicit conversion with alias Nullable.get this will be removed after 2.096", nullable types (except string) have to make call to .get
 */
-static immutable string[] ColumnTypePropertyToVariant = 
+static immutable string[] ColumnTypePropertyToVariant =
     [
      "Variant(%s)", //BOOL_TYPE     // bool
      "Variant(%s)", //BYTE_TYPE,    // byte
@@ -1989,7 +1998,7 @@ string getPropertyVariantReadCode(T, string m)() {
 }
 
 
-static immutable string[] ColumnTypeConstructorCode = 
+static immutable string[] ColumnTypeConstructorCode =
     [
      "new BooleanType()", // BOOL_TYPE, bool
      "new NumberType(2, false, SqlType.TINYINT)", //BYTE_TYPE,    // byte
@@ -2033,7 +2042,7 @@ string getColumnTypeName(T, string m, int length)() {
     }
 }
 
-static immutable string[] ColumnTypeDatasetReaderCode = 
+static immutable string[] ColumnTypeDatasetReaderCode =
     [
      "r.getBoolean(index)", //BOOL_TYPE,    // bool
      "r.getByte(index)", //BYTE_TYPE,    // byte
@@ -2075,7 +2084,7 @@ string getColumnTypeDatasetReadCode(T, string m)() {
 /*
  * Due to to change in dmd [issue #72] "Implicit conversion with alias Nullable.get this will be removed after 2.096", nullable types (except string) have to make call to .get
 */
-static immutable string[] ColumnTypeVariantReadCode = 
+static immutable string[] ColumnTypeVariantReadCode =
     [
      "(value == null ? nv : value.get!(bool))", //BOOL_TYPE,    // bool
      "(value == null ? nv : (value.convertsTo!(byte) ? value.get!(byte) : (value.convertsTo!(long) ? to!byte(value.get!(long)) : to!byte((value.get!(ulong))))))", //BYTE_TYPE,    // byte
@@ -2113,7 +2122,7 @@ static immutable string[] ColumnTypeVariantReadCode =
 /*
  * Due to to change in dmd [issue #72] "Implicit conversion with alias Nullable.get this will be removed after 2.096", nullable types (except string) have to make call to .get
 */
-static immutable string[] DatasetWriteCode = 
+static immutable string[] DatasetWriteCode =
     [
      "r.setBoolean(index, %s);", //BOOL_TYPE,    // bool
      "r.setByte(index, %s);", //BYTE_TYPE,    // byte
@@ -2289,43 +2298,43 @@ string getOneToOnePropertyDef(T, immutable string m)() {
     //  pragma(msg, "variant get: " ~ propertyVariantGetCode);
     immutable string readerFuncDef = "null";
     immutable string writerFuncDef = "null";
-    immutable string getVariantFuncDef = 
+    immutable string getVariantFuncDef =
         "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ propertyVariantGetCode ~ "; \n" ~
             " }\n";
-    immutable string setVariantFuncDef = 
+    immutable string setVariantFuncDef =
         "\n" ~
-            "function(Object obj, Variant value) { \n" ~ 
+            "function(Object obj, Variant value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyVariantSetCode ~ "\n" ~
             " }\n";
     immutable string keyIsSetFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    return false;\n" ~
             " }\n";
     immutable string isNullFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ isNullCode ~ ";\n" ~
             " }\n";
-    immutable string getObjectFuncDef = 
+    immutable string getObjectFuncDef =
         "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    assert(entity !is null);\n" ~
             "    return " ~ propertyObjectGetCode ~ "; \n" ~
             " }\n";
-    immutable string setObjectFuncDef = 
+    immutable string setObjectFuncDef =
         "\n" ~
-            "function(Object obj, Object value) { \n" ~ 
+            "function(Object obj, Object value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyObjectSetCode ~ "\n" ~
             " }\n";
-    immutable string copyFuncDef = 
+    immutable string copyFuncDef =
         "\n" ~
-            "function(Object to, Object from) { \n" ~ 
+            "function(Object to, Object from) { \n" ~
             "    " ~ entityClassName ~ " toentity = cast(" ~ entityClassName ~ ")to; \n" ~
             "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
             "    " ~ copyFieldCode ~ "\n" ~
@@ -2334,30 +2343,30 @@ string getOneToOnePropertyDef(T, immutable string m)() {
     immutable string setCollectionFuncDef = "null";
     immutable string setObjectDelegateFuncDef = !isLazy ? "null" :
             "\n" ~
-            "function(Object obj, Object delegate() loader) { \n" ~ 
+            "function(Object obj, Object delegate() loader) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ getLazyPropertyObjectWriteCode!(T,m) ~ "\n" ~
             " }\n";
     immutable string setCollectionDelegateFuncDef = "null";
-    immutable string isLoadedFuncDef = !isLazy ? "null" : 
+    immutable string isLoadedFuncDef = !isLazy ? "null" :
             "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ getLazyPropertyLoadedCode!(T,m) ~ ";\n" ~
             " }\n";
-    
+
     return "    new PropertyInfo(" ~
-            quoteString(propertyName) ~ ", " ~ 
-            quoteString(columnName) ~ ", " ~ 
-            typeName ~ ", " ~ 
-            format("%s",length) ~ ", " ~ 
+            quoteString(propertyName) ~ ", " ~
+            quoteString(columnName) ~ ", " ~
+            typeName ~ ", " ~
+            format("%s",length) ~ ", " ~
             "false, " ~ // id
             "false, " ~ // generated
-            quoteBool(nullable) ~ ", " ~ 
+            quoteBool(nullable) ~ ", " ~
             unique ~ ", " ~
             "RelationType.OneToOne, " ~
-            quoteString(referencedEntityName)  ~ ", " ~ 
-            quoteString(referencedPropertyName)  ~ ", " ~ 
+            quoteString(referencedEntityName)  ~ ", " ~
+            quoteString(referencedPropertyName)  ~ ", " ~
             readerFuncDef ~ ", " ~
             writerFuncDef ~ ", " ~
             getVariantFuncDef ~ ", " ~
@@ -2412,30 +2421,30 @@ string getManyToOnePropertyDef(T, immutable string m)() {
     //  pragma(msg, "variant get: " ~ propertyVariantGetCode);
     immutable string readerFuncDef = "null";
     immutable string writerFuncDef = "null";
-    immutable string getVariantFuncDef = 
+    immutable string getVariantFuncDef =
         "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ propertyVariantGetCode ~ "; \n" ~
             " }\n";
-    immutable string setVariantFuncDef = 
+    immutable string setVariantFuncDef =
         "\n" ~
-            "function(Object obj, Variant value) { \n" ~ 
+            "function(Object obj, Variant value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyVariantSetCode ~ "\n" ~
             " }\n";
     immutable string keyIsSetFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    return false;\n" ~
             " }\n";
     immutable string isNullFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ isNullCode ~ ";\n" ~
             " }\n";
-    immutable string getObjectFuncDef = 
+    immutable string getObjectFuncDef =
         "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    //writeln(\"Inside getObjectFunc\"); \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    assert(entity !is null);\n" ~
@@ -2443,15 +2452,15 @@ string getManyToOnePropertyDef(T, immutable string m)() {
             "    //writeln(res is null ? \"obj is null\" : \"obj is not null\"); \n" ~
             "    return res; \n" ~
             " }\n";
-    immutable string setObjectFuncDef = 
+    immutable string setObjectFuncDef =
         "\n" ~
-            "function(Object obj, Object value) { \n" ~ 
+            "function(Object obj, Object value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyObjectSetCode ~ "\n" ~
             " }\n";
-    immutable string copyFuncDef = 
+    immutable string copyFuncDef =
         "\n" ~
-            "function(Object to, Object from) { \n" ~ 
+            "function(Object to, Object from) { \n" ~
             "    " ~ entityClassName ~ " toentity = cast(" ~ entityClassName ~ ")to; \n" ~
             "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
             "    " ~ copyFieldCode ~ "\n" ~
@@ -2460,30 +2469,30 @@ string getManyToOnePropertyDef(T, immutable string m)() {
     immutable string setCollectionFuncDef = "null";
     immutable string setObjectDelegateFuncDef = !isLazy ? "null" :
         "\n" ~
-        "function(Object obj, Object delegate() loader) { \n" ~ 
+        "function(Object obj, Object delegate() loader) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ getLazyPropertyObjectWriteCode!(T,m) ~ "\n" ~
             " }\n";
     immutable string setCollectionDelegateFuncDef = "null";
-    immutable string isLoadedFuncDef = !isLazy ? "null" : 
+    immutable string isLoadedFuncDef = !isLazy ? "null" :
     "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ getLazyPropertyLoadedCode!(T,m) ~ ";\n" ~
             " }\n";
 
     return "    new PropertyInfo(" ~
-            quoteString(propertyName) ~ ", " ~ 
-            quoteString(columnName) ~ ", " ~ 
-            typeName ~ ", " ~ 
-            format("%s",length) ~ ", " ~ 
+            quoteString(propertyName) ~ ", " ~
+            quoteString(columnName) ~ ", " ~
+            typeName ~ ", " ~
+            format("%s",length) ~ ", " ~
             "false, " ~ // id
             "false, " ~ // generated
-            quoteBool(nullable) ~ ", " ~ 
+            quoteBool(nullable) ~ ", " ~
             unique ~ ", " ~
             "RelationType.ManyToOne, " ~
-            quoteString(referencedEntityName)  ~ ", " ~ 
-            quoteString(referencedPropertyName)  ~ ", " ~ 
+            quoteString(referencedEntityName)  ~ ", " ~
+            quoteString(referencedPropertyName)  ~ ", " ~
             readerFuncDef ~ ", " ~
             writerFuncDef ~ ", " ~
             getVariantFuncDef ~ ", " ~
@@ -2543,75 +2552,75 @@ string getOneToManyPropertyDef(T, immutable string m)() {
     //  pragma(msg, "variant get: " ~ propertyVariantGetCode);
     immutable string readerFuncDef = "null";
     immutable string writerFuncDef = "null";
-    immutable string getVariantFuncDef = 
+    immutable string getVariantFuncDef =
         "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ propertyVariantGetCode ~ "; \n" ~
             " }\n";
-    immutable string setVariantFuncDef = 
+    immutable string setVariantFuncDef =
         "\n" ~
-            "function(Object obj, Variant value) { \n" ~ 
+            "function(Object obj, Variant value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyVariantSetCode ~ "\n" ~
             " }\n";
     immutable string keyIsSetFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    return false;\n" ~
             " }\n";
     immutable string isNullFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ isNullCode ~ ";\n" ~
             " }\n";
     immutable string getObjectFuncDef = "null";
     immutable string setObjectFuncDef = "null";
-    immutable string copyFuncDef = 
+    immutable string copyFuncDef =
         "\n" ~
-            "function(Object to, Object from) { \n" ~ 
+            "function(Object to, Object from) { \n" ~
             "    " ~ entityClassName ~ " toentity = cast(" ~ entityClassName ~ ")to; \n" ~
             "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
             "    " ~ copyFieldCode ~ "\n" ~
             " }\n";
-    immutable string getCollectionFuncDef = 
+    immutable string getCollectionFuncDef =
         "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    assert(entity !is null);\n" ~
             "    return cast(Object[])" ~ propertyObjectGetCode ~ "; \n" ~
             " }\n";
-    immutable string setCollectionFuncDef = 
+    immutable string setCollectionFuncDef =
         "\n" ~
-        "function(Object obj, Object[] value) { \n" ~ 
+        "function(Object obj, Object[] value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyObjectSetCode ~ "\n" ~
             " }\n";
     immutable string setObjectDelegateFuncDef = "null";
     immutable string setCollectionDelegateFuncDef = !isLazy ? "null" :
     "\n" ~
-        "function(Object obj, Object[] delegate() loader) { \n" ~ 
+        "function(Object obj, Object[] delegate() loader) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ getLazyPropertyObjectWriteCode!(T,m) ~ "\n" ~
             " }\n";
-    immutable string isLoadedFuncDef = !isLazy ? "null" : 
+    immutable string isLoadedFuncDef = !isLazy ? "null" :
     "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ getLazyPropertyLoadedCode!(T,m) ~ ";\n" ~
             " }\n";
 
     return "    new PropertyInfo(" ~
-            quoteString(propertyName) ~ ", " ~ 
-            quoteString(columnName) ~ ", " ~ 
-            typeName ~ ", " ~ 
-            format("%s",length) ~ ", " ~ 
+            quoteString(propertyName) ~ ", " ~
+            quoteString(columnName) ~ ", " ~
+            typeName ~ ", " ~
+            format("%s",length) ~ ", " ~
             "false"  ~ ", " ~ // id
             "false"  ~ ", " ~ // generated
-            quoteBool(nullable) ~ ", " ~ 
+            quoteBool(nullable) ~ ", " ~
             unique ~ ", " ~
             "RelationType.OneToMany, " ~
-            quoteString(referencedEntityName)  ~ ", " ~ 
-            quoteString(referencedPropertyName)  ~ ", " ~ 
+            quoteString(referencedEntityName)  ~ ", " ~
+            quoteString(referencedPropertyName)  ~ ", " ~
             readerFuncDef ~ ", " ~
             writerFuncDef ~ ", " ~
             getVariantFuncDef ~ ", " ~
@@ -2670,74 +2679,74 @@ string getManyToManyPropertyDef(T, immutable string m)() {
     immutable string copyFieldCode = getPropertyCopyCode!(T,m);
     immutable string readerFuncDef = "null";
     immutable string writerFuncDef = "null";
-    immutable string getVariantFuncDef = 
+    immutable string getVariantFuncDef =
         "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ propertyVariantGetCode ~ "; \n" ~
             " }\n";
-    immutable string setVariantFuncDef = 
+    immutable string setVariantFuncDef =
         "\n" ~
-            "function(Object obj, Variant value) { \n" ~ 
+            "function(Object obj, Variant value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyVariantSetCode ~ "\n" ~
             " }\n";
     immutable string keyIsSetFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    return false;\n" ~
             " }\n";
     immutable string isNullFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ isNullCode ~ ";\n" ~
             " }\n";
     immutable string getObjectFuncDef = "null";
     immutable string setObjectFuncDef = "null";
-    immutable string copyFuncDef = 
+    immutable string copyFuncDef =
         "\n" ~
-            "function(Object to, Object from) { \n" ~ 
+            "function(Object to, Object from) { \n" ~
             "    " ~ entityClassName ~ " toentity = cast(" ~ entityClassName ~ ")to; \n" ~
             "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
             "    " ~ copyFieldCode ~ "\n" ~
             " }\n";
-    immutable string getCollectionFuncDef = 
+    immutable string getCollectionFuncDef =
         "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    assert(entity !is null);\n" ~
             "    return cast(Object[])" ~ propertyObjectGetCode ~ "; \n" ~
             " }\n";
-    immutable string setCollectionFuncDef = 
+    immutable string setCollectionFuncDef =
         "\n" ~
-            "function(Object obj, Object[] value) { \n" ~ 
+            "function(Object obj, Object[] value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyObjectSetCode ~ "\n" ~
             " }\n";
     immutable string setObjectDelegateFuncDef = "null";
     immutable string setCollectionDelegateFuncDef = !isLazy ? "null" :
     "\n" ~
-        "function(Object obj, Object[] delegate() loader) { \n" ~ 
+        "function(Object obj, Object[] delegate() loader) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ getLazyPropertyObjectWriteCode!(T,m) ~ "\n" ~
             " }\n";
-    immutable string isLoadedFuncDef = !isLazy ? "null" : 
+    immutable string isLoadedFuncDef = !isLazy ? "null" :
     "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ getLazyPropertyLoadedCode!(T,m) ~ ";\n" ~
             " }\n";
 
     return "    new PropertyInfo(" ~
-            quoteString(propertyName) ~ ", " ~ 
-            quoteString(columnName) ~ ", " ~ 
-            typeName ~ ", " ~ 
-            format("%s",length) ~ ", " ~ 
+            quoteString(propertyName) ~ ", " ~
+            quoteString(columnName) ~ ", " ~
+            typeName ~ ", " ~
+            format("%s",length) ~ ", " ~
             "false"  ~ ", " ~ // id
             "false"  ~ ", " ~ // generated
-            quoteBool(nullable) ~ ", " ~ 
+            quoteBool(nullable) ~ ", " ~
             unique ~ ", " ~
             "RelationType.ManyToMany, " ~
-            quoteString(referencedEntityName)  ~ ", " ~ 
+            quoteString(referencedEntityName)  ~ ", " ~
             "null, " ~ //referencedPropertyName
             readerFuncDef ~ ", " ~
             writerFuncDef ~ ", " ~
@@ -2784,6 +2793,10 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
     immutable string propertyName = getPropertyName!(T,m);
     static assert (propertyName != null, "Cannot determine property name for member " ~ m ~ " of type " ~ T.stringof);
     static assert (!hasOneOfMemberAnnotations!(T, m, Column, Id, Generated, Generator, ManyToOne, ManyToMany, OneToOne), entityClassName ~ "." ~ propertyName ~ ": Embedded property cannot have Column, Id, Generated, OneToOne, ManyToOne, ManyToMany annotation");
+    // Naming the property "id" implies that it is `@EmbeddedId`.
+    immutable bool isIdPropertyName = propertyName == "id";
+    immutable bool hasKeyAnnotation = hasMemberAnnotation!(T, m, EmbeddedId);
+    immutable bool isId = hasKeyAnnotation || isIdPropertyName;
     // While embedded properties have no column themselves, they can have a prefix for embedded properties.
     immutable string columnName = getEmbeddedPropertyColumnPrefix!(T, m);  // getColumnName!(T, m);
     immutable length = getColumnLength!(T, m);
@@ -2800,7 +2813,8 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
     immutable string propertyVariantGetCode = "Variant(" ~ propertyReadCode ~ " is null ? null : " ~ propertyReadCode ~ ")"; //getPropertyVariantReadCode!(T,m)();
     immutable string propertyObjectSetCode = getPropertyObjectWriteCode!(T,m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
     immutable string propertyObjectGetCode = propertyReadCode; //getPropertyVariantReadCode!(T,m)();
-    immutable string keyIsSetCode = null; //getColumnTypeKeyIsSetCode!(T,m)();
+    // As a class, checking if not null is enough to determine if a key is set.
+    immutable string keyIsSetCode = "(" ~ propertyReadCode ~ " !is null)";// null; //getColumnTypeKeyIsSetCode!(T,m)();
     immutable string isNullCode = propertyReadCode ~ " is null";
     immutable string copyFieldCode = getPropertyCopyCode!(T,m);
     //  pragma(msg, "property read: " ~ propertyReadCode);
@@ -2808,59 +2822,60 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
     //  pragma(msg, "variant get: " ~ propertyVariantGetCode);
     immutable string readerFuncDef = "null";
     immutable string writerFuncDef = "null";
-    immutable string getVariantFuncDef = 
+    immutable string getVariantFuncDef =
         "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ propertyVariantGetCode ~ "; \n" ~
             " }\n";
-    immutable string setVariantFuncDef = 
+    immutable string setVariantFuncDef =
         "\n" ~
-        "function(Object obj, Variant value) { \n" ~ 
+        "function(Object obj, Variant value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyVariantSetCode ~ "\n" ~
             " }\n";
     immutable string keyIsSetFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
-            "    return false;\n" ~
+        "function(Object obj) { \n" ~
+            "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
+            "    return " ~ keyIsSetCode ~ ";\n" ~
             " }\n";
     immutable string isNullFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ isNullCode ~ ";\n" ~
             " }\n";
-    immutable string getObjectFuncDef = 
+    immutable string getObjectFuncDef =
         "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    assert(entity !is null);\n" ~
             "    return " ~ propertyObjectGetCode ~ "; \n" ~
             " }\n";
-    immutable string setObjectFuncDef = 
+    immutable string setObjectFuncDef =
         "\n" ~
-            "function(Object obj, Object value) { \n" ~ 
+            "function(Object obj, Object value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyObjectSetCode ~ "\n" ~
             " }\n";
-    immutable string copyFuncDef = 
+    immutable string copyFuncDef =
         "\n" ~
-            "function(Object to, Object from) { \n" ~ 
+            "function(Object to, Object from) { \n" ~
             "    " ~ entityClassName ~ " toentity = cast(" ~ entityClassName ~ ")to; \n" ~
             "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
             "    " ~ copyFieldCode ~ "\n" ~
             " }\n";
-    
-    return "    new PropertyInfo(" ~ 
-            quoteString(propertyName) ~ ", " ~ 
-            quoteString(columnName) ~ ", " ~ 
-            typeName ~ ", " ~ 
-            format("%s",length) ~ ", " ~ 
-            "false, " ~ // id
+
+    return "    new PropertyInfo(" ~
+            quoteString(propertyName) ~ ", " ~
+            quoteString(columnName) ~ ", " ~
+            typeName ~ ", " ~
+            format("%s",length) ~ ", " ~
+            quoteBool(isId) ~ ", " ~ // id
             "false, " ~ // generated
-            quoteBool(nullable) ~ ", " ~ 
+            quoteBool(nullable) ~ ", " ~
             unique ~ ", " ~
             "RelationType.Embedded, " ~
-            quoteString(referencedEntityName)  ~ ", " ~ 
+            quoteString(referencedEntityName)  ~ ", " ~
             "null, \n" ~
             readerFuncDef ~ ", " ~
             writerFuncDef ~ ", " ~
@@ -2871,7 +2886,7 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
             copyFuncDef ~ ", " ~
             "null, " ~ // generatorFunc
             getObjectFuncDef ~ ", " ~
-            setObjectFuncDef ~ 
+            setObjectFuncDef ~
             ")";
 }
 
@@ -2907,60 +2922,60 @@ string getSimplePropertyDef(T, immutable string m)() {
     immutable string isNullCode = getColumnTypeIsNullCode!(T,m);
     immutable string copyFieldCode = getPropertyCopyCode!(T,m);
     immutable string readerFuncDef = "\n" ~
-        "function(Object obj, DataSetReader r, int index) { \n" ~ 
+        "function(Object obj, DataSetReader r, int index) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyWriteCode ~ " \n" ~
             " }\n";
     immutable string writerFuncDef = "\n" ~
-        "function(Object obj, DataSetWriter r, int index) { \n" ~ 
+        "function(Object obj, DataSetWriter r, int index) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ datasetWriteCode ~ " \n" ~
             " }\n";
     immutable string getVariantFuncDef = "\n" ~
-        "function(Object obj) { \n" ~ 
+        "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ propertyVariantGetCode ~ "; \n" ~
             " }\n";
     immutable string setVariantFuncDef = "\n" ~
-        "function(Object obj, Variant value) { \n" ~ 
+        "function(Object obj, Variant value) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyVariantSetCode ~ "\n" ~
             " }\n";
     immutable string keyIsSetFuncDef = "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ keyIsSetCode ~ ";\n" ~
             " }\n";
     immutable string isNullFuncDef = "\n" ~
-            "function(Object obj) { \n" ~ 
+            "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    return " ~ isNullCode ~ ";\n" ~
             " }\n";
-    immutable string copyFuncDef = 
+    immutable string copyFuncDef =
             "\n" ~
-            "function(Object to, Object from) { \n" ~ 
+            "function(Object to, Object from) { \n" ~
             "    " ~ entityClassName ~ " toentity = cast(" ~ entityClassName ~ ")to; \n" ~
             "    " ~ entityClassName ~ " fromentity = cast(" ~ entityClassName ~ ")from; \n" ~
             "    " ~ copyFieldCode ~ "\n" ~
             " }\n";
     immutable string generatorFuncDef = generatorCode is null ? "null" :
             "\n" ~
-            "function(Connection conn, const PropertyInfo property) { \n" ~ 
+            "function(Connection conn, const PropertyInfo property) { \n" ~
             "    return Variant(" ~ generatorCode ~ ");\n" ~
             "}\n";
 
     static assert (typeName != null, "Cannot determine column type for member " ~ m ~ " of type " ~ T.stringof);
-    return "    new PropertyInfo(" ~ 
+    return "    new PropertyInfo(" ~
             quoteString(propertyName) ~ ", " ~
-            quoteString(columnName) ~ ", " ~ 
-            typeName ~ ", " ~ 
-            format("%s",length) ~ ", " ~ 
-            quoteBool(isId)  ~ ", " ~ 
-            quoteBool(isGenerated)  ~ ", " ~ 
-            quoteBool(nullable) ~ ", " ~ 
+            quoteString(columnName) ~ ", " ~
+            typeName ~ ", " ~
+            format("%s",length) ~ ", " ~
+            quoteBool(isId)  ~ ", " ~
+            quoteBool(isGenerated)  ~ ", " ~
+            quoteBool(nullable) ~ ", " ~
             unique ~ ", " ~
-            "RelationType.None, " ~ 
-            "null, " ~ 
+            "RelationType.None, " ~
+            "null, " ~
             "null, \n" ~
             readerFuncDef ~ ", " ~
             writerFuncDef ~ ", " ~
@@ -3057,7 +3072,7 @@ string getEntityDef(T)() {
                 immutable bool isMainProp = isMainMemberForProperty!(T,m) && !hasMemberAnnotation!(T, m, Transient);
                 //pragma( msg, entityName ~ ":" ~ tableName ~ "." ~ m ~ ": typeSupported: " ~ (typeSupported ? "true" : "false") ~ " isMainProp: " ~ (isMainProp ? "true" : "false") )
                 static if (typeSupported && isMainProp) {
-                    
+
                     immutable string propertyDef = getPropertyDef!(T, m)();
                     //pragma(msg, propertyDef);
 
@@ -3159,7 +3174,7 @@ string entityListDef(T ...)() {
             }
         }
     }
-    string code = 
+    string code =
         "shared static this() {\n" ~
         imp ~ // imports
         "    //writeln(\"starting static initializer\");\n" ~
@@ -3250,7 +3265,7 @@ abstract class SchemaInfo : EntityMetaData {
         }
         return query;
     }
-    
+
     override public string getAllFieldList(Dialect dialect, const EntityInfo ei, bool exceptKey = false, string columnPrefix="") const {
         string query;
         foreach(pi; ei) {
@@ -3272,7 +3287,7 @@ abstract class SchemaInfo : EntityMetaData {
         }
         return query;
     }
-    
+
     override public int getFieldCount(const EntityInfo ei, bool exceptKey) const {
         int count = 0;
         foreach(pi; ei) {
@@ -3294,7 +3309,7 @@ abstract class SchemaInfo : EntityMetaData {
         }
         return count;
     }
-    
+
     public string getAllFieldPlaceholderList(const EntityInfo ei, bool exceptKey = false) const {
         string query;
         foreach(pi; ei) {
@@ -3316,7 +3331,7 @@ abstract class SchemaInfo : EntityMetaData {
         }
         return query;
     }
-    
+
     override public string getAllFieldList(Dialect dialect, string entityName, bool exceptKey) const {
         return getAllFieldList(dialect, findEntity(entityName), exceptKey);
     }
@@ -3412,8 +3427,26 @@ abstract class SchemaInfo : EntityMetaData {
         return "INSERT INTO " ~ dialect.quoteIfNeeded(ei.tableName) ~ "(" ~ getAllFieldList(dialect, ei, true) ~ ") VALUES (" ~ getAllFieldPlaceholderList(ei, true) ~ ")";
     }
 
+    /// Generates an update query for a dialect-specific PreparedStatement.
     override public string generateUpdateForEntity(Dialect dialect, const EntityInfo ei) const {
-        return "UPDATE " ~ dialect.quoteIfNeeded(ei.tableName) ~ " SET " ~ getAllFieldListForUpdate(dialect, ei, true) ~ " WHERE " ~ dialect.quoteIfNeeded(ei.getKeyProperty().columnName) ~ "=?";
+        string query = "UPDATE " ~ dialect.quoteIfNeeded(ei.tableName)
+                ~ " SET " ~ getAllFieldListForUpdate(dialect, ei, true)
+                ~ " WHERE ";
+        if (ei.getKeyProperty().relation == RelationType.Embedded) {
+            auto embeddedEntityInfo = ei.getKeyProperty().referencedEntity;
+            bool isFirst = true;
+            foreach (propertyInfo; embeddedEntityInfo) {
+                if (isFirst) {
+                    isFirst = false;
+                } else {
+                    query ~= " AND ";
+                }
+                query ~= dialect.quoteIfNeeded(propertyInfo.columnName) ~ "=?";
+            }
+        } else {
+            query ~= dialect.quoteIfNeeded(ei.getKeyProperty().columnName) ~ "=?";
+        }
+        return query;
     }
 
     override public string generateFindByPkForEntity(Dialect dialect, string entityName) const {
@@ -3440,33 +3473,33 @@ class SchemaInfoImpl(T...) : SchemaInfo {
     override public const(EntityInfo[string]) getEntityMap() const  { return entityMap; }
     override public const(EntityInfo [TypeInfo_Class]) getClassMap() const  { return classMap; }
 
-    override int opApply(int delegate(ref const EntityInfo) dg) const { 
-        int result = 0; 
-        for (int i = 0; i < entities.length; i++) { 
-            result = dg(entities[i]); 
-            if (result) break; 
-        } 
-        return result; 
+    override int opApply(int delegate(ref const EntityInfo) dg) const {
+        int result = 0;
+        for (int i = 0; i < entities.length; i++) {
+            result = dg(entities[i]);
+            if (result) break;
+        }
+        return result;
     }
 
     override public const(EntityInfo) findEntity(string entityName) const  {
         enforceHelper!MappingException((entityName in entityMap) !is null, "Cannot find entity by name " ~ entityName);
-        return entityMap[entityName]; 
+        return entityMap[entityName];
     }
 
-    override public const(EntityInfo) findEntity(TypeInfo_Class entityClass) const { 
+    override public const(EntityInfo) findEntity(TypeInfo_Class entityClass) const {
         enforceHelper!MappingException((entityClass in classMap) !is null, "Cannot find entity by class " ~ entityClass.toString());
-        return classMap[entityClass]; 
+        return classMap[entityClass];
     }
 
-    override public const(EntityInfo) getEntity(int entityIndex) const { 
+    override public const(EntityInfo) getEntity(int entityIndex) const {
         enforceHelper!MappingException(entityIndex >= 0 && entityIndex < entities.length, "Invalid entity index " ~ to!string(entityIndex));
-        return entities[entityIndex]; 
+        return entities[entityIndex];
     }
 
-    override public Object createEntity(string entityName) const { 
+    override public Object createEntity(string entityName) const {
         enforceHelper!MappingException((entityName in entityMap) !is null, "Cannot find entity by name " ~ entityName);
-        return entityMap[entityName].createEntity(); 
+        return entityMap[entityName].createEntity();
     }
 
     override public const(EntityInfo) findEntityForObject(Object obj) const {
@@ -3829,7 +3862,7 @@ class ColumnInfo {
         this.table = table;
         this.property = null;
         this.columnName = columnName;
-        this.columnDefinition = table.schema.dialect.quoteIfNeeded(columnName) ~ " " ~ 
+        this.columnDefinition = table.schema.dialect.quoteIfNeeded(columnName) ~ " " ~
                 table.schema.dialect.getColumnTypeDefinition(null, referencedEntity.getKeyProperty());
     }
     this(TableInfo table, const PropertyInfo property, string columnPrefix="") {
@@ -3872,7 +3905,7 @@ class IndexInfo {
                 return [table.schema.dialect.getDropIndexSQL(table.tableName, indexName)];
             case IndexType.ForeignKey:
             case IndexType.UniqueForeignKey:
-                return [table.schema.dialect.getDropForeignKeySQL(table.tableName, indexName), 
+                return [table.schema.dialect.getDropForeignKeySQL(table.tableName, indexName),
                         table.schema.dialect.getDropIndexSQL(table.tableName, indexName)];
         }
     }
@@ -3885,7 +3918,7 @@ class IndexInfo {
             case IndexType.ForeignKey:
                 return [table.schema.dialect.getForeignKeySQL(table.tableName, indexName, columnNames, referencedTable, referencedColumnNames)];
             case IndexType.UniqueForeignKey:
-                return [table.schema.dialect.getUniqueIndexSQL(table.tableName, indexName, columnNames), 
+                return [table.schema.dialect.getUniqueIndexSQL(table.tableName, indexName, columnNames),
                         table.schema.dialect.getForeignKeySQL(table.tableName, indexName, columnNames, referencedTable, referencedColumnNames)];
         }
     }
@@ -3896,30 +3929,30 @@ unittest {
     @Entity
     @Table("users")
     static class User {
-        
+
         //@Id @Generated
         @Column("id_column")
         int id;
-        
+
         @Column("name_column")
         string name;
-        
+
         // no column name
         //@Column
         string flags;
-        
+
         // annotated getter
         private string login;
         //@Column
         public string getLogin() { return login; }
         public void setLogin(string login) { this.login = login; }
-        
+
         // no (), no column name
         //@Column
         int testColumn;
     }
-    
-    
+
+
     @Entity
     @Table("customer")
     static class Customer {

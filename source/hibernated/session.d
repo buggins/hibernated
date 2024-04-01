@@ -534,10 +534,34 @@ class SessionImpl : Session {
 
     /// Read the persistent state associated with the given identifier into the given transient instance
     Object getObject(const EntityInfo info, Object obj, Variant id) {
-        string hql = "FROM " ~ info.name ~ " WHERE " ~ info.getKeyProperty().propertyName ~ "=:Id";
-        Query q = createQuery(hql).setParameter("Id", id);
-        Object res = q.uniqueResult(obj);
-        return res;
+        import std.logger : logInfo = info;
+        if (info.getKeyProperty().relation == RelationType.Embedded) {
+            auto embeddedEntityInfo = info.getKeyProperty().referencedEntity;
+            string hql = "FROM " ~ info.name ~ " WHERE ";
+            bool isFirst = true;
+            foreach (propertyInfo; embeddedEntityInfo) {
+                if (isFirst) {
+                    isFirst = false;
+                } else {
+                    hql ~= " AND ";
+                }
+                hql ~= info.getKeyProperty().propertyName ~ "." ~ propertyInfo.propertyName ~ "=:" ~ propertyInfo.propertyName;
+            }
+            logInfo("hql=", hql);
+            Query q = createQuery(hql);
+            foreach (propertyInfo; embeddedEntityInfo) {
+                q = q.setParameter(
+                        propertyInfo.propertyName,
+                        embeddedEntityInfo.getPropertyValue(id.get!Object, propertyInfo.propertyName));
+            }
+            Object res = q.uniqueResult(obj);
+            return res;
+        } else {
+            string hql = "FROM " ~ info.name ~ " WHERE " ~ info.getKeyProperty().propertyName ~ "=:Id";
+            Query q = createQuery(hql).setParameter("Id", id);
+            Object res = q.uniqueResult(obj);
+            return res;
+        }
     }
 
     /// Read entities referenced by property
@@ -725,15 +749,21 @@ class SessionImpl : Session {
     }
 
     override void update(Object obj) {
+        import std.logger : logInfo = info;
         auto info = metaData.findEntityForObject(obj);
         enforceHelper!TransientObjectException(info.isKeySet(obj), "Cannot persist entity w/o key assigned");
 		string query = metaData.generateUpdateForEntity(dialect, info);
 		//trace("Query: " ~ query);
+        logInfo("Query: ", query);
         {
     		PreparedStatement stmt = conn.prepareStatement(query);
     		scope(exit) stmt.close();
     		int columnCount = metaData.writeAllColumns(obj, stmt, 1, true);
-    		info.keyProperty.writeFunc(obj, stmt, columnCount + 1);
+            if (info.keyProperty.relation == RelationType.Embedded) {
+                metaData.writeAllColumns(info.getKey(obj).get!Object, stmt, columnCount + 1, false);
+            } else {
+                info.keyProperty.writeFunc(obj, stmt, columnCount + 1);
+            }
     		stmt.executeUpdate();
         }
         updateRelations(info, obj);
@@ -743,9 +773,28 @@ class SessionImpl : Session {
     override void remove(Object obj) {
         auto info = metaData.findEntityForObject(obj);
         deleteRelations(info, obj);
-        string query = "DELETE FROM " ~ dialect.quoteIfNeeded(info.tableName) ~ " WHERE " ~ dialect.quoteIfNeeded(info.getKeyProperty().columnName) ~ "=?";
+        string query = "DELETE FROM " ~ dialect.quoteIfNeeded(info.tableName) ~ " WHERE ";
+        if (info.keyProperty.relation == RelationType.Embedded) {
+            // TODO: Resume here.
+            auto embeddedEntityInfo = info.getKeyProperty().referencedEntity;
+            bool isFirst = true;
+            foreach (propertyInfo; embeddedEntityInfo) {
+                if (isFirst) {
+                    isFirst = false;
+                } else {
+                    query ~= " AND ";
+                }
+                query ~= dialect.quoteIfNeeded(propertyInfo.columnName) ~ "=?";
+            }
+        } else {
+            query ~= dialect.quoteIfNeeded(info.getKeyProperty().columnName) ~ "=?";
+        }
 		PreparedStatement stmt = conn.prepareStatement(query);
-		info.getKeyProperty().writeFunc(obj, stmt, 1);
+        if (info.keyProperty.relation == RelationType.Embedded) {
+            metaData.writeAllColumns(info.getKey(obj).get!Object, stmt, 1, false);
+        } else {
+            info.getKeyProperty().writeFunc(obj, stmt, 1);
+        }
 		stmt.executeUpdate();
 	}
 

@@ -1,0 +1,127 @@
+module embeddedidtest;
+
+import hibernated.core;
+
+import testrunner : Test;
+import hibernatetest : HibernateTest;
+
+// An object representing a composite key, a key with multiple columns to uniquely identify a row.
+@Embeddable
+class InvoiceId {
+    // Each vendor has a unique ID.
+    string vendorNo;
+    // Vendors independently pick an invoiceNo, which may overlap with other vendors.
+    string invoiceNo;
+}
+
+@Entity
+class Invoice {
+    @EmbeddedId
+    InvoiceId invoiceId;
+
+    string currency;
+    int amountE4;
+}
+
+class EmbeddedIdTest : HibernateTest {
+    override
+    EntityMetaData buildSchema() {
+        return new SchemaInfoImpl!(Invoice, InvoiceId);
+    }
+
+    @Test("embeddedid.creation")
+    void creationTest() {
+        Session sess = sessionFactory.openSession();
+        scope(exit) sess.close();
+
+        Invoice invoice = new Invoice();
+        invoice.invoiceId = new InvoiceId();
+        invoice.invoiceId.vendorNo = "ABC123";
+        invoice.invoiceId.invoiceNo = "L1005-2328";
+        invoice.currency = "EUR";
+        invoice.amountE4 = 120_3400;
+
+        InvoiceId c1Id = sess.save(invoice).get!InvoiceId;
+        assert(c1Id.vendorNo == "ABC123" && c1Id.invoiceNo == "L1005-2328");
+    }
+
+    @Test("embeddedid.read.query")
+    void readQueryTest() {
+        Session sess = sessionFactory.openSession();
+        scope(exit) sess.close();
+
+        auto r1 = sess.createQuery("FROM Invoice WHERE invoiceId.vendorNo = :VendorNo AND invoiceId.invoiceNo = :InvoiceNo")
+                .setParameter("VendorNo", "ABC123")
+                .setParameter("InvoiceNo", "L1005-2328");
+        Invoice i1 = r1.uniqueResult!Invoice();
+        assert(i1 !is null);
+        assert(i1.invoiceId.vendorNo == "ABC123");
+        assert(i1.invoiceId.invoiceNo == "L1005-2328");
+        assert(i1.currency == "EUR");
+        assert(i1.amountE4 == 120_3400);
+    }
+
+    @Test("embeddedid.read.get")
+    void readGetTest() {
+        Session sess = sessionFactory.openSession();
+        scope(exit) sess.close();
+
+        InvoiceId id1 = new InvoiceId();
+        id1.vendorNo = "ABC123";
+        id1.invoiceNo = "L1005-2328";
+        Invoice i1 = sess.get!Invoice(id1);
+        assert(i1 !is null);
+        assert(i1.invoiceId.vendorNo == "ABC123");
+        assert(i1.invoiceId.invoiceNo == "L1005-2328");
+        assert(i1.currency == "EUR");
+        assert(i1.amountE4 == 120_3400);
+    }
+
+    @Test("embeddedid.update")
+    void updateTest() {
+        Session sess = sessionFactory.openSession();
+
+        // Get a record that we will be updating.
+        InvoiceId id1 = new InvoiceId();
+        id1.vendorNo = "ABC123";
+        id1.invoiceNo = "L1005-2328";
+        Invoice i1 = sess.get!Invoice(id1);
+        assert(i1 !is null);
+
+        i1.currency = "USD";
+        sess.update(i1);
+
+        // Create a new session to prevent caching.
+        sess.close();
+        sess = sessionFactory.openSession();
+
+        Invoice i2 = sess.get!Invoice(id1);
+        assert(i2 !is null);
+        assert(i2.currency == "USD");
+
+        sess.close();
+    }
+
+    @Test("embeddedid.delete")
+    void deleteTest() {
+        Session sess = sessionFactory.openSession();
+
+        // Get an entity to delete.
+        InvoiceId id1 = new InvoiceId();
+        id1.vendorNo = "ABC123";
+        id1.invoiceNo = "L1005-2328";
+        Invoice i1 = sess.get!Invoice(id1);
+        assert(i1 !is null);
+
+        sess.remove(i1);
+
+        // Create a new session to prevent caching.
+        sess.close();
+        sess = sessionFactory.openSession();
+
+        i1 = sess.get!Invoice(id1);
+        assert(i1 is null);
+
+        sess.close();
+    }
+}
