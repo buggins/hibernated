@@ -775,7 +775,6 @@ class SessionImpl : Session {
         deleteRelations(info, obj);
         string query = "DELETE FROM " ~ dialect.quoteIfNeeded(info.tableName) ~ " WHERE ";
         if (info.keyProperty.relation == RelationType.Embedded) {
-            // TODO: Resume here.
             auto embeddedEntityInfo = info.getKeyProperty().referencedEntity;
             bool isFirst = true;
             foreach (propertyInfo; embeddedEntityInfo) {
