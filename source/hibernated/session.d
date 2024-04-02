@@ -534,7 +534,6 @@ class SessionImpl : Session {
 
     /// Read the persistent state associated with the given identifier into the given transient instance
     Object getObject(const EntityInfo info, Object obj, Variant id) {
-        import std.logger : logInfo = info;
         if (info.getKeyProperty().relation == RelationType.Embedded) {
             auto embeddedEntityInfo = info.getKeyProperty().referencedEntity;
             string hql = "FROM " ~ info.name ~ " WHERE ";
@@ -547,7 +546,6 @@ class SessionImpl : Session {
                 }
                 hql ~= info.getKeyProperty().propertyName ~ "." ~ propertyInfo.propertyName ~ "=:" ~ propertyInfo.propertyName;
             }
-            logInfo("hql=", hql);
             Query q = createQuery(hql);
             foreach (propertyInfo; embeddedEntityInfo) {
                 q = q.setParameter(
@@ -749,25 +747,23 @@ class SessionImpl : Session {
     }
 
     override void update(Object obj) {
-        import std.logger : logInfo = info;
         auto info = metaData.findEntityForObject(obj);
         enforceHelper!TransientObjectException(info.isKeySet(obj), "Cannot persist entity w/o key assigned");
-		string query = metaData.generateUpdateForEntity(dialect, info);
-		//trace("Query: " ~ query);
-        logInfo("Query: ", query);
+        string query = metaData.generateUpdateForEntity(dialect, info);
+        //trace("Query: " ~ query);
         {
-    		PreparedStatement stmt = conn.prepareStatement(query);
-    		scope(exit) stmt.close();
-    		int columnCount = metaData.writeAllColumns(obj, stmt, 1, true);
+            PreparedStatement stmt = conn.prepareStatement(query);
+            scope(exit) stmt.close();
+            int columnCount = metaData.writeAllColumns(obj, stmt, 1, true);
             if (info.keyProperty.relation == RelationType.Embedded) {
                 metaData.writeAllColumns(info.getKey(obj).get!Object, stmt, columnCount + 1, false);
             } else {
                 info.keyProperty.writeFunc(obj, stmt, columnCount + 1);
             }
-    		stmt.executeUpdate();
+            stmt.executeUpdate();
         }
         updateRelations(info, obj);
-	}
+    }
 
     // renamed from Session.delete since delete is D keyword
     override void remove(Object obj) {
