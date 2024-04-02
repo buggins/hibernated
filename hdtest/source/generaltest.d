@@ -83,6 +83,15 @@ class GeneralTest : HibernateTest {
     return new SchemaInfoImpl!(User, Role, Address, Asset, MyGroup);
   }
 
+  @Test("session_close")
+  void sessionCloseTest() {
+    assert((cast(SessionFactoryImpl) sessionFactory).activeSessions.length == 0);
+    Session sess = sessionFactory.openSession();
+    assert((cast(SessionFactoryImpl) sessionFactory).activeSessions.length == 1);
+    sess.close();
+    assert((cast(SessionFactoryImpl) sessionFactory).activeSessions.length == 0);
+  }
+
   @Test("general test")
   void generalTest() {
     // create session
