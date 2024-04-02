@@ -72,14 +72,22 @@ abstract class Session
     /// returns metadata
     EntityMetaData getMetaData();
 
-	/// not supported in current implementation
+	/**
+	 * Begins a new DB transaction, causing all statements run to complete together or not at all.
+	 *
+	 * All statements will attempt to be applied when returned Transaction object's `commit()`
+	 * method is called, or discarded if the `rollback()` method is called.
+	 */
 	Transaction beginTransaction();
+
 	/// not supported in current implementation
 	void cancelQuery();
+
 	/// not supported in current implementation
 	void clear();
 
-	/// closes session
+	/// Closes the session.
+	/// All sessions that are not explicitly closed will be closed when the connection is closed.
 	Connection close();
 
     ///Does this session contain any changes which must be synchronized with the database? In other words, would any DML operations be executed if we flushed this session?
@@ -786,7 +794,7 @@ class SessionFactoryImpl : SessionFactory {
     void sessionClosed(SessionImpl session) {
         foreach(i, item; activeSessions) {
             if (item == session) {
-                remove(activeSessions, i);
+                activeSessions = remove(activeSessions, i);
             }
         }
     }
