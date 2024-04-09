@@ -168,3 +168,45 @@ int main() {
     return 0;
 }
 ```
+
+## Additional Features
+
+### Composite Keys
+
+If a database contains tables with a composite primary key, the `@EmbeddedId` can be used to
+represent this. The columns that represent the primary key should be in an `@Embeddable` class
+which is then referenced in a property annotated with `@EmbeddedId`.
+
+For example, consider a database table created via the following SQL command:
+
+```sql
+CREATE TABLE invoices (
+    vendor_no VARCHAR(8) NOT NULL,
+    invoice_no VARCHAR(20) NOT NULL,
+    amount_e4 INTEGER);
+ALTER TABLE invoices
+    ADD CONSTRAINT invoices_pkey PRIMARY KEY (vendor_no, invoice_no);
+```
+
+To represent this using HibernateD, the following code would be used:
+```
+@Embeddable
+class InvoiceId {
+    string vendorNo;
+    string invoiceNo;
+}
+
+@Table("invoices")
+class Invoice {
+    @EmbeddedId InvoiceId invoiceId;
+    int amountE4;
+}
+```
+
+**Note**: At the time of writing, there are two important limitations.
+1. The function `DBInfo.updateDbSchema(Connection conn, bool dropTables, bool createTables)`
+   does not generate schemas with compound keys.
+2. The Hibernate annotation `@JoinColumns` (plural) has not yet been implemented, thus,
+   the `@ManyToOne` and `@ManyToMany` relations are not usable for classes using an
+   `@EmbeddedId`.
+These features will be added in future updates.
