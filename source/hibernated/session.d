@@ -20,6 +20,7 @@ private import std.conv;
 private import std.exception;
 private import std.variant;
 private import std.traits : isCallable;
+//private import std.logger;
 
 private import ddbc.core : Connection, DataSource, DataSetReader, DataSetWriter, PreparedStatement, ResultSet, Statement;
 
@@ -906,6 +907,10 @@ Variant normalize(Variant v) {
         return Variant(v.get!long);
     else if (v.convertsTo!ulong)
         return Variant(v.get!ulong);
+    else if (v.convertsTo!Object) {
+        // Warning: Objects need to define `bool opEquals(...)` to make this reliable.
+        return Variant(v.get!Object);
+    }
     return Variant(v.toString());
 }
 
@@ -1090,7 +1095,7 @@ class QueryImpl : Query
             Object row;
             if (!from.entity.isKeyNull(r, from.startColumn)) {
                 //trace("key is not null");
-                Variant key = from.entity.getKey(r, from.startColumn);
+                Variant key = from.entity.getKeyFromColumns(r, from.startColumn);
                 //trace("key is " ~ key.toString);
                 row = sess.peekFromCache(from.entity.name, key);
                 if (row is null) {

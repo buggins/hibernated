@@ -1,5 +1,8 @@
 module embeddedidtest;
 
+
+import std.algorithm : any;
+
 import hibernated.core;
 
 import testrunner : Test;
@@ -12,6 +15,16 @@ class InvoiceId {
     string vendorNo;
     // Vendors independently pick an invoiceNo, which may overlap with other vendors.
     string invoiceNo;
+
+    // Allows session caching to function correctly.
+    bool opEquals(const InvoiceId o) const @safe {
+        return vendorNo == o.vendorNo && invoiceNo == o.invoiceNo;
+    }
+
+    // Useful for debugging.
+    override string toString() const @safe {
+       return vendorNo ~ ":" ~ invoiceNo;
+    }
 }
 
 @Entity
@@ -40,13 +53,21 @@ class EmbeddedIdTest : HibernateTest {
         invoice.invoiceId.invoiceNo = "L1005-2328";
         invoice.currency = "EUR";
         invoice.amountE4 = 120_3400;
-
         InvoiceId c1Id = sess.save(invoice).get!InvoiceId;
         assert(c1Id.vendorNo == "ABC123" && c1Id.invoiceNo == "L1005-2328");
+
+        Invoice invoice2 = new Invoice();
+        invoice2.invoiceId = new InvoiceId();
+        invoice2.invoiceId.vendorNo = "ABC123";
+        invoice2.invoiceId.invoiceNo = "L1005-2329";
+        invoice2.currency = "EUR";
+        invoice2.amountE4 = 80_1200;
+        InvoiceId c2Id = sess.save(invoice2).get!InvoiceId;
+        assert(c2Id.vendorNo == "ABC123" && c2Id.invoiceNo == "L1005-2329");
     }
 
-    @Test("embeddedid.read.query")
-    void readQueryTest() {
+    @Test("embeddedid.read.query.uniqueResult")
+    void readQueryUniqueTest() {
         Session sess = sessionFactory.openSession();
         scope(exit) sess.close();
 
@@ -59,6 +80,20 @@ class EmbeddedIdTest : HibernateTest {
         assert(i1.invoiceId.invoiceNo == "L1005-2328");
         assert(i1.currency == "EUR");
         assert(i1.amountE4 == 120_3400);
+    }
+
+    @Test("embeddedid.read.query.list")
+    void readQueryListTest() {
+        Session sess = sessionFactory.openSession();
+        scope(exit) sess.close();
+
+        // A query that only partially covers the primary key.
+        auto r2 = sess.createQuery("FROM Invoice WHERE invoiceId.vendorNo = :VendorNo")
+                .setParameter("VendorNo", "ABC123");
+        Invoice[] i2List = r2.list!Invoice();
+        assert(i2List.length == 2);
+        assert(i2List.any!((Invoice inv) => inv.invoiceId.vendorNo == "ABC123" && inv.invoiceId.invoiceNo == "L1005-2328"));
+        assert(i2List.any!(inv => inv.invoiceId.vendorNo == "ABC123" && inv.invoiceId.invoiceNo == "L1005-2329"));
     }
 
     @Test("embeddedid.read.get")

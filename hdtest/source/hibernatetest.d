@@ -11,10 +11,10 @@ import testrunner : Test, BeforeClass, AfterClass;
  */
 struct ConnectionParams {
     string host;
-	ushort port;
+    ushort port;
     string database;
-	string user;
-	string pass;
+    string user;
+    string pass;
 }
 
 /**

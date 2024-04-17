@@ -323,9 +323,21 @@ class EntityInfo {
         enforceHelper!MappingException(keyProperty !is null || embeddable, "No key specified for non-embeddable entity " ~ name);
     }
     /// returns key value as Variant from entity instance
-    Variant getKey(Object obj) const { return keyProperty.getFunc(obj); }
+    Variant getKey(Object obj) const {
+        // A key must be comparable using equality to work for cache lookup.
+        return keyProperty.getFunc(obj);
+    }
     /// returns key value as Variant from data set
-    Variant getKey(DataSetReader r, int startColumn) const { return r.getVariant(startColumn + keyProperty.columnOffset); }
+    Variant getKeyFromColumns(DataSetReader r, int startColumn) const {
+        if (keyProperty.embedded) {
+            auto emei = keyProperty.referencedEntity;
+            Object em = emei.createEntity();
+            int columnsRead = metadata.readAllColumns(em, r, startColumn);
+            //trace("Reading key from columns = ", em, ", columnsRead=", columnsRead);
+            return Variant(em);
+        }
+        return r.getVariant(startColumn + keyProperty.columnOffset);
+    }
     /// sets key value from Variant
     void setKey(Object obj, Variant value) const { keyProperty.setFunc(obj, value); }
     /// returns property info for key property
@@ -882,6 +894,8 @@ string getOneToManyReferencedPropertyName(T, string m)() {
     return res;
 }
 
+/// Returns the field length of a column, e.g. SQL `code VARCHAR(3)` could be represented in D as
+/// `@Column("code", 3) string code;`.
 int getColumnLength(T, string m)() {
     auto length = 0;
     static if (is(typeof(__traits(getMember, T, m)) == function)) {
