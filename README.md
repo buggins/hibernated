@@ -194,6 +194,11 @@ To represent this using HibernateD, the following code would be used:
 class InvoiceId {
     string vendorNo;
     string invoiceNo;
+
+    // Be sure to implement this to benefit from session caching.
+    bool opEquals(const InvoiceId o) const @safe {
+        return vendorNo == o.vendorNo && invoiceNo == o.invoiceNo;
+    }
 }
 
 @Table("invoices")
@@ -203,10 +208,12 @@ class Invoice {
 }
 ```
 
-**Note**: At the time of writing, there are two important limitations.
+**Note**: At the time of writing, there are important limitations.
 1. The function `DBInfo.updateDbSchema(Connection conn, bool dropTables, bool createTables)`
    does not generate schemas with compound keys.
 2. The Hibernate annotation `@JoinColumns` (plural) has not yet been implemented, thus,
    the `@ManyToOne` and `@ManyToMany` relations are not usable for classes using an
    `@EmbeddedId`.
+3. The `@Embedded` class referenced via an `@EmbeddedId` property should implement `opEquals`
+   in order to gain performance benefits from session caching.
 These features will be added in future updates.
