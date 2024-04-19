@@ -7,110 +7,137 @@ import hibernatetest : HibernateTest;
 
 @Embeddable
 class Address {
-  string street;
-  string city;
+    string street;
+    string city;
 }
 
 class Customer {
-  @Id @Generated
-  long cid;
+    @Id @Generated
+    long cid;
 
-  string name;
+    string name;
 
-  Address shippingAddress;
+    Address shippingAddress;
 
-  @Embedded("billing")
-  Address billingAddress;
+    @Embedded("billing")
+    Address billingAddress;
 }
 
 class EmbeddedTest : HibernateTest {
-  override
-  EntityMetaData buildSchema() {
-    return new SchemaInfoImpl!(Customer, Address);
-  }
+    override
+    EntityMetaData buildSchema() {
+        return new SchemaInfoImpl!(Customer, Address);
+    }
 
-  @Test("embedded.creation")
-  void creationTest() {
-    Session sess = sessionFactory.openSession();
-    scope(exit) sess.close();
+    @Test("embedded.creation")
+    void creationTest() {
+        Session sess = sessionFactory.openSession();
+        scope(exit) sess.close();
 
-    Customer c1 = new Customer();
-    c1.name = "Kickflip McOllie";
-    c1.shippingAddress = new Address();
-    c1.shippingAddress.street = "1337 Rad Street";
-    c1.shippingAddress.city = "Awesomeville";
-    c1.billingAddress = new Address();
-    c1.billingAddress.street = "101001 Robotface";
-    c1.billingAddress.city = "Lametown";
+        Customer c1 = new Customer();
+        c1.name = "Kickflip McOllie";
+        c1.shippingAddress = new Address();
+        c1.shippingAddress.street = "1337 Rad Street";
+        c1.shippingAddress.city = "Awesomeville";
+        c1.billingAddress = new Address();
+        c1.billingAddress.street = "101001 Robotface";
+        c1.billingAddress.city = "Lametown";
 
-    long c1Id = sess.save(c1).get!long;
-    assert(c1Id > 0);
-  }
+        long c1Id = sess.save(c1).get!long;
+        assert(c1Id > 0);
 
-  @Test("embedded.read")
-  void readTest() {
-    Session sess = sessionFactory.openSession();
-    scope(exit) sess.close();
+        Customer c2 = new Customer();
+        c2.name = "Jumpy Bunny";
+        c2.shippingAddress = new Address();
+        c2.shippingAddress.street = "21 Grassy Knoll";
+        c2.shippingAddress.city = "Warrenton";
+        c2.billingAddress = new Address();
+        c2.billingAddress.street = "327 Industrial Way";
+        c2.billingAddress.city = "Megatropolis";
+        long c2Id = sess.save(c2).get!long;
+        assert(c2Id > 0);
+    }
 
-    auto r1 = sess.createQuery("FROM Customer WHERE shippingAddress.city = :City")
-        .setParameter("City", "Awesomeville");
-    Customer c1 = r1.uniqueResult!Customer();
-    assert(c1 !is null);
-    assert(c1.shippingAddress.street == "1337 Rad Street");
+    @Test("embedded.read")
+    void readTest() {
+        Session sess = sessionFactory.openSession();
+        scope(exit) sess.close();
 
-    auto r2 = sess.createQuery("FROM Customer WHERE billingAddress.city = :City")
-        .setParameter("City", "Lametown");
-    Customer c2 = r2.uniqueResult!Customer();
-    assert(c2 !is null);
-    assert(c2.billingAddress.street == "101001 Robotface");
-  }
+        auto r1 = sess.createQuery("FROM Customer WHERE shippingAddress.city = :City")
+                .setParameter("City", "Awesomeville");
+        Customer c1 = r1.uniqueResult!Customer();
+        assert(c1 !is null);
+        assert(c1.shippingAddress.street == "1337 Rad Street");
 
-  @Test("embedded.update")
-  void updateTest() {
-    Session sess = sessionFactory.openSession();
+        auto r2 = sess.createQuery("FROM Customer WHERE billingAddress.city = :City")
+                .setParameter("City", "Lametown");
+        Customer c2 = r2.uniqueResult!Customer();
+        assert(c2 !is null);
+        assert(c2.billingAddress.street == "101001 Robotface");
+    }
 
-    auto r1 = sess.createQuery("FROM Customer WHERE billingAddress.city = :City")
-        .setParameter("City", "Lametown");
-    Customer c1 = r1.uniqueResult!Customer();
-    assert(c1 !is null);
+    @Test("embedded.read.query-order-by")
+    void readQueryOrderByTest() {
+        Session sess = sessionFactory.openSession();
+        scope(exit) sess.close();
 
-    c1.billingAddress.street = "17 Neat Street";
-    sess.update(c1);
+        auto r1 = sess.createQuery("FROM Customer ORDER BY shippingAddress.street DESC");
+        Customer[] customers = r1.list!Customer();
+        assert(customers.length == 2);
+        assert(customers[0].shippingAddress.street == "21 Grassy Knoll");
 
-    // Create a new session to prevent caching.
-    sess.close();
-    sess = sessionFactory.openSession();
+        auto r2 = sess.createQuery("FROM Customer c ORDER BY c.billingAddress.street ASC");
+        customers = r2.list!Customer();
+        assert(customers.length == 2);
+        assert(customers[0].billingAddress.street == "101001 Robotface");
+    }
 
-    r1 = sess.createQuery("FROM Customer WHERE billingAddress.city = :City")
-        .setParameter("City", "Lametown");
-    c1 = r1.uniqueResult!Customer();
-    assert(c1 !is null);
-    assert(c1.billingAddress.street == "17 Neat Street");
+    @Test("embedded.update")
+    void updateTest() {
+        Session sess = sessionFactory.openSession();
 
-    sess.close();
-  }
+        auto r1 = sess.createQuery("FROM Customer WHERE billingAddress.city = :City")
+                .setParameter("City", "Lametown");
+        Customer c1 = r1.uniqueResult!Customer();
+        assert(c1 !is null);
 
-  @Test("embedded.delete")
-  void deleteTest() {
-    Session sess = sessionFactory.openSession();
+        c1.billingAddress.street = "17 Neat Street";
+        sess.update(c1);
 
-    auto r1 = sess.createQuery("FROM Customer WHERE billingAddress.city = :City")
-        .setParameter("City", "Lametown");
-    Customer c1 = r1.uniqueResult!Customer();
-    assert(c1 !is null);
+        // Create a new session to prevent caching.
+        sess.close();
+        sess = sessionFactory.openSession();
 
-    sess.remove(c1);
+        r1 = sess.createQuery("FROM Customer WHERE billingAddress.city = :City")
+                .setParameter("City", "Lametown");
+        c1 = r1.uniqueResult!Customer();
+        assert(c1 !is null);
+        assert(c1.billingAddress.street == "17 Neat Street");
 
-    // Create a new session to prevent caching.
-    sess.close();
-    sess = sessionFactory.openSession();
+        sess.close();
+    }
 
-    r1 = sess.createQuery("FROM Customer WHERE billingAddress.city = :City")
-        .setParameter("City", "Lametown");
-    c1 = r1.uniqueResult!Customer();
-    assert(c1 is null);
+    @Test("embedded.delete")
+    void deleteTest() {
+        Session sess = sessionFactory.openSession();
 
-    sess.close();
-  }
+        auto r1 = sess.createQuery("FROM Customer WHERE billingAddress.city = :City")
+                .setParameter("City", "Lametown");
+        Customer c1 = r1.uniqueResult!Customer();
+        assert(c1 !is null);
+
+        sess.remove(c1);
+
+        // Create a new session to prevent caching.
+        sess.close();
+        sess = sessionFactory.openSession();
+
+        r1 = sess.createQuery("FROM Customer WHERE billingAddress.city = :City")
+                .setParameter("City", "Lametown");
+        c1 = r1.uniqueResult!Customer();
+        assert(c1 is null);
+
+        sess.close();
+    }
 
 }

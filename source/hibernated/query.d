@@ -11,6 +11,8 @@
  * Copyright: Copyright 2013
  * License:   $(LINK www.boost.org/LICENSE_1_0.txt, Boost License 1.0).
  * Author:   Vadim Lopatin
+ *
+ * TODO: Reformat this file to use 4-space indents and LF line endings.
  */
 module hibernated.query;
 
@@ -449,7 +451,7 @@ class QueryParser {
 				//trace("Embedded property " ~ item.prop.propertyName ~ " of type " ~ item.prop.referencedEntityName);
                 ei = cast(EntityInfo)item.prop.referencedEntity;
 			    enforceHelper!QuerySyntaxException(propertyNames.length > 0, "@Embedded field property name should be specified when selecting " ~ aliasName ~ "." ~ item.prop.propertyName);
-                item.prop = cast(PropertyInfo)ei.findProperty(propertyNames[0]);
+				item.prop = cast(PropertyInfo)ei.findProperty(propertyNames[0]);
 				propertyNames.popFront();
 			}
 		}
@@ -458,44 +460,36 @@ class QueryParser {
 		//insertInPlace(selectClause, 0, item);
 	}
 	
-	void addOrderByClauseItem(string aliasName, string propertyName, bool asc) {
-		FromClauseItem from = aliasName == null ? fromClause.first : findFromClauseByAlias(aliasName);
+	//void addOrderByClauseItem(string aliasName, string propertyName, bool asc) {
+    void addOrderByClauseItem(FromClauseItem from, PropertyInfo prop, bool asc) {
 		OrderByClauseItem item;
 		item.from = from;
-        item.prop = cast(PropertyInfo)from.entity.findProperty(propertyName);
+		item.prop = prop;
 		item.asc = asc;
 		orderByClause ~= item;
 		//insertInPlace(orderByClause, 0, item);
 	}
 	
 	void parseOrderByClauseItem(int start, int end) {
-		// for each comma delimited item
-		// in current version it can only be
-		// {property}  or  {alias . property} optionally followed by ASC or DESC
-		//trace("ORDER BY ITEM: " ~ to!string(start) ~ " .. " ~ to!string(end));
+		Token orderClauseItem = new Token(tokens[start].pos, TokenType.Expression, tokens, start, end);
+		// Convert any `[<Alias>.]<Ident>[.<Ident>]...` token sequences into fields.
+		// E.g. consider the ORDER BY fields in HQL `FROM Cats c ORDER BY c.age DESC, c.license.id ASC`.
+		convertFields(orderClauseItem.children);
+
+		enforceHelper!QuerySyntaxException(
+				orderClauseItem.children.length >= 1 && orderClauseItem.children.length <= 2
+						&& orderClauseItem.children[0].type == TokenType.Field
+						&& (orderClauseItem.children.length == 1 || orderClauseItem.children[1].type == TokenType.Keyword),
+				"Invalid ORDER BY clause (expected {property [ASC | DESC]} or {alias.property [ASC | DESC]} )" ~ errorContext(tokens[start]));
+
+		trace("ORDER BY ITEM: " ~ to!string(start) ~ " .. " ~ to!string(end));
 		bool asc = true;
-		if (tokens[end - 1].type == TokenType.Keyword && tokens[end - 1].keyword == KeywordType.ASC) {
-			end--;
-		} else if (tokens[end - 1].type == TokenType.Keyword && tokens[end - 1].keyword == KeywordType.DESC) {
+		if (orderClauseItem.children[$-1].type == TokenType.Keyword && orderClauseItem.children[$-1].keyword == KeywordType.DESC) {
 			asc = false;
-			end--;
 		}
-		enforceHelper!QuerySyntaxException(start < end, "Empty ORDER BY clause item" ~ errorContext(tokens[start]));
-		if (start == end - 1) {
-			// no alias
-			enforceHelper!QuerySyntaxException(tokens[start].type == TokenType.Ident, "Property name expected in ORDER BY clause" ~ errorContext(tokens[start]));
-			addOrderByClauseItem(null, cast(string)tokens[start].text, asc);
-		} else if (start == end - 3) {
-			enforceHelper!QuerySyntaxException(tokens[start].type == TokenType.Alias, "Entity alias expected in ORDER BY clause" ~ errorContext(tokens[start]));
-			enforceHelper!QuerySyntaxException(tokens[start + 1].type == TokenType.Dot, "Dot expected after entity alias in ORDER BY clause" ~ errorContext(tokens[start]));
-			enforceHelper!QuerySyntaxException(tokens[start + 2].type == TokenType.Ident, "Property name expected after entity alias in ORDER BY clause" ~ errorContext(tokens[start]));
-			addOrderByClauseItem(cast(string)tokens[start].text, cast(string)tokens[start + 2].text, asc);
-		} else {
-			//trace("range: " ~ to!string(start) ~ " .. " ~ to!string(end));
-			enforceHelper!QuerySyntaxException(false, "Invalid ORDER BY clause (expected {property [ASC | DESC]} or {alias.property [ASC | DESC]} )" ~ errorContext(tokens[start]));
-		}
+		addOrderByClauseItem(orderClauseItem.children[0].from, orderClauseItem.children[0].field, asc);
 	}
-	
+
 	void parseSelectClauseItem(int start, int end) {
 		// for each comma delimited item
 		// in current version it can only be
@@ -633,11 +627,12 @@ class QueryParser {
 	}
 
     /**
-     * During the parsing of an HQL query, populates Tokens with contextual information such as
-     * EntityInfo, PropertyInfo, and more.
+     * During the parsing of an HQL query, populates Tokens with TokenType Ident or Alias with
+     * contextual information such as EntityInfo, PropertyInfo, and more.
      */
 	void convertFields(ref Token[] items) {
 		while(true) {
+            // Find the first Ident/Alias token and keep its index in `p`.
 			int p = -1;
 			for (int i=0; i<items.length; i++) {
 				if (items[i].type != TokenType.Ident && items[i].type != TokenType.Alias)
@@ -647,19 +642,25 @@ class QueryParser {
 			}
 			if (p == -1)
 				return;
-			// found identifier at position p
+
+			// A property may be referenced in the form:
+			//   [<Alias>.] <Ident> [.<Ident>]...
+			// Extract only the Alias and Ident tokens, without Dot tokens, and store that in `idents`.
+			// Each dot represents either an @Embeddable property or a join.
 			string[] idents;
 			int lastp = p;
 			idents ~= items[p].text;
 			for (int i=p + 1; i < items.length - 1; i+=2) {
 				if (items[i].type != TokenType.Dot)
 					break;
-				enforceHelper!QuerySyntaxException(i < items.length - 1 && items[i + 1].type == TokenType.Ident, "Syntax error in WHERE condition - no property name after . " ~ errorContext(items[p]));
+				enforceHelper!QuerySyntaxException(
+                        i < items.length - 1 && items[i + 1].type == TokenType.Ident,
+                        "Syntax error in property - no property name after . " ~ errorContext(items[p]));
 				lastp = i + 1;
 				idents ~= items[i + 1].text;
 			}
-			string fullName;
-            string columnPrefix;
+
+			// Determine the entity in the FromClause being referred to and make `idents` contain only Ident tokens.
 			FromClauseItem a;
 			if (items[p].type == TokenType.Alias) {
 				a = findFromClauseByAlias(idents[0]);
@@ -670,16 +671,28 @@ class QueryParser {
 			}
 			string aliasName = a.entityAlias;
             EntityInfo ei = cast(EntityInfo)a.entity;
-			enforceHelper!QuerySyntaxException(idents.length > 0, "Syntax error in WHERE condition - alias w/o property name: " ~ aliasName ~ errorContext(items[p]));
-            PropertyInfo pi;
-            fullName = aliasName;
-            while(true) {
+			enforceHelper!QuerySyntaxException(idents.length > 0,
+                    "Syntax error in property - alias w/o property name: " ~ aliasName ~ errorContext(items[p]));
+
+			// Dive through the list of identifiers, searching through embedded properties and joins.
+			PropertyInfo pi;
+			string fullName;
+			string columnPrefix;
+			fullName = aliasName;
+			while(true) {
     			string propertyName = idents[0];
     			idents.popFront();
     			fullName ~= "." ~ propertyName;
                 pi = cast(PropertyInfo)ei.findProperty(propertyName);
+
+				// First consume all the dot-separated identifiers for @Embedded properties.
     			while (pi.embedded) { // loop to allow nested @Embedded
-    				enforceHelper!QuerySyntaxException(idents.length > 0, "Syntax error in WHERE condition - @Embedded property reference should include reference to @Embeddable property " ~ aliasName ~ errorContext(items[p]));
+    				enforceHelper!QuerySyntaxException(
+							idents.length > 0,
+							"Syntax error in property - @Embedded property reference should include reference to @Embeddable property "
+									~ aliasName ~ errorContext(items[p]));
+					// The `columnName` of an `@Embedded` property contains an optional prefix to add to the
+					// column names of the properties inside its entity type.
                     columnPrefix ~= pi.columnName == "" ? pi.columnName : pi.columnName ~ "_";
     				propertyName = idents[0];
     				idents.popFront();
@@ -688,11 +701,14 @@ class QueryParser {
     			}
                 if (idents.length == 0)
                     break;
+
+				// Next consume all the dot-separated identifiers for explicit or implicit joins.
                 if (idents.length > 0) {
-                    // more field names
-                    string pname = idents[0];
+					// There are more names after `propertyName`, whose property info is in `pi`.
+					string pname = idents[0];
                     enforceHelper!QuerySyntaxException(pi.referencedEntity !is null, "Unexpected extra field name " ~ pname ~ " - property " ~ propertyName ~ " doesn't content subproperties " ~ errorContext(items[p]));
                     ei = cast(EntityInfo)pi.referencedEntity;
+                    // Check if the referenced entity is already in a from-clause, if not, implicitly add it.
                     FromClauseItem newClause = fromClause.findByPath(fullName);
                     if (newClause is null) {
                         // autogenerate FROM clause
@@ -703,6 +719,10 @@ class QueryParser {
             }
 			enforceHelper!QuerySyntaxException(idents.length == 0, "Unexpected extra field name " ~ idents[0] ~ errorContext(items[p]));
 			//trace("full name = " ~ fullName);
+
+            // Replace a sequence of tokens in `items[p..lastp+1]` of the form:
+            //   [<Alias>.] <Ident> [.<Ident>]...
+            // with a single Field token, containing the EntityInfo and PropertyInfo of the referenced entity and property.
 			Token t = new Token(/+pos+/ items[p].pos, /+type+/ TokenType.Field, /+text+/ fullName);
             t.entity = cast(EntityInfo)ei;
             t.field = cast(PropertyInfo)pi;
@@ -826,6 +846,7 @@ class QueryParser {
 	
 	void parseOrderClause(int start, int end) {
 		enforceHelper!QuerySyntaxException(start < end, "Invalid ORDER BY clause" ~ errorContext(tokens[start]));
+        trace("tokens[start..end]=", tokens[start..end].to!string);
 		splitCommaDelimitedList(start, end, &parseOrderByClauseItem);
 	}
 	
