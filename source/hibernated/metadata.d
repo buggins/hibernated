@@ -3807,7 +3807,9 @@ class TableInfo {
         indexes ~= index;
     }
     void addColumn(ColumnInfo column) {
-        enforceHelper!HibernatedException((column.columnName in columnNameMap) is null, "duplicate column name " ~ tableName ~ "." ~ column.columnName ~ " in schema");
+        // Perform no logic if the column already exists, e.g. a @ManyToOne relationship using a key which is part of an @EmbeddedId.
+        if (column.columnName in columnNameMap) return;
+
         columns ~= column;
         columnNameMap[column.columnName] = column;
         if (column.property !is null && (column.property.manyToOne || column.property.oneToOne)) {
