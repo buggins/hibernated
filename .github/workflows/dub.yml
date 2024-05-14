@@ -33,7 +33,7 @@ jobs:
           - ldc-1.28.1 # eq to dmd v2.098.1 (exclude on Windows)
           - ldc-1.27.1 # eq to dmd v2.097.2 (exclude on Windows)
         include:
-          - { os: macos-latest, compiler: dmd-latest }
+          - { os: macos-13, compiler: dmd-latest } ## Cannot use dmd on Apple silicon (latest is 14 with M1 cpu)
           - { os: macos-latest, compiler: ldc-latest }
           - { os: 'ubuntu-latest', compiler: 'ldc-1.28.1' }
           - { os: 'ubuntu-latest', compiler: 'ldc-1.27.1' }
@@ -69,7 +69,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, windows-latest, macos-latest ]
+        os: [ ubuntu-latest, windows-latest, macos-13 ]
         compiler:
           - dmd-latest
           - ldc-latest
