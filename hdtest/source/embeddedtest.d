@@ -47,7 +47,8 @@ class EmbeddedTest : HibernateTest {
         assert(c1Id > 0);
 
         Customer c2 = new Customer();
-        c2.name = "Jumpy Bunny";
+        // Single quotes (') are quoted as ('') in SQL.
+        c2.name = "Erdrick O'Henry";
         c2.shippingAddress = new Address();
         c2.shippingAddress.street = "21 Grassy Knoll";
         c2.shippingAddress.city = "Warrenton";
@@ -74,6 +75,14 @@ class EmbeddedTest : HibernateTest {
         Customer c2 = r2.uniqueResult!Customer();
         assert(c2 !is null);
         assert(c2.billingAddress.street == "101001 Robotface");
+
+        // Make sure queries on strings with (') characters work.
+        auto r3 = sess.createQuery("FROM Customer WHERE name = :Name")
+                .setParameter("Name", "Erdrick O'Henry");
+        Customer c3 = r3.uniqueResult!Customer();
+        import std.stdio;
+        writeln("c3.name = ", c3.name);
+        assert(c3.shippingAddress.city == "Warrenton");
     }
 
     @Test("embedded.read.query-order-by")
@@ -139,5 +148,4 @@ class EmbeddedTest : HibernateTest {
 
         sess.close();
     }
-
 }
