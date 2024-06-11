@@ -80,8 +80,7 @@ class EmbeddedTest : HibernateTest {
         auto r3 = sess.createQuery("FROM Customer WHERE name = :Name")
                 .setParameter("Name", "Erdrick O'Henry");
         Customer c3 = r3.uniqueResult!Customer();
-        import std.stdio;
-        writeln("c3.name = ", c3.name);
+        assert(c3.name == "Erdrick O'Henry");
         assert(c3.shippingAddress.city == "Warrenton");
     }
 
