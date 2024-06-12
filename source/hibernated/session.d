@@ -944,10 +944,12 @@ class PropertyLoadItem {
 }
 
 string createKeySQL(Variant id) {
+    import std.string : translate;
     if (id.convertsTo!long || id.convertsTo!ulong) {
         return id.toString();
     } else {
-        return "'" ~ id.toString() ~ "'";
+        // Quote (') in strings as ('') according to the SQL standard.
+        return "'" ~ id.toString().translate(['\'': "''"]) ~ "'";
     }
 }
 

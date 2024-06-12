@@ -1521,7 +1521,13 @@ Token[] tokenize(string s) {
 			// string constant
 			i++;
 			for(int j=i; j<len; j++) {
-				if (s[j] != '\'') {
+				// In SQL, (') characters are quoted as ('').
+				if (s[j] == '\'' && j+1 < len && s[j+1] == '\'') {
+					text ~= s[j];
+					j++;
+					text ~= s[j];
+				}
+				else if (s[j] != '\'') {
 					text ~= s[j];
 					i = j;
 				} else {
