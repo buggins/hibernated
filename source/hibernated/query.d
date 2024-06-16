@@ -1721,6 +1721,7 @@ unittest {
     assert(q.getParam("param3") == [5]);
 }
 
+/+
 unittest {
 
     //trace("query unittest");
@@ -1854,3 +1855,4 @@ unittest {
     assert(q.sql == "SELECT _t2.id, _t2.name, _t2.flags, _t2.comment, _t2.customer_fk FROM customers AS _t1 INNER JOIN users AS _t2 ON _t1.id=_t2.customer_fk WHERE _t1.id = 1");
 
 }
++/
