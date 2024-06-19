@@ -15,10 +15,10 @@ mixin(grammar(`
 # &elem = Matches if elem is found, without including elem in the containing rule.
 # !elem = Matches if elem is NOT found, without including elem in the containing rule.
 HQL:
-    Query           <-  SelectQuery  # / DeleteQuery / InsertQuery / UpdateQuery
+    Query           <-  ( SelectQuery ) eoi # / DeleteQuery / InsertQuery / UpdateQuery
     SubQuery        <-  SelectQuery
 
-    SelectQuery     <-  (SelectClause :spaces)? FromClause (:spaces WhereClause)?
+    SelectQuery     <-  (SelectClause :spaces)? FromClause (:spaces WhereClause)? (:spaces OrderClause)?
     # DeleteQuery   <- (DeleteKw FromClause WhereClause?)
 
     SelectClause    <- :SelectKw :spaces ( SelectItems ) # ( SelectItems / MapItems / ObjectItems )
@@ -31,35 +31,49 @@ HQL:
     # See https://docs.jboss.org/hibernate/orm/3.3/reference/en/html/queryhql.html#queryhql-where
     WhereClause     <- WhereKw :spaces Expression
 
+    # See https://docs.jboss.org/hibernate/orm/3.3/reference/en/html/queryhql.html#queryhql-ordering
+    OrderClause     <- OrderByKw :spaces Expression ( :spaces OrderDir )?
+    OrderDir        <- AscKw / DescKw
+
     # HQL expressions: https://docs.jboss.org/hibernate/orm/3.3/reference/en/html/queryhql.html#queryhql-expressions
     # For precedence, see: https://www.postgresql.org/docs/current/sql-syntax-lexical.html#SQL-PRECEDENCE
-    Expression      <- CallExpression
-                       / Unary1Expression
-                       / BinaryExpression
+    Expression      <- Unary1Expression
+                       / Binary1Expression
+                       / Binary2Expression
                        / TrinaryExpression
                        / Unary2Expression
                        / ParenExpression
                        / SubQueryExpression
+                       / CallExpression
                        / IdentifierItem / LitItem / NamedParamItem
-    BinaryExpression <- Expression :spaces BinaryOp :spaces Expression
-    BinaryOp        <- '^' / '*' / '/' / '%'
+    # A limited expression missing logical operators, which create ambiguity with 'between a and b'.
+    LimExpression   <- Unary1Expression
+                       / Binary1Expression
+                       / Unary2Expression
+                       / ParenExpression
+                       / SubQueryExpression
+                       / CallExpression
+                       / IdentifierItem / LitItem / NamedParamItem
+    Binary1Expression <- Expression :spaces Binary1Op :spaces Expression
+    Binary1Op        <- '^' / '*' / '/' / '%'
                        / '+' / '-'
                        / InKw / LikeKw / ILikeKw / SimilarKw
                        / '<' / '>' / '=' / '<=' / '>=' / '<>'
                        / IsNotKw / IsKw
-                       / AndKw / OrKw
-    TrinaryExpression <- Expression :spaces BetweenKw :spaces Expression :spaces AndKw :spaces Expression
+    Binary2Expression <- Expression :spaces Binary2Op :spaces Expression
+    Binary2Op         <- AndKw / OrKw
+    TrinaryExpression <- Expression :spaces BetweenKw :spaces LimExpression :spaces AndKw :spaces LimExpression
 
     # A method call, e.g. 'max(age)'.
-    CallExpression  <- Func :spaces? :'(' ParameterList :')'
+    CallExpression  <- Func :spaces? :'(' :spaces? ParameterList :spaces? :')'
     Func            <- identifier
-    ParameterList   <- Expression :spaces? (',' :spaces? Expression :spaces?)*
+    ParameterList   <- Expression ( :spaces? ',' :spaces? Expression )*
     ParenExpression <- '(' :spaces? Expression :spaces? ')'
     Unary1Expression <- ( '+' / '-' ) !NumberLit Expression
     Unary2Expression <- ( NotKw ) :spaces Expression
 
-    SubQueryExpression <- ExistsKw :'(' SubQuery :')'
-                          / Expression :spaces ( InKw / NotInKw ) :spaces? :'(' SubQuery :')'
+    SubQueryExpression <- ExistsKw :spaces? :'(' :spaces? SubQuery :spaces? :')'
+                          / Expression :spaces ( InKw / NotInKw ) :spaces :'(' SubQuery :')'
 
     IdentifierItem  <- !Kw identifier ( :'.' identifier )*
     LitItem         <- StringLit / NumberLit / BoolLit / NullLit
@@ -79,15 +93,17 @@ HQL:
     BoolLit         <- TrueKw / FalseKw
     NullLit         <- NullKw
 
-    Kw              <~ AndKw / AsKw / AvgKw / BetweenKw / CountKw / DeleteKw / ExistsKw / FalseKw / FromKw
-                       / InKw / ILikeKw / IsKw / LikeKw / MaxKw / MinKw / NotKw / OrKw / SelectKw / SumKw
-                       / TrueKw / WhereKw
+    Kw              <~ AndKw / AsKw / AscKw / AvgKw / BetweenKw / CountKw / DeleteKw / DescKw / ExistsKw
+                       / FalseKw / FromKw / InKw / ILikeKw / IsKw / LikeKw / MaxKw / MinKw / NotKw
+                       / OrKw / OrderByKw / SelectKw / SumKw / TrueKw / WhereKw
     AndKw           <~ [Aa][Nn][Dd]
     AsKw            <~ [Aa][Ss]
+    AscKw           <~ [Aa][Ss][Cc]
     AvgKw           <~ [Aa][Vv][Gg]
     BetweenKw       <~ [Bb][Ee][Tt][Ww][Ee][Ee][Nn]
     CountKw         <~ [Cc][Oo][Uu][Nn][Tt]
     DeleteKw        <~ [Dd][Ee][Ll][Ee][Tt][Ee]
+    DescKw          <~ [Dd][Ee][Ss][Cc]
     ExistsKw        <~ [Ee][Xx][Ii][Ss][Tt][Ss]
     FalseKw         <~ [Ff][Aa][Ll][Ss][Ee]
     FromKw          <~ [Ff][Rr][Oo][Mm]
@@ -102,11 +118,15 @@ HQL:
     NotInKw         <~ [Nn][Oo][Tt] :spaces [Ii][Nn]
     NullKw          <~ [Nn][Uu][Ll][Ll]
     OrKw            <~ [Oo][Rr]
+    OrderByKw       <~ [Oo][Rr][Dd][Ee][Rr] :spaces [Bb][Yy]
     SelectKw        <~ [Ss][Ee][Ll][Ee][Cc][Tt]
     SimilarKw       <~ [Ss][Ii][Mm][Ii][Ll][Aa][Rr]
     SumKw           <~ [Ss][Uu][Mm]
     TrueKw          <~ [Tt][Rr][Uu][Ee]
     WhereKw         <~ [Ww][Hh][Ee][Rr][Ee]
+
+    # End of input, e.g. not any character.
+    eoi             <- !.
 `));
 
 /// A sanity check on the HQL select clause.
@@ -123,6 +143,9 @@ unittest {
     assert(HQL("select :name, :age FROM Ham").successful);
     // Select w/ expressions
     assert(HQL("select 1 + 2, 1 * (3 + 4), true and false, not true and false FROM Ham").successful);
+    assert(HQL("select count(h), min(age, height) FROM Ham h").successful);
+    // Invalid queries.
+    assert(!HQL("FROM models.Fish floom boom").successful);
 }
 
 /// A sanity check on the HQL where clause.
@@ -136,6 +159,19 @@ unittest {
     // SubQuery expressions.
     assert(HQL("FROM fish where name in (select name from Bird) or "
             ~ "exists ( from shark where id = fish.id )").successful);
+}
+
+// // A sanity sheck on HQL order-by clause.
+unittest {
+    // Order by ascending.
+    assert(HQL("FROM fish ORDER BY age ASC").successful);
+    // Order by descending.
+    assert(HQL("FROM fish ORDER BY sister.age desc").successful);
+    // Implicit sort order (system determined).
+    assert(HQL("FROM fish ORDER BY sister.age").successful);
+    // Some invalid ordering that should be rejected.
+    assert(!HQL("FROM fish ORDER BY sister.age ARSC").successful);
+    assert(!HQL("FROM fish ORDER BY sister.age ASC DESC").successful);
 }
 
 /// A unittest focused on parsing of a select clause in normal form (not list, object, or map).
