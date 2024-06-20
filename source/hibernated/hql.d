@@ -15,24 +15,36 @@ mixin(grammar(`
 # &elem = Matches if elem is found, without including elem in the containing rule.
 # !elem = Matches if elem is NOT found, without including elem in the containing rule.
 HQL:
-    Query           <-  ( SelectQuery ) eoi # / DeleteQuery / InsertQuery / UpdateQuery
+    # Query           <-  ( SelectQuery / DeleteQuery / UpdateQuery ) eoi
+    Query           <-  ( SelectQuery / DeleteQuery ) eoi
     SubQuery        <-  SelectQuery
 
     SelectQuery     <-  (SelectClause :spaces)? FromClause (:spaces WhereClause)? (:spaces OrderClause)?
-    # DeleteQuery   <- (DeleteKw FromClause WhereClause?)
 
-    SelectClause    <- :SelectKw :spaces ( SelectItems ) # ( SelectItems / MapItems / ObjectItems )
-    SelectItems      <- SelectItem (:spaces? ',' :spaces? SelectItem)*
+    DeleteQuery     <- DeleteKw :spaces FromClause2 (:spaces WhereClause)?
+
+    # Inserts are done by periodically flushing the cache, and shoud be implemented accordingly.
+    # See: https://docs.jboss.org/hibernate/orm/3.3/reference/en/html/batch.html#batch-inserts
+
+    # The select clause has array, map, and object forms.
+    # See: https://docs.jboss.org/hibernate/orm/3.3/reference/en/html/queryhql.html#queryhql-select
+    SelectClause    <- :SelectKw :spaces ( MapItems / ObjectItems / ArrayItems )
+    MapItems        <- :'new' :spaces :'map' :spaces? :'(' :spaces? ArrayItems :spaces? :')'
+    ObjectItems     <- :'new' :spaces IdentifierItem :spaces? :'(' :spaces? ArrayItems :spaces? :')'
+    ArrayItems      <- SelectItem (:spaces? ',' :spaces? SelectItem)*
+
     SelectItem      <- Expression (:spaces Alias)?
-    Alias           <- :(AsKw spaces)? !Kw identifier
+    Alias           <- :(AsKw :spaces)? Identifier
 
     FromClause      <- :FromKw :spaces IdentifierItem (:spaces Alias)?
+    # A variant of the From clause where the FromKw is optional.
+    FromClause2     <- (:FromKw :spaces)? IdentifierItem (:spaces Alias)?
 
     # See https://docs.jboss.org/hibernate/orm/3.3/reference/en/html/queryhql.html#queryhql-where
     WhereClause     <- WhereKw :spaces Expression
 
     # See https://docs.jboss.org/hibernate/orm/3.3/reference/en/html/queryhql.html#queryhql-ordering
-    OrderClause     <- OrderByKw :spaces Expression ( :spaces OrderDir )?
+    OrderClause     <- OrderKw :spaces ByKw :spaces Expression ( :spaces OrderDir )?
     OrderDir        <- AscKw / DescKw
 
     # HQL expressions: https://docs.jboss.org/hibernate/orm/3.3/reference/en/html/queryhql.html#queryhql-expressions
@@ -55,11 +67,11 @@ HQL:
                        / CallExpression
                        / IdentifierItem / LitItem / NamedParamItem
     Binary1Expression <- Expression :spaces Binary1Op :spaces Expression
-    Binary1Op        <- '^' / '*' / '/' / '%'
-                       / '+' / '-'
-                       / InKw / LikeKw / ILikeKw / SimilarKw
-                       / '<' / '>' / '=' / '<=' / '>=' / '<>'
-                       / IsNotKw / IsKw
+    Binary1Op         <- '^' / '*' / '/' / '%'
+                         / '+' / '-'
+                         / InKw / LikeKw / ILikeKw / SimilarKw
+                         / '<' / '>' / '=' / '<=' / '>=' / '<>'
+                         / IsNotKw / IsKw
     Binary2Expression <- Expression :spaces Binary2Op :spaces Expression
     Binary2Op         <- AndKw / OrKw
     TrinaryExpression <- Expression :spaces BetweenKw :spaces LimExpression :spaces AndKw :spaces LimExpression
@@ -75,7 +87,8 @@ HQL:
     SubQueryExpression <- ExistsKw :spaces? :'(' :spaces? SubQuery :spaces? :')'
                           / Expression :spaces ( InKw / NotInKw ) :spaces :'(' SubQuery :')'
 
-    IdentifierItem  <- !Kw identifier ( :'.' identifier )*
+    Identifier      <~ ((!Kw identifier) / (Kw identifier))
+    IdentifierItem  <- Identifier ( :'.' Identifier )*
     LitItem         <- StringLit / NumberLit / BoolLit / NullLit
     NamedParamItem  <- ':' identifier
 
@@ -93,14 +106,15 @@ HQL:
     BoolLit         <- TrueKw / FalseKw
     NullLit         <- NullKw
 
-    Kw              <~ AndKw / AsKw / AscKw / AvgKw / BetweenKw / CountKw / DeleteKw / DescKw / ExistsKw
+    Kw              <~ AndKw / AsKw / AscKw / AvgKw / BetweenKw / ByKw / CountKw / DeleteKw / DescKw / ExistsKw
                        / FalseKw / FromKw / InKw / ILikeKw / IsKw / LikeKw / MaxKw / MinKw / NotKw
-                       / OrKw / OrderByKw / SelectKw / SumKw / TrueKw / WhereKw
+                       / OrderKw / OrKw / SelectKw / SumKw / TrueKw / WhereKw
     AndKw           <~ [Aa][Nn][Dd]
     AsKw            <~ [Aa][Ss]
     AscKw           <~ [Aa][Ss][Cc]
     AvgKw           <~ [Aa][Vv][Gg]
     BetweenKw       <~ [Bb][Ee][Tt][Ww][Ee][Ee][Nn]
+    ByKw            <~ [Bb][Yy]
     CountKw         <~ [Cc][Oo][Uu][Nn][Tt]
     DeleteKw        <~ [Dd][Ee][Ll][Ee][Tt][Ee]
     DescKw          <~ [Dd][Ee][Ss][Cc]
@@ -118,14 +132,17 @@ HQL:
     NotInKw         <~ [Nn][Oo][Tt] :spaces [Ii][Nn]
     NullKw          <~ [Nn][Uu][Ll][Ll]
     OrKw            <~ [Oo][Rr]
-    OrderByKw       <~ [Oo][Rr][Dd][Ee][Rr] :spaces [Bb][Yy]
+    OrderKw         <~ [Oo][Rr][Dd][Ee][Rr]
     SelectKw        <~ [Ss][Ee][Ll][Ee][Cc][Tt]
     SimilarKw       <~ [Ss][Ii][Mm][Ii][Ll][Aa][Rr]
     SumKw           <~ [Ss][Uu][Mm]
     TrueKw          <~ [Tt][Rr][Uu][Ee]
+    UpdateKw        <~ [Uu][Pp][Dd][Aa][Tt][Ee]
     WhereKw         <~ [Ww][Hh][Ee][Rr][Ee]
 
     # End of input, e.g. not any character.
+    identifierChar  <- [a-zA-Z_0-9]
+    eow             <- !identifierChar
     eoi             <- !.
 `));
 
@@ -148,6 +165,15 @@ unittest {
     assert(!HQL("FROM models.Fish floom boom").successful);
 }
 
+/// Test some of HQL's alternate select forms, e.g. as a map or an object.
+unittest {
+    // Delcare a map, which in D could be an associative array or other implementation.
+    import std.stdio;
+    assert(HQL("SELECT new map(1 as turn, 2 as magic, age > 18 as is_adult ) FROM Person").successful);
+    // Declare a new object (assuming a constructor exists).
+    assert(HQL("SELECT new Birb(1 as turn, 2 as magic, age > 18 as is_adult ) FROM Person").successful);
+}
+
 /// A sanity check on the HQL where clause.
 unittest {
     // Single values are permitted for where clauses.
@@ -161,7 +187,7 @@ unittest {
             ~ "exists ( from shark where id = fish.id )").successful);
 }
 
-// // A sanity sheck on HQL order-by clause.
+// A sanity check on HQL order-by clause.
 unittest {
     // Order by ascending.
     assert(HQL("FROM fish ORDER BY age ASC").successful);
@@ -172,6 +198,12 @@ unittest {
     // Some invalid ordering that should be rejected.
     assert(!HQL("FROM fish ORDER BY sister.age ARSC").successful);
     assert(!HQL("FROM fish ORDER BY sister.age ASC DESC").successful);
+}
+
+// A sanity check for HQL update and delete queries.
+unittest {
+    assert(HQL("delete from dogs where name = :Doggo").successful);
+    assert(HQL("DELETE dogs").successful);
 }
 
 /// A unittest focused on parsing of a select clause in normal form (not list, object, or map).
@@ -192,7 +224,7 @@ unittest {
     assert(selectQuery.children[1].name == "HQL.FromClause");
 
     ParseTree selectClause = selectQuery.children[0];
-    assert(selectClause.children.length == 1 && selectClause.children[0].name == "HQL.SelectItems");
+    assert(selectClause.children.length == 1 && selectClause.children[0].name == "HQL.ArrayItems");
 
     ParseTree arrayItems = selectClause.children[0];
     assert(arrayItems.children.length == 4);
