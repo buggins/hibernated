@@ -36,9 +36,19 @@ HQL:
     SelectItem      <- Expression (:spaces Alias)?
     Alias           <- :(AsKw :spaces)? Identifier
 
-    FromClause      <- :FromKw :spaces IdentifierItem (:spaces Alias)?
+    FromClause      <- :FromKw :spaces FromItem
     # A variant of the From clause where the FromKw is optional.
-    FromClause2     <- (:FromKw :spaces)? IdentifierItem (:spaces Alias)?
+    FromClause2     <- (:FromKw :spaces)? FromItem
+
+    # See https://www.postgresql.org/docs/16/sql-select.html
+    # See https://docs.jboss.org/hibernate/orm/3.3/reference/en/html/queryhql.html#queryhql-joins
+    FromItem        <- IdentifierItem (:spaces Alias)? (:spaces JoinItems)?
+    JoinItems       <- JoinItem (:spaces JoinItem)*
+    JoinItem        <- JoinType :spaces IdentifierItem (:spaces Alias)? (:spaces WithKw :spaces Expression)?
+    JoinType        <- :(InnerKw spaces)? JoinKw (:spaces FetchKw)?
+                       / LeftKw :spaces :(OuterKw spaces)? JoinKw (:spaces FetchKw)?
+                       / RightKw :spaces :(OuterKw spaces)? JoinKw (:spaces FetchKw)?
+                       / FullKw :spaces :(OuterKw spaces)? JoinKw (:spaces FetchKw)?
 
     # See https://docs.jboss.org/hibernate/orm/3.3/reference/en/html/queryhql.html#queryhql-where
     WhereClause     <- WhereKw :spaces Expression
@@ -107,8 +117,9 @@ HQL:
     NullLit         <- NullKw
 
     Kw              <~ AndKw / AsKw / AscKw / AvgKw / BetweenKw / ByKw / CountKw / DeleteKw / DescKw / ExistsKw
-                       / FalseKw / FromKw / InKw / ILikeKw / IsKw / LikeKw / MaxKw / MinKw / NotKw
-                       / OrderKw / OrKw / SelectKw / SumKw / TrueKw / WhereKw
+                       / FalseKw / FetchKw / FromKw / FullKw / InnerKw / InKw / ILikeKw / IsKw / JoinKw / LeftKw
+                       / LikeKw / MaxKw / MinKw / NotKw / OrderKw / OrKw / OuterKw / RightKw / SelectKw / SumKw
+                       / TrueKw / WhereKw / WithKw
     AndKw           <~ [Aa][Nn][Dd]
     AsKw            <~ [Aa][Ss]
     AscKw           <~ [Aa][Ss][Cc]
@@ -120,11 +131,16 @@ HQL:
     DescKw          <~ [Dd][Ee][Ss][Cc]
     ExistsKw        <~ [Ee][Xx][Ii][Ss][Tt][Ss]
     FalseKw         <~ [Ff][Aa][Ll][Ss][Ee]
+    FetchKw         <~ [Ff][Ee][Tt][Cc][Hh]
     FromKw          <~ [Ff][Rr][Oo][Mm]
+    FullKw          <~ [Ff][Uu][Ll][Ll]
     ILikeKw         <~ [Ii][Ll][Ii][Kk][Ee]
+    InnerKw         <~ [Ii][Nn][Nn][Ee][Rr]
     InKw            <~ [Ii][Nn]
     IsKw            <~ [Ii][Ss]
     IsNotKw         <~ [Ii][Ss] :spaces [Nn][Oo][Tt]
+    JoinKw          <~ [Jj][Oo][Ii][Nn]
+    LeftKw          <~ [Ll][Ee][Ff][Tt]
     LikeKw          <~ [Ll][Ii][Kk][Ee]
     MaxKw           <~ [Mm][Aa][Xx]
     MinKw           <~ [Mm][Ii][Nn]
@@ -133,12 +149,15 @@ HQL:
     NullKw          <~ [Nn][Uu][Ll][Ll]
     OrKw            <~ [Oo][Rr]
     OrderKw         <~ [Oo][Rr][Dd][Ee][Rr]
+    OuterKw         <~ [Oo][Uu][Tt][Ee][Rr]
+    RightKw         <~ [Rr][Ii][Gg][Hh][Tt]
     SelectKw        <~ [Ss][Ee][Ll][Ee][Cc][Tt]
     SimilarKw       <~ [Ss][Ii][Mm][Ii][Ll][Aa][Rr]
     SumKw           <~ [Ss][Uu][Mm]
     TrueKw          <~ [Tt][Rr][Uu][Ee]
     UpdateKw        <~ [Uu][Pp][Dd][Aa][Tt][Ee]
     WhereKw         <~ [Ww][Hh][Ee][Rr][Ee]
+    WithKw          <~ [Ww][Ii][Tt][Hh]
 
     # End of input, e.g. not any character.
     identifierChar  <- [a-zA-Z_0-9]
@@ -200,6 +219,32 @@ unittest {
     assert(!HQL("FROM fish ORDER BY sister.age ASC DESC").successful);
 }
 
+// A sanity check on HQL joins and fetches.
+unittest {
+    assert(HQL("from Cat as cat "
+            ~ "inner join cat.mate as mate "
+            ~ "left outer join cat.kittens as kitten").successful);
+    assert(HQL("from Cat as cat left join cat.mate.kittens as kittens").successful);
+    assert(HQL("from Formula form full join form.parameter param").successful);
+    // join types may be abbreviated
+    assert(HQL("from Cat as cat "
+            ~ "join cat.mate as mate "
+            ~ "left join cat.kittens as kitten").successful);
+    // extra conditions using the "with" keyword
+    assert(HQL("from Cat as cat "
+            ~ "left join cat.kittens as kitten "
+            ~ "with kitten.bodyWeight > 10.0").successful);
+    // fetch joins without aliases
+    assert(HQL("from Cat as cat "
+            ~ "inner join fetch cat.mate "
+            ~ "left join fetch cat.kittens").successful);
+    // fetch joins with aliases
+    assert(HQL("from Cat as cat "
+            ~ "inner join fetch cat.mate "
+            ~ "left join fetch cat.kittens child "
+            ~ "left join fetch child.kittens").successful);
+}
+
 // A sanity check for HQL update and delete queries.
 unittest {
     assert(HQL("delete from dogs where name = :Doggo").successful);
@@ -241,9 +286,11 @@ unittest {
     assert(arrayItems.children[3].matches == ["-2.3E4"]);
 
     ParseTree fromClause = selectQuery.children[1];
-    assert(fromClause.children.length == 2);
-    assert(fromClause.children[0].name == "HQL.IdentifierItem");
-    assert(fromClause.children[0].matches == ["models", "Person"]);
-    assert(fromClause.children[1].name == "HQL.Alias");
-    assert(fromClause.children[1].matches == ["p"]);
+    assert(fromClause.children.length == 1);
+    ParseTree fromItem = fromClause.children[0];
+    assert(fromItem.children.length == 2);
+    assert(fromItem.children[0].name == "HQL.IdentifierItem");
+    assert(fromItem.children[0].matches == ["models", "Person"]);
+    assert(fromItem.children[1].name == "HQL.Alias");
+    assert(fromItem.children[1].matches == ["p"]);
 }
