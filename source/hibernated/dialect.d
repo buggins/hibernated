@@ -109,7 +109,8 @@ abstract class Dialect {
 		string res = "'";
 		foreach(ch; s) {
 			switch(ch) {
-				case '\'': res ~= "\\\'"; break;
+                // All dialects support the SQL-standard way of escaping a (') character via ('').
+				case '\'': res ~= "''"; break;
 				case '\"': res ~= "\\\""; break;
 				case '\\': res ~= "\\\\"; break;
 				case '\0': res ~= "\\n"; break;

@@ -1443,6 +1443,12 @@ class Token {
 	
 }
 
+/**
+ * Converts an HQL string into a series of tokens to be later converted to SQL.
+ *
+ * HQL follows the Jakarta Persistence specification, which requires escaping (') characters via ('').
+ * See: https://jakarta.ee/specifications/persistence/3.2/jakarta-persistence-spec-3.2#literals
+ */
 Token[] tokenize(string s) {
 	Token[] res;
 	int startpos = 0;
@@ -1521,11 +1527,10 @@ Token[] tokenize(string s) {
 			// string constant
 			i++;
 			for(int j=i; j<len; j++) {
-				// In SQL, (') characters are quoted as ('').
+				// In HQL, (') characters are quoted as (''), so undo that escaping.
 				if (s[j] == '\'' && j+1 < len && s[j+1] == '\'') {
 					text ~= s[j];
 					j++;
-					text ~= s[j];
 				}
 				else if (s[j] != '\'') {
 					text ~= s[j];

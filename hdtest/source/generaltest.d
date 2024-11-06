@@ -253,5 +253,18 @@ class GeneralTest : HibernateTest {
       assert(allUsers.length == 2); // Should only be 2 users now
     }
   }
+
+  @Test("quote escape test")
+  void quoteEscapeTest() {
+      Session sess = sessionFactory.openSession();
+      scope(exit) sess.close();
+
+      auto a1 = new Asset();
+      a1.name = "Bucky O'Hare";
+      int id = sess.save(a1).get!int;
+
+      auto query = sess.createQuery("FROM Asset WHERE name=:Name").setParameter("Name", "Bucky O'Hare");
+      writeln("FLOOB: query results", query.listRows());
+  }
 }
 
