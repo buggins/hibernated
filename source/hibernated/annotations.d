@@ -266,7 +266,6 @@ struct ManyToMany {
     immutable string joinColumn2;
 }
 
-
 unittest {
     @Entity
     @Table("user")
