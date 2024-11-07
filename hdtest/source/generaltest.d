@@ -263,8 +263,14 @@ class GeneralTest : HibernateTest {
       a1.name = "Bucky O'Hare";
       int id = sess.save(a1).get!int;
 
-      auto query = sess.createQuery("FROM Asset WHERE name=:Name").setParameter("Name", "Bucky O'Hare").list!Asset;
-      assert(query.length == 1);
+      auto result = sess.createQuery("FROM Asset WHERE name=:Name")
+              .setParameter("Name", "Bucky O'Hare")
+              .list!Asset();
+      assert(result.length == 1);
+
+      result = sess.createQuery("FROM Asset WHERE name='Bucky O''Hare'")
+              .list!Asset();
+      assert(result.length == 1);
   }
 }
 
