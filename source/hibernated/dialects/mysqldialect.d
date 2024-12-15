@@ -115,11 +115,14 @@ class MySQLDialect : Dialect {
         bool fk = pi is null;
         string nullablility = !fk && pi.nullable ? " NULL" : " NOT NULL";
         string pk = !fk && pi.key ? " PRIMARY KEY" : "";
-        // MySQL only supports AUTO_INCREMENT for the primary key.
+        // MySQL only supports AUTO_INCREMENT for integer types of PRIMARY KEY or UNIQUE.
         string autoinc = (!fk && pi.generated)
-                ? (pi.key
-                     ? " AUTO_INCREMENT"
-                     : " AUTO_INCREMENT UNIQUE")
+                ? (sqlType == SqlType.INTEGER
+                    ? (pi.key
+                         ? " AUTO_INCREMENT"
+                         : " AUTO_INCREMENT UNIQUE")
+                    // Without a generator, use a default so that it it is optional for insert/update.
+                    : " DEFAULT " ~ getImplicitDefaultByType(sqlType))
                 : "";
         string def = "";
         int len = 0;
@@ -228,6 +231,40 @@ class MySQLDialect : Dialect {
 	this() {
 		addKeywords(MYSQL_RESERVED_WORDS);
 	}
+
+    string getImplicitDefaultByType(SqlType sqlType) {
+         switch (sqlType) {
+            case SqlType.BIGINT:
+            case SqlType.BIT:
+            case SqlType.DECIMAL:
+            case SqlType.DOUBLE:
+            case SqlType.FLOAT:
+            case SqlType.INTEGER:
+            case SqlType.NUMERIC:
+            case SqlType.SMALLINT:
+            case SqlType.TINYINT:
+                return "0";
+            case SqlType.BOOLEAN:
+                return "false";
+            case SqlType.CHAR:
+            case SqlType.LONGNVARCHAR:
+            case SqlType.LONGVARBINARY:
+            case SqlType.LONGVARCHAR:
+            case SqlType.NCHAR:
+            case SqlType.NCLOB:
+            case SqlType.NVARCHAR:
+            case SqlType.VARBINARY:
+            case SqlType.VARCHAR:
+                return "''";
+            case SqlType.DATE:
+            case SqlType.DATETIME:
+                return "'1970-01-01'";
+            case SqlType.TIME:
+                return "'00:00:00'";
+            default:
+                return "''";
+        }
+    }
 }
 
 
