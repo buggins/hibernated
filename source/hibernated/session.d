@@ -585,10 +585,17 @@ class SessionImpl : Session {
         string query = metaData.generateFindByPkForEntity(dialect, info);
         enforceHelper!TransientObjectException(info.isKeySet(obj), "Cannot refresh entity " ~ info.name ~ ": no Id specified");
         Variant id = info.getKey(obj);
-        //trace("Finder query: " ~ query);
+        trace("refresh query: " ~ query);
         PreparedStatement stmt = conn.prepareStatement(query);
         scope(exit) stmt.close();
-        stmt.setVariant(1, id);
+        if (info.keyProperty.relation == RelationType.Embedded) {
+            int pos = 1;
+            foreach (pi; info.keyProperty.referencedEntity()) {
+                stmt.setVariant(pos++, pi.getFunc(id.get!Object));
+            }
+        } else {
+            stmt.setVariant(1, id);
+        }
         ResultSet rs = stmt.executeQuery();
         //trace("returned rows: " ~ to!string(rs.getFetchSize()));
         scope(exit) rs.close();
@@ -944,12 +951,10 @@ class PropertyLoadItem {
 }
 
 string createKeySQL(Variant id) {
-    import std.string : translate;
     if (id.convertsTo!long || id.convertsTo!ulong) {
         return id.toString();
     } else {
-        // Quote (') in strings as ('') according to the SQL standard.
-        return "'" ~ id.toString().translate(['\'': "''"]) ~ "'";
+        return "'" ~ id.toString() ~ "'";
     }
 }
 
@@ -1285,7 +1290,7 @@ class QueryImpl : Query
         Object[] res;
 
 
-        //trace("SQL: " ~ query.sql);
+        trace("SQL: " ~ query.sql);
         PreparedStatement stmt = sess.conn.prepareStatement(query.sql);
         scope(exit) stmt.close();
         params.applyParams(stmt);

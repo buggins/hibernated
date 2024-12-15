@@ -1,10 +1,10 @@
 /**
- * HibernateD - Object-Relation Mapping for D programming language, with interface similar to Hibernate. 
- * 
+ * HibernateD - Object-Relation Mapping for D programming language, with interface similar to Hibernate.
+ *
  * Source file hibernated/dialects/sqlitedialect.d.
  *
  * This module contains implementation of PGSQLDialect class which provides implementation specific SQL syntax information.
- * 
+ *
  * Copyright: Copyright 2013
  * License:   $(LINK www.boost.org/LICENSE_1_0.txt, Boost License 1.0).
  * Author:   Vadim Lopatin
@@ -19,7 +19,7 @@ import hibernated.type;
 import ddbc.core : SqlType;
 
 
-string[] PGSQL_RESERVED_WORDS = 
+string[] PGSQL_RESERVED_WORDS =
     [
      "ABORT",
      "ACTION",
@@ -151,7 +151,7 @@ class PGSQLDialect : Dialect {
     override char closeQuote() const { return '"'; }
     ///The character specific to this dialect used to begin a quoted identifier.
     override char  openQuote() const { return '"'; }
-    
+
     // returns string like "BIGINT(20) NOT NULL" or "VARCHAR(255) NULL"
     override string getColumnTypeDefinition(const PropertyInfo pi, const PropertyInfo overrideTypeFrom = null) {
         immutable Type type = overrideTypeFrom !is null ? overrideTypeFrom.columnType : pi.columnType;
@@ -161,10 +161,10 @@ class PGSQLDialect : Dialect {
         string pk = !fk && pi.key ? " PRIMARY KEY" : "";
         if (!fk && pi.generated) {
             if (sqlType == SqlType.SMALLINT || sqlType == SqlType.TINYINT)
-                return "SERIAL PRIMARY KEY";
+                return "SERIAL" ~ pk;
             if (sqlType == SqlType.INTEGER)
-                return "SERIAL PRIMARY KEY";
-            return "BIGSERIAL PRIMARY KEY";
+                return "SERIAL" ~ pk;
+            return "BIGSERIAL" ~ pk;
         }
         string def = "";
         int len = 0;
@@ -219,15 +219,15 @@ class PGSQLDialect : Dialect {
                 return "TEXT";
         }
     }
-    
+
     override string getCheckTableExistsSQL(string tableName) {
         return "select relname from pg_class where relname = " ~ quoteSqlString(tableName) ~ " and relkind='r'";
     }
-    
+
     override string getUniqueIndexItemSQL(string indexName, string[] columnNames) {
         return "UNIQUE " ~ createFieldListSQL(columnNames);
     }
-    
+
     /// for some of RDBMS it's necessary to pass additional clauses in query to get generated value (e.g. in Postgres - " returing id"
     override string appendInsertToFetchGeneratedKey(string query, const EntityInfo entity) {
         return query ~ " RETURNING " ~ quoteIfNeeded(entity.getKeyProperty().columnName);

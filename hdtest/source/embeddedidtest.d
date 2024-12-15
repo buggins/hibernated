@@ -1,6 +1,5 @@
 module embeddedidtest;
 
-
 import std.algorithm : any;
 
 import hibernated.core;
@@ -158,5 +157,32 @@ class EmbeddedIdTest : HibernateTest {
         assert(i1 is null);
 
         sess.close();
+    }
+
+    @Test("embeddedid.refresh")
+    void refreshTest() {
+        Session sess = sessionFactory.openSession();
+
+        // Create a new record that we can mutate outside the session.
+        Invoice invoice = new Invoice();
+        invoice.invoiceId = new InvoiceId();
+        invoice.invoiceId.vendorNo = "ABC123";
+        invoice.invoiceId.invoiceNo = "L1005-2330";
+        invoice.currency = "EUR";
+        invoice.amountE4 = 54_3200;
+        sess.save(invoice).get!InvoiceId;
+
+        // Modify this entity outside the session using a raw SQL query.
+        sess.doWork(
+                (Connection c) {
+                    Statement stmt = c.createStatement();
+                    scope (exit) stmt.close();
+                    stmt.executeUpdate("UPDATE invoice SET currency = 'USD' "
+                            ~ "WHERE vendor_no = 'ABC123' AND invoice_no = 'L1005-2330'");
+                });
+
+        // Make sure that the entity picks up the out-of-session changes.
+        sess.refresh(invoice);
+        assert(invoice.currency == "USD");
     }
 }
