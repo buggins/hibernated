@@ -115,7 +115,12 @@ class MySQLDialect : Dialect {
         bool fk = pi is null;
         string nullablility = !fk && pi.nullable ? " NULL" : " NOT NULL";
         string pk = !fk && pi.key ? " PRIMARY KEY" : "";
-        string autoinc = !fk && pi.generated ? " AUTO_INCREMENT" : "";
+        // MySQL only supports AUTO_INCREMENT for the primary key.
+        string autoinc = (!fk && pi.generated)
+                ? (pi.key
+                     ? " AUTO_INCREMENT"
+                     : " UNIQUE AUTO_INCREMENT")
+                : "";
         string def = "";
         int len = 0;
         string unsigned = "";
