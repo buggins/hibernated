@@ -119,7 +119,7 @@ class MySQLDialect : Dialect {
         string autoinc = (!fk && pi.generated)
                 ? (pi.key
                      ? " AUTO_INCREMENT"
-                     : " UNIQUE AUTO_INCREMENT")
+                     : " AUTO_INCREMENT UNIQUE")
                 : "";
         string def = "";
         int len = 0;
