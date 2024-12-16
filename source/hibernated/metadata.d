@@ -3498,7 +3498,6 @@ abstract class SchemaInfo : EntityMetaData {
         string query = "SELECT " ~ getAllFieldList(dialect, ei) ~ " FROM " ~ dialect.quoteIfNeeded(ei.tableName) ~ " WHERE ";
         // If there is a compound primary key, match all columns of the primary key.
         if (ei.getKeyProperty().relation == RelationType.Embedded) {
-            trace("NEW REFRESH");
             auto embeddedEntityInfo = ei.getKeyProperty().referencedEntity;
             bool isFirst = true;
             foreach (propertyInfo; embeddedEntityInfo) {
@@ -3512,7 +3511,6 @@ abstract class SchemaInfo : EntityMetaData {
         }
         // Otherwise, match the single column of the primary key.
         else {
-            trace("OLD REFRESH");
             query ~= dialect.quoteIfNeeded(ei.keyProperty.columnName) ~ " = ?";
         }
         return query;
