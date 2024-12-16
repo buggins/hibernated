@@ -159,13 +159,14 @@ class PGSQLDialect : Dialect {
         bool fk = pi is null;
         string nullablility = !fk && pi.nullable ? " NULL" : " NOT NULL";
         string pk = !fk && pi.key ? " PRIMARY KEY" : "";
-        if (!fk && pi.generated) {
-            if (sqlType == SqlType.SMALLINT || sqlType == SqlType.TINYINT)
-                return "SERIAL" ~ pk;
-            if (sqlType == SqlType.INTEGER)
-                return "SERIAL" ~ pk;
-            return "BIGSERIAL" ~ pk;
-        }
+        string autoinc = (!fk && pi.generated)
+                ? (sqlType == SqlType.SMALLINT || sqlType == SqlType.TINYINT || sqlType == SqlType.INTEGER
+                    ? " SERIAL"
+                    : (sqlType == SqlType.BIGINT
+                        ? " BIGSERIAL"
+                        // Without a generator, use a default so that it is optional for insert/update.
+                        : " DEFAULT " ~ getImplicitDefaultByType(sqlType)))
+                : "";
         string def = "";
         int len = 0;
         if (cast(NumberType)type !is null) {
@@ -174,7 +175,7 @@ class PGSQLDialect : Dialect {
         if (cast(StringType)type !is null) {
             len = (cast(StringType)type).length;
         }
-        string modifiers = nullablility ~ def ~ pk;
+        string modifiers = nullablility ~ def ~ pk ~ autoinc;
         string lenmodifiers = "(" ~ to!string(len > 0 ? len : 255) ~ ")" ~ modifiers;
         switch (sqlType) {
             case SqlType.BIGINT:
@@ -238,3 +239,36 @@ class PGSQLDialect : Dialect {
     }
 }
 
+private string getImplicitDefaultByType(SqlType sqlType) {
+    switch (sqlType) {
+        case SqlType.BIGINT:
+        case SqlType.BIT:
+        case SqlType.DECIMAL:
+        case SqlType.DOUBLE:
+        case SqlType.FLOAT:
+        case SqlType.INTEGER:
+        case SqlType.NUMERIC:
+        case SqlType.SMALLINT:
+        case SqlType.TINYINT:
+            return "0";
+        case SqlType.BOOLEAN:
+            return "false";
+        case SqlType.CHAR:
+        case SqlType.LONGNVARCHAR:
+        case SqlType.LONGVARBINARY:
+        case SqlType.LONGVARCHAR:
+        case SqlType.NCHAR:
+        case SqlType.NCLOB:
+        case SqlType.NVARCHAR:
+        case SqlType.VARBINARY:
+        case SqlType.VARCHAR:
+            return "''";
+        case SqlType.DATE:
+        case SqlType.DATETIME:
+            return "'1970-01-01'";
+        case SqlType.TIME:
+            return "'00:00:00'";
+        default:
+            return "''";
+    }
+}
