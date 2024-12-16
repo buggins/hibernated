@@ -117,7 +117,7 @@ class MySQLDialect : Dialect {
         string pk = !fk && pi.key ? " PRIMARY KEY" : "";
         // MySQL only supports AUTO_INCREMENT for integer types of PRIMARY KEY or UNIQUE.
         string autoinc = (!fk && pi.generated)
-                ? (sqlType == SqlType.INTEGER
+                ? (sqlType == SqlType.INTEGER || sqlType == SqlType.BIGINT
                     ? (pi.key
                          ? " AUTO_INCREMENT"
                          : " AUTO_INCREMENT UNIQUE")
