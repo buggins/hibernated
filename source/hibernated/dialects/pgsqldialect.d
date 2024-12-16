@@ -159,14 +159,17 @@ class PGSQLDialect : Dialect {
         bool fk = pi is null;
         string nullablility = !fk && pi.nullable ? " NULL" : " NOT NULL";
         string pk = !fk && pi.key ? " PRIMARY KEY" : "";
-        string autoinc = (!fk && pi.generated)
-                ? (sqlType == SqlType.SMALLINT || sqlType == SqlType.TINYINT || sqlType == SqlType.INTEGER
-                    ? " SERIAL"
-                    : (sqlType == SqlType.BIGINT
-                        ? " BIGSERIAL"
-                        // Without a generator, use a default so that it is optional for insert/update.
-                        : " DEFAULT " ~ getImplicitDefaultByType(sqlType)))
-                : "";
+        string autoinc = "";
+        if (!fk && pi.generated) {
+            if (sqlType == SqlType.SMALLINT || sqlType == SqlType.TINYINT || sqlType == SqlType.INTEGER) {
+                return "SERIAL" ~ pk;
+            } else if (sqlType == SqlType.BIGINT) {
+                return "BIGSERIAL" ~ pk;
+            } else {
+                // Without a generator, use a default so that it is optional for insert/update.
+                autoinc = " DEFAULT " ~ getImplicitDefaultByType(sqlType);
+            }
+        }
         string def = "";
         int len = 0;
         if (cast(NumberType)type !is null) {
