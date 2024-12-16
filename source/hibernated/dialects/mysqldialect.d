@@ -231,40 +231,6 @@ class MySQLDialect : Dialect {
 	this() {
 		addKeywords(MYSQL_RESERVED_WORDS);
 	}
-
-    string getImplicitDefaultByType(SqlType sqlType) {
-         switch (sqlType) {
-            case SqlType.BIGINT:
-            case SqlType.BIT:
-            case SqlType.DECIMAL:
-            case SqlType.DOUBLE:
-            case SqlType.FLOAT:
-            case SqlType.INTEGER:
-            case SqlType.NUMERIC:
-            case SqlType.SMALLINT:
-            case SqlType.TINYINT:
-                return "0";
-            case SqlType.BOOLEAN:
-                return "false";
-            case SqlType.CHAR:
-            case SqlType.LONGNVARCHAR:
-            case SqlType.LONGVARBINARY:
-            case SqlType.LONGVARCHAR:
-            case SqlType.NCHAR:
-            case SqlType.NCLOB:
-            case SqlType.NVARCHAR:
-            case SqlType.VARBINARY:
-            case SqlType.VARCHAR:
-                return "''";
-            case SqlType.DATE:
-            case SqlType.DATETIME:
-                return "'1970-01-01'";
-            case SqlType.TIME:
-                return "'00:00:00'";
-            default:
-                return "''";
-        }
-    }
 }
 
 
@@ -275,4 +241,38 @@ unittest {
 	assert(dialect.quoteSqlString("a\nc") == "'a\\nc'");
 	assert(dialect.quoteIfNeeded("blabla") == "blabla");
 	assert(dialect.quoteIfNeeded("true") == "`true`");
+}
+
+private string getImplicitDefaultByType(SqlType sqlType) {
+    switch (sqlType) {
+        case SqlType.BIGINT:
+        case SqlType.BIT:
+        case SqlType.DECIMAL:
+        case SqlType.DOUBLE:
+        case SqlType.FLOAT:
+        case SqlType.INTEGER:
+        case SqlType.NUMERIC:
+        case SqlType.SMALLINT:
+        case SqlType.TINYINT:
+            return "0";
+        case SqlType.BOOLEAN:
+            return "false";
+        case SqlType.CHAR:
+        case SqlType.LONGNVARCHAR:
+        case SqlType.LONGVARBINARY:
+        case SqlType.LONGVARCHAR:
+        case SqlType.NCHAR:
+        case SqlType.NCLOB:
+        case SqlType.NVARCHAR:
+        case SqlType.VARBINARY:
+        case SqlType.VARCHAR:
+            return "''";
+        case SqlType.DATE:
+        case SqlType.DATETIME:
+            return "'1970-01-01'";
+        case SqlType.TIME:
+            return "'00:00:00'";
+        default:
+            return "''";
+    }
 }

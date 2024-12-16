@@ -59,6 +59,31 @@ class GeneratedTest : HibernateTest {
         assert(g1.myId == g1Id);
     }
 
+    @Test("generated.mannually-set-id-generated")
+    void manuallySetIdTest() {
+        Session sess = sessionFactory.openSession();
+        scope (exit) sess.close();
+
+        Generated1 g1 = new Generated1();
+        g1.myId = 10;
+        g1.name = "Bob";
+        sess.save(g1);
+        // This value should have been detected as empty, populated by the DB, and refreshed.
+        int g1Id = g1.myId;
+        assert(g1Id == 10);
+
+        g1.name = "Barb";
+        sess.update(g1);
+
+        // Make a new session to avoid caching.
+        sess.close();
+        sess = sessionFactory.openSession();
+        g1 = sess.get!Generated1(10);
+
+        // The ID should not have been generated.
+        assert(g1.myId == g1Id);
+    }
+
     @Test("generated.non-primary-generated")
     void creation2Test() {
         Session sess = sessionFactory.openSession();
@@ -76,5 +101,31 @@ class GeneratedTest : HibernateTest {
 
         // The ID should not have changed.
         assert(g2Id == g2.myId);
+    }
+
+    @Test("generated.manually-set-non-id-generated")
+    void manuallySetNonIdTest() {
+        Session sess = sessionFactory.openSession();
+        scope (exit) sess.close();
+
+        Generated2 g2 = new Generated2();
+        g2.myId = 3;
+        g2.name = "Sam";
+        g2.counter1 = 11;
+        sess.save(g2);
+
+        int g2Id = g2.myId;
+
+        g2.name = "Slom";
+        sess.update(g2);
+
+        // Make a new session to avoid caching.
+        sess.close();
+        sess = sessionFactory.openSession();
+        g2 = sess.get!Generated2(3);
+
+        // The ID should not have changed.
+        assert(g2Id == g2.myId);
+        assert(g2.counter1 == 11);
     }
 }
