@@ -14,8 +14,18 @@ import generaltest : GeneralTest;
 import embeddedtest : EmbeddedTest;
 import embeddedidtest : EmbeddedIdTest;
 import transactiontest : TransactionTest;
+import generatedtest : GeneratedTest;
+
+void enableTraceLogging() {
+    import std.logger : sharedLog, LogLevel, globalLogLevel;
+    (cast() sharedLog).logLevel = LogLevel.trace;
+    globalLogLevel = LogLevel.trace;
+}
 
 int main(string[] args) {
+
+  // Use this to enable trace() logs, useful to inspect generated SQL.
+  enableTraceLogging();
 
   ConnectionParams par;
 
@@ -38,9 +48,14 @@ int main(string[] args) {
   test3.setConnectionParams(par);
   runTests(test3);
 
-  TransactionTest test4 = new TransactionTest();
+  GeneratedTest test4 = new GeneratedTest();
   test4.setConnectionParams(par);
   runTests(test4);
+
+  // TODO: Some tests that run after this have errors, find out why.
+  TransactionTest test5 = new TransactionTest();
+  test5.setConnectionParams(par);
+  runTests(test5);
 
   writeln("All scenarios worked successfully");
   return 0;

@@ -1,10 +1,10 @@
 /**
- * HibernateD - Object-Relation Mapping for D programming language, with interface similar to Hibernate. 
- * 
+ * HibernateD - Object-Relation Mapping for D programming language, with interface similar to Hibernate.
+ *
  * Source file hibernated/dialects/sqlitedialect.d.
  *
  * This module contains implementation of PGSQLDialect class which provides implementation specific SQL syntax information.
- * 
+ *
  * Copyright: Copyright 2013
  * License:   $(LINK www.boost.org/LICENSE_1_0.txt, Boost License 1.0).
  * Author:   Vadim Lopatin
@@ -19,7 +19,7 @@ import hibernated.type;
 import ddbc.core : SqlType;
 
 
-string[] PGSQL_RESERVED_WORDS = 
+string[] PGSQL_RESERVED_WORDS =
     [
      "ABORT",
      "ACTION",
@@ -151,7 +151,7 @@ class PGSQLDialect : Dialect {
     override char closeQuote() const { return '"'; }
     ///The character specific to this dialect used to begin a quoted identifier.
     override char  openQuote() const { return '"'; }
-    
+
     // returns string like "BIGINT(20) NOT NULL" or "VARCHAR(255) NULL"
     override string getColumnTypeDefinition(const PropertyInfo pi, const PropertyInfo overrideTypeFrom = null) {
         immutable Type type = overrideTypeFrom !is null ? overrideTypeFrom.columnType : pi.columnType;
@@ -159,12 +159,16 @@ class PGSQLDialect : Dialect {
         bool fk = pi is null;
         string nullablility = !fk && pi.nullable ? " NULL" : " NOT NULL";
         string pk = !fk && pi.key ? " PRIMARY KEY" : "";
+        string autoinc = "";
         if (!fk && pi.generated) {
-            if (sqlType == SqlType.SMALLINT || sqlType == SqlType.TINYINT)
-                return "SERIAL PRIMARY KEY";
-            if (sqlType == SqlType.INTEGER)
-                return "SERIAL PRIMARY KEY";
-            return "BIGSERIAL PRIMARY KEY";
+            if (sqlType == SqlType.SMALLINT || sqlType == SqlType.TINYINT || sqlType == SqlType.INTEGER) {
+                return "SERIAL" ~ pk;
+            } else if (sqlType == SqlType.BIGINT) {
+                return "BIGSERIAL" ~ pk;
+            } else {
+                // Without a generator, use a default so that it is optional for insert/update.
+                autoinc = " DEFAULT " ~ getImplicitDefaultByType(sqlType);
+            }
         }
         string def = "";
         int len = 0;
@@ -174,7 +178,7 @@ class PGSQLDialect : Dialect {
         if (cast(StringType)type !is null) {
             len = (cast(StringType)type).length;
         }
-        string modifiers = nullablility ~ def ~ pk;
+        string modifiers = nullablility ~ def ~ pk ~ autoinc;
         string lenmodifiers = "(" ~ to!string(len > 0 ? len : 255) ~ ")" ~ modifiers;
         switch (sqlType) {
             case SqlType.BIGINT:
@@ -219,15 +223,15 @@ class PGSQLDialect : Dialect {
                 return "TEXT";
         }
     }
-    
+
     override string getCheckTableExistsSQL(string tableName) {
         return "select relname from pg_class where relname = " ~ quoteSqlString(tableName) ~ " and relkind='r'";
     }
-    
+
     override string getUniqueIndexItemSQL(string indexName, string[] columnNames) {
         return "UNIQUE " ~ createFieldListSQL(columnNames);
     }
-    
+
     /// for some of RDBMS it's necessary to pass additional clauses in query to get generated value (e.g. in Postgres - " returing id"
     override string appendInsertToFetchGeneratedKey(string query, const EntityInfo entity) {
         return query ~ " RETURNING " ~ quoteIfNeeded(entity.getKeyProperty().columnName);
@@ -238,3 +242,36 @@ class PGSQLDialect : Dialect {
     }
 }
 
+private string getImplicitDefaultByType(SqlType sqlType) {
+    switch (sqlType) {
+        case SqlType.BIGINT:
+        case SqlType.BIT:
+        case SqlType.DECIMAL:
+        case SqlType.DOUBLE:
+        case SqlType.FLOAT:
+        case SqlType.INTEGER:
+        case SqlType.NUMERIC:
+        case SqlType.SMALLINT:
+        case SqlType.TINYINT:
+            return "0";
+        case SqlType.BOOLEAN:
+            return "false";
+        case SqlType.CHAR:
+        case SqlType.LONGNVARCHAR:
+        case SqlType.LONGVARBINARY:
+        case SqlType.LONGVARCHAR:
+        case SqlType.NCHAR:
+        case SqlType.NCLOB:
+        case SqlType.NVARCHAR:
+        case SqlType.VARBINARY:
+        case SqlType.VARCHAR:
+            return "''";
+        case SqlType.DATE:
+        case SqlType.DATETIME:
+            return "'1970-01-01'";
+        case SqlType.TIME:
+            return "'00:00:00'";
+        default:
+            return "''";
+    }
+}

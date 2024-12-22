@@ -79,11 +79,19 @@ abstract class EntityMetaData {
     public int getEntityCount() const;
     /// Entity factory
     public Object createEntity(string entityName) const;
-    /// Fills all properties of entity instance from dataset
+
+    /**
+     * Sets the properties of an entity from the output of a SELECT SQL command.
+     */
     public int readAllColumns(Object obj, DataSetReader r, int startColumn) const;
-    /// Puts all properties of entity instance to dataset
+
+    /**
+     * Sets all the parameters of an UPDATE or INSERT SQL command, to be run as a PreparedStatement,
+     * matching the properties of an entity.
+     */
     public int writeAllColumns(Object obj, DataSetWriter w, int startColumn, bool exceptKey = false) const;
 
+    /// Produces the list of fields in a `SELECT field1, field2, ... FROM <table>` SQL statement.
     public string generateFindAllForEntity(Dialect dialect, string entityName) const;
 
     public int getFieldCount(const EntityInfo ei, bool exceptKey) const;
@@ -91,13 +99,23 @@ abstract class EntityMetaData {
     public string getAllFieldList(Dialect dialect, const EntityInfo ei, bool exceptKey = false, string columnPrefix = "") const;
     public string getAllFieldList(Dialect dialect, string entityName, bool exceptKey = false) const;
 
+    /**
+     * Create a parameterized SQL SELECT statement matching only the primary-key(s) of the given entity type.
+     *
+     * For every column of the primary key, the query will contain a "?" parameter.
+     */
     public string generateFindByPkForEntity(Dialect dialect, const EntityInfo ei) const;
     public string generateFindByPkForEntity(Dialect dialect, string entityName) const;
 
-    public string generateInsertAllFieldsForEntity(Dialect dialect, const EntityInfo ei) const;
-    public string generateInsertAllFieldsForEntity(Dialect dialect, string entityName) const;
-    public string generateInsertNoKeyForEntity(Dialect dialect, const EntityInfo ei) const;
-    public string generateUpdateForEntity(Dialect dialect, const EntityInfo ei) const;
+    /// Returns an SQL query to insert all columns aside from the key, as is the case when
+    /// calling `Session.save(Object)` and the key, the `@Id` column, is set.
+    public string generateInsertAllFieldsForEntity(Object obj, Dialect dialect, const EntityInfo ei) const;
+    public string generateInsertAllFieldsForEntity(Object obj, Dialect dialect, string entityName) const;
+
+    /// Returns an SQL query to insert all columns aside from the key, as is the case when
+    /// calling `Session.save(Object)` and the key, the `@Id` column, is not set.
+    public string generateInsertNoKeyForEntity(Object obj, Dialect dialect, const EntityInfo ei) const;
+    public string generateUpdateForEntity(Object obj, Dialect dialect, const EntityInfo ei) const;
 
     public Variant getPropertyValue(Object obj, string propertyName) const;
     public void setPropertyValue(Object obj, string propertyName, Variant value) const;
@@ -129,7 +147,7 @@ public:
     /// returns true if property value of object is not null
     alias IsNullFunc = bool function(Object);
     /// returns true if key property of object is set (similar to IsNullFunc but returns true if non-nullable number is 0.
-    alias KeyIsSetFunc = bool function(Object);
+    alias IsSetFunc = bool function(Object);
     /// returns OneToOne, ManyToOne or Embedded property as Object
     alias GetObjectFunc = Object function(Object);
     /// sets OneToOne, ManyToOne or Embedded property as Object
@@ -144,7 +162,7 @@ public:
     alias SetCollectionFunc = void function(Object, Object[]);
     /// returns true if Lazy! or LazyCollection! property is loaded (no loader delegate set).
     alias IsLoadedFunc = bool function(Object);
-    /// returns new generated primary key for property
+    /// returns new generated value for property
     alias GeneratorFunc = Variant function(Connection conn, const PropertyInfo prop);
 
     package EntityInfo _entity;
@@ -179,9 +197,11 @@ public:
 
     immutable ReaderFunc readFunc;
     immutable WriterFunc writeFunc;
+    /// A function that gets the value from an object/entity corresponding with this PropertyInfo.
     immutable GetVariantFunc getFunc;
+    /// A function that sets the value from an object/entity corresponding with this PropertyInfo.
     immutable SetVariantFunc setFunc;
-    immutable KeyIsSetFunc keyIsSetFunc;
+    immutable IsSetFunc isSetFunc;
     immutable IsNullFunc isNullFunc;
     immutable GetObjectFunc getObjectFunc;
     immutable SetObjectFunc setObjectFunc;
@@ -200,7 +220,7 @@ public:
     @property bool manyToOne() const { return relation == RelationType.ManyToOne; };
     @property bool manyToMany() const { return relation == RelationType.ManyToMany; };
 
-    this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, string uniqueIndex, RelationType relation, string referencedEntityName, string referencedPropertyName, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, KeyIsSetFunc keyIsSetFunc, IsNullFunc isNullFunc,
+    this(string propertyName, string columnName, Type columnType, int length, bool key, bool generated, bool nullable, string uniqueIndex, RelationType relation, string referencedEntityName, string referencedPropertyName, ReaderFunc reader, WriterFunc writer, GetVariantFunc getFunc, SetVariantFunc setFunc, IsSetFunc isSetFunc, IsNullFunc isNullFunc,
             CopyFunc copyFieldFunc,
             GeneratorFunc generatorFunc = null,
             GetObjectFunc getObjectFunc = null,
@@ -226,7 +246,7 @@ public:
         this.writeFunc = writer;
         this.getFunc = getFunc;
         this.setFunc = setFunc;
-        this.keyIsSetFunc = keyIsSetFunc;
+        this.isSetFunc = isSetFunc;
         this.isNullFunc = isNullFunc;
         this.getObjectFunc = getObjectFunc;
         this.setObjectFunc = setObjectFunc;
@@ -343,7 +363,7 @@ class EntityInfo {
     /// returns property info for key property
     const(PropertyInfo) getKeyProperty() const { return keyProperty; }
     /// checks if primary key is set (for non-nullable member types like int or long, 0 is considered as non-set)
-    bool isKeySet(Object obj) const { return keyProperty.keyIsSetFunc(obj); }
+    bool isKeySet(Object obj) const { return keyProperty.isSetFunc(obj); }
     /// checks if primary key is set (for non-nullable member types like int or long, 0 is considered as non-set)
     bool isKeyNull(DataSetReader r, int startColumn) const { return r.isNull(startColumn + keyProperty.columnOffset); }
     /// checks if property value is null
@@ -1451,9 +1471,7 @@ string getPropertyReferencedClassName(T : Object, string m)() {
 }
 
 
-
-
-
+/// An enumerated list of types, used as an index in other type-specific constants.
 enum PropertyMemberType : int {
     BOOL_TYPE,    // bool
     BYTE_TYPE,    // byte
@@ -1805,8 +1823,9 @@ bool isColumnTypeNullableByDefault(T, string m)() {
     return ColumnTypeCanHoldNulls[getPropertyMemberType!(T,m)];
 }
 
-
-static immutable string[] ColumnTypeKeyIsSetCode =
+/// Code snippets that determines if an @Id property has been set or not, indexed by PropertyMemberType.
+/// Leaving the @Id property unset is a common practice when it is @Generated.
+static immutable string[] ColumnTypeIsSetCode =
     [
      "(%s != 0)", //BOOL_TYPE     // bool
      "(%s != 0)", //BYTE_TYPE,    // byte
@@ -1841,8 +1860,8 @@ static immutable string[] ColumnTypeKeyIsSetCode =
      "(%s !is null)", //UBYTE_ARRAY_TYPE, // ubyte[]
      ];
 
-string getColumnTypeKeyIsSetCode(T, string m)() {
-    return substituteParam(ColumnTypeKeyIsSetCode[getPropertyMemberType!(T,m)()], getPropertyReadCode!(T,m)());
+string getColumnTypeIsSetCode(T, string m)() {
+    return substituteParam(ColumnTypeIsSetCode[getPropertyMemberType!(T,m)()], getPropertyReadCode!(T,m)());
 }
 
 static immutable string[] ColumnTypeIsNullCode =
@@ -2304,7 +2323,7 @@ string getOneToOnePropertyDef(T, immutable string m)() {
     immutable string propertyVariantGetCode = "Variant(" ~ propertyReadCode ~ " is null ? null : " ~ propertyReadCode ~ ")"; //getPropertyVariantReadCode!(T,m)();
     immutable string propertyObjectSetCode = getPropertyObjectWriteCode!(T,m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
     immutable string propertyObjectGetCode = propertyReadCode; //getPropertyVariantReadCode!(T,m)();
-    immutable string keyIsSetCode = null; //getColumnTypeKeyIsSetCode!(T,m)();
+    immutable string isSetCode = null; //getColumnTypeIsSetCode!(T,m)();
     immutable string isNullCode = propertyReadCode ~ " is null";
     immutable string copyFieldCode = getPropertyCopyCode!(T,m);
     //  pragma(msg, "property read: " ~ propertyReadCode);
@@ -2324,7 +2343,7 @@ string getOneToOnePropertyDef(T, immutable string m)() {
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyVariantSetCode ~ "\n" ~
             " }\n";
-    immutable string keyIsSetFuncDef = "\n" ~
+    immutable string isSetFuncDef = "\n" ~
         "function(Object obj) { \n" ~
             "    return false;\n" ~
             " }\n";
@@ -2385,7 +2404,7 @@ string getOneToOnePropertyDef(T, immutable string m)() {
             writerFuncDef ~ ", " ~
             getVariantFuncDef ~ ", " ~
             setVariantFuncDef ~ ", " ~
-            keyIsSetFuncDef ~ ", " ~
+            isSetFuncDef ~ ", " ~
             isNullFuncDef ~ ", " ~
             copyFuncDef ~ ", " ~
             "null, " ~ // generatorFunc
@@ -2427,7 +2446,7 @@ string getManyToOnePropertyDef(T, immutable string m)() {
     immutable string propertyVariantGetCode = "Variant(" ~ propertyReadCode ~ " is null ? null : " ~ propertyReadCode ~ ")"; //getPropertyVariantReadCode!(T,m)();
     immutable string propertyObjectSetCode = getPropertyObjectWriteCode!(T,m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
     immutable string propertyObjectGetCode = propertyReadCode; //getPropertyVariantReadCode!(T,m)();
-    immutable string keyIsSetCode = null; //getColumnTypeKeyIsSetCode!(T,m)();
+    immutable string isSetCode = null; //getColumnTypeIsSetCode!(T,m)();
     immutable string isNullCode = propertyReadCode ~ " is null";
     immutable string copyFieldCode = getPropertyCopyCode!(T,m);
     //  pragma(msg, "property read: " ~ propertyReadCode);
@@ -2447,7 +2466,7 @@ string getManyToOnePropertyDef(T, immutable string m)() {
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyVariantSetCode ~ "\n" ~
             " }\n";
-    immutable string keyIsSetFuncDef = "\n" ~
+    immutable string isSetFuncDef = "\n" ~
         "function(Object obj) { \n" ~
             "    return false;\n" ~
             " }\n";
@@ -2511,7 +2530,7 @@ string getManyToOnePropertyDef(T, immutable string m)() {
             writerFuncDef ~ ", " ~
             getVariantFuncDef ~ ", " ~
             setVariantFuncDef ~ ", " ~
-            keyIsSetFuncDef ~ ", " ~
+            isSetFuncDef ~ ", " ~
             isNullFuncDef ~ ", " ~
             copyFuncDef ~ ", " ~
             "null, " ~ // generatorFunc
@@ -2558,7 +2577,7 @@ string getOneToManyPropertyDef(T, immutable string m)() {
     //pragma(msg, "propertyVariantSetCode: " ~ propertyVariantSetCode);
     immutable string propertyObjectSetCode = getPropertyCollectionWriteCode!(T,m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
     immutable string propertyObjectGetCode = propertyReadCode; //getPropertyVariantReadCode!(T,m)();
-    immutable string keyIsSetCode = null; //getColumnTypeKeyIsSetCode!(T,m)();
+    immutable string isSetCode = null; //getColumnTypeIsSetCode!(T,m)();
     immutable string isNullCode = propertyReadCode ~ " is null";
     immutable string copyFieldCode = getPropertyCopyCode!(T,m);
     //  pragma(msg, "property read: " ~ propertyReadCode);
@@ -2578,7 +2597,7 @@ string getOneToManyPropertyDef(T, immutable string m)() {
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyVariantSetCode ~ "\n" ~
             " }\n";
-    immutable string keyIsSetFuncDef = "\n" ~
+    immutable string isSetFuncDef = "\n" ~
         "function(Object obj) { \n" ~
             "    return false;\n" ~
             " }\n";
@@ -2639,7 +2658,7 @@ string getOneToManyPropertyDef(T, immutable string m)() {
             writerFuncDef ~ ", " ~
             getVariantFuncDef ~ ", " ~
             setVariantFuncDef ~ ", " ~
-            keyIsSetFuncDef ~ ", " ~
+            isSetFuncDef ~ ", " ~
             isNullFuncDef ~ ", " ~
             copyFuncDef ~ ", " ~
             "null, " ~ // generatorFunc
@@ -2688,7 +2707,7 @@ string getManyToManyPropertyDef(T, immutable string m)() {
     //pragma(msg, "propertyVariantSetCode: " ~ propertyVariantSetCode);
     immutable string propertyObjectSetCode = getPropertyCollectionWriteCode!(T,m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
     immutable string propertyObjectGetCode = propertyReadCode; //getPropertyVariantReadCode!(T,m)();
-    immutable string keyIsSetCode = null; //getColumnTypeKeyIsSetCode!(T,m)();
+    immutable string isSetCode = null; //getColumnTypeIsSetCode!(T,m)();
     immutable string isNullCode = propertyReadCode ~ " is null";
     immutable string copyFieldCode = getPropertyCopyCode!(T,m);
     immutable string readerFuncDef = "null";
@@ -2705,7 +2724,7 @@ string getManyToManyPropertyDef(T, immutable string m)() {
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyVariantSetCode ~ "\n" ~
             " }\n";
-    immutable string keyIsSetFuncDef = "\n" ~
+    immutable string isSetFuncDef = "\n" ~
         "function(Object obj) { \n" ~
             "    return false;\n" ~
             " }\n";
@@ -2766,7 +2785,7 @@ string getManyToManyPropertyDef(T, immutable string m)() {
             writerFuncDef ~ ", " ~
             getVariantFuncDef ~ ", " ~
             setVariantFuncDef ~ ", " ~
-            keyIsSetFuncDef ~ ", " ~
+            isSetFuncDef ~ ", " ~
             isNullFuncDef ~ ", " ~
             copyFuncDef ~ ", " ~
             "null, " ~ // generatorFunc
@@ -2828,7 +2847,7 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
     immutable string propertyObjectSetCode = getPropertyObjectWriteCode!(T,m, referencedClassName); // getPropertyVariantWriteCode!(T,m)();
     immutable string propertyObjectGetCode = propertyReadCode; //getPropertyVariantReadCode!(T,m)();
     // As a class, checking if not null is enough to determine if a key is set.
-    immutable string keyIsSetCode = "(" ~ propertyReadCode ~ " !is null)";// null; //getColumnTypeKeyIsSetCode!(T,m)();
+    immutable string isSetCode = "(" ~ propertyReadCode ~ " !is null)";// null; //getColumnTypeIsSetCode!(T,m)();
     immutable string isNullCode = propertyReadCode ~ " is null";
     immutable string copyFieldCode = getPropertyCopyCode!(T,m);
     //  pragma(msg, "property read: " ~ propertyReadCode);
@@ -2848,10 +2867,10 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyVariantSetCode ~ "\n" ~
             " }\n";
-    immutable string keyIsSetFuncDef = "\n" ~
+    immutable string isSetFuncDef = "\n" ~
         "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
-            "    return " ~ keyIsSetCode ~ ";\n" ~
+            "    return " ~ isSetCode ~ ";\n" ~
             " }\n";
     immutable string isNullFuncDef = "\n" ~
         "function(Object obj) { \n" ~
@@ -2895,7 +2914,7 @@ string getEmbeddedPropertyDef(T, immutable string m)() {
             writerFuncDef ~ ", " ~
             getVariantFuncDef ~ ", " ~
             setVariantFuncDef ~ ", " ~
-            keyIsSetFuncDef ~ ", " ~
+            isSetFuncDef ~ ", " ~
             isNullFuncDef ~ ", " ~
             copyFuncDef ~ ", " ~
             "null, " ~ // generatorFunc
@@ -2915,7 +2934,7 @@ string getSimplePropertyDef(T, immutable string m)() {
     immutable bool isEmbeddableClass = hasAnnotation!(T, Embeddable);
     immutable bool classHasKeyField = hasAnyKeyPropertyAnnotation!T;
     immutable string generatorCode = getGeneratorCode!(T, m);
-    immutable bool hasKeyAnnotation = hasMemberAnnotation!(T, m, Id) || hasMemberAnnotation!(T, m, Generated) || generatorCode != null;
+    immutable bool hasKeyAnnotation = hasMemberAnnotation!(T, m, Id);
     immutable bool isId = hasKeyAnnotation || (isIdPropertyName && !classHasKeyField && !isEmbeddableClass);
     immutable bool isGenerated = hasMemberAnnotation!(T, m, Generated) || (!hasKeyAnnotation && isId);
     immutable string columnName = getColumnName!(T, m);
@@ -2932,7 +2951,7 @@ string getSimplePropertyDef(T, immutable string m)() {
     immutable string datasetWriteCode = getColumnTypeDatasetWriteCode!(T,m);
     immutable string propertyVariantSetCode = getPropertyVariantWriteCode!(T,m);
     immutable string propertyVariantGetCode = getPropertyVariantReadCode!(T,m);
-    immutable string keyIsSetCode = getColumnTypeKeyIsSetCode!(T,m);
+    immutable string isSetCode = getColumnTypeIsSetCode!(T,m);
     immutable string isNullCode = getColumnTypeIsNullCode!(T,m);
     immutable string copyFieldCode = getPropertyCopyCode!(T,m);
     immutable string readerFuncDef = "\n" ~
@@ -2955,10 +2974,10 @@ string getSimplePropertyDef(T, immutable string m)() {
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
             "    " ~ propertyVariantSetCode ~ "\n" ~
             " }\n";
-    immutable string keyIsSetFuncDef = "\n" ~
+    immutable string isSetFuncDef = "\n" ~
             "function(Object obj) { \n" ~
             "    " ~ entityClassName ~ " entity = cast(" ~ entityClassName ~ ")obj; \n" ~
-            "    return " ~ keyIsSetCode ~ ";\n" ~
+            "    return " ~ isSetCode ~ ";\n" ~
             " }\n";
     immutable string isNullFuncDef = "\n" ~
             "function(Object obj) { \n" ~
@@ -2995,7 +3014,7 @@ string getSimplePropertyDef(T, immutable string m)() {
             writerFuncDef ~ ", " ~
             getVariantFuncDef ~ ", " ~
             setVariantFuncDef ~ ", " ~
-            keyIsSetFuncDef ~ ", " ~
+            isSetFuncDef ~ ", " ~
             isNullFuncDef ~ ", " ~
             copyFuncDef ~ ", " ~
             generatorFuncDef ~
@@ -3255,17 +3274,24 @@ abstract class SchemaInfo : EntityMetaData {
         buf ~= data;
     }
 
-    // Obtains an SQL compatible list of all feldis for a given entity type.
+    /**
+     * For an `UPDATE <table> SET field1=?, field2=?, ...` parameterized query, list the updatable fields.
+     * Each field is set to `?`, which must be set as a positional query parameter.
+     *
+     * TODO: Replace this with a generic function that writes columns to a query given a column
+     * filter and a column outputter.
+     */
     public string getAllFieldListForUpdate(
-            Dialect dialect, const EntityInfo ei, bool exceptKey = false,
+            Object obj, Dialect dialect, const EntityInfo ei, bool exceptKey = false,
             string columnPrefix="") const {
         string query;
         foreach(pi; ei) {
-            if (pi.key && exceptKey)
+            // TODO: Exclude non-updatable columns like @Column(updatable=false)
+            if ((pi.key && exceptKey) || (pi.generated && !pi.isSetFunc(obj)))
                 continue;
             if (pi.embedded) {
                 auto emei = pi.referencedEntity;
-                appendCommaDelimitedList(query, getAllFieldListForUpdate(dialect, emei, exceptKey, pi.columnName == "" ? "" : pi.columnName ~ "_"));
+                appendCommaDelimitedList(query, getAllFieldListForUpdate(obj, dialect, emei, exceptKey, pi.columnName == "" ? "" : pi.columnName ~ "_"));
             } else if (pi.oneToOne || pi.manyToOne) {
                 if (pi.columnName != null) {
                     // read FK column
@@ -3275,6 +3301,33 @@ abstract class SchemaInfo : EntityMetaData {
                 // skip
             } else {
                 appendCommaDelimitedList(query, dialect.quoteIfNeeded(columnPrefix ~ pi.columnName) ~ "=?");
+            }
+        }
+        return query;
+    }
+
+    // For an `INSERT INTO <table> (field1, field2, ...) VALUES (...), (...), ...` query, list the
+    // fields to be inserted.
+    public string getAllFieldListForInsert(
+            Object obj, Dialect dialect, const EntityInfo ei, bool exceptKey = false,
+            string columnPrefix="") const {
+        string query;
+        foreach(pi; ei) {
+            // TODO: Exclude non-insertable columns like @Column(insertable=false).
+            if ((pi.key && exceptKey) || (pi.generated && !pi.isSetFunc(obj)))
+                continue;
+            if (pi.embedded) {
+                auto emei = pi.referencedEntity;
+                appendCommaDelimitedList(query, getAllFieldListForInsert(obj, dialect, emei, exceptKey, pi.columnName == "" ? "" : pi.columnName ~ "_"));
+            } else if (pi.oneToOne || pi.manyToOne) {
+                if (pi.columnName != null) {
+                    // read FK column
+                    appendCommaDelimitedList(query, dialect.quoteIfNeeded(pi.columnName));
+                }
+            } else if (pi.oneToMany || pi.manyToMany) {
+                // skip
+            } else {
+                appendCommaDelimitedList(query, dialect.quoteIfNeeded(columnPrefix ~ pi.columnName));
             }
         }
         return query;
@@ -3324,14 +3377,22 @@ abstract class SchemaInfo : EntityMetaData {
         return count;
     }
 
-    public string getAllFieldPlaceholderList(const EntityInfo ei, bool exceptKey = false) const {
+    /**
+     * For an SQL query of the form `INSERT INTO <table> (col1, col2, ...) VALUES (val1, val2, ...)`,
+     * creates a list of values that match the inserted columns.
+     *
+     * TODO: Replace this with a generic function that writes columns to a query given a property
+     * filter and a column outputter.
+     */
+    public string getAllFieldPlaceholderList(Object obj, const EntityInfo ei, bool exceptKey = false) const {
         string query;
         foreach(pi; ei) {
-            if (pi.key && exceptKey)
+            // TODO: Exclude non-updatable columns like @Column(insertable=false)
+            if ((pi.key && exceptKey) || (pi.generated && !pi.isSetFunc(obj)))
                 continue;
             if (pi.embedded) {
                 auto emei = pi.referencedEntity;
-                appendCommaDelimitedList(query, getAllFieldPlaceholderList(emei));
+                appendCommaDelimitedList(query, getAllFieldPlaceholderList(obj, emei));
             } else if (pi.oneToOne || pi.manyToOne) {
                 if (pi.columnName != null) {
                     // read FK column
@@ -3378,12 +3439,15 @@ abstract class SchemaInfo : EntityMetaData {
         return columnCount;
     }
 
+    // TODO: Replace this with a generic function that writes values to a PreparedStatement given a
+    // property filter and a property outputter.
     override public int writeAllColumns(Object obj, DataSetWriter w, int startColumn, bool exceptKey = false) const {
         auto ei = findEntityForObject(obj);
         //writeln(ei.name ~ ".writeAllColumns");
         int columnCount = 0;
         foreach(pi; ei) {
-            if (pi.key && exceptKey)
+            // TODO: Exclude non-updatable or non-insertable columns.
+            if ((pi.key && exceptKey) || (pi.generated && !pi.isSetFunc(obj)))
                 continue;
             if (pi.embedded) {
                 auto emei = pi.referencedEntity;
@@ -3429,22 +3493,47 @@ abstract class SchemaInfo : EntityMetaData {
         return "SELECT " ~ getAllFieldList(dialect, ei) ~ " FROM " ~ dialect.quoteIfNeeded(ei.tableName);
     }
 
+    /// Create a parameterized SQL SELECT statement matching only the primary-key(s) of the given entity type.
     override public string generateFindByPkForEntity(Dialect dialect, const EntityInfo ei) const {
-        return "SELECT " ~ getAllFieldList(dialect, ei) ~ " FROM " ~ dialect.quoteIfNeeded(ei.tableName) ~ " WHERE " ~ dialect.quoteIfNeeded(ei.keyProperty.columnName) ~ " = ?";
+        string query = "SELECT " ~ getAllFieldList(dialect, ei) ~ " FROM " ~ dialect.quoteIfNeeded(ei.tableName) ~ " WHERE ";
+        // If there is a compound primary key, match all columns of the primary key.
+        if (ei.getKeyProperty().relation == RelationType.Embedded) {
+            auto embeddedEntityInfo = ei.getKeyProperty().referencedEntity;
+            bool isFirst = true;
+            foreach (propertyInfo; embeddedEntityInfo) {
+                if (isFirst) {
+                    isFirst = false;
+                } else {
+                    query ~= " AND ";
+                }
+                query ~= dialect.quoteIfNeeded(propertyInfo.columnName) ~ "= ?";
+            }
+        }
+        // Otherwise, match the single column of the primary key.
+        else {
+            query ~= dialect.quoteIfNeeded(ei.keyProperty.columnName) ~ " = ?";
+        }
+        return query;
     }
 
-    override public string generateInsertAllFieldsForEntity(Dialect dialect, const EntityInfo ei) const {
-        return "INSERT INTO " ~ dialect.quoteIfNeeded(ei.tableName) ~ "(" ~ getAllFieldList(dialect, ei) ~ ") VALUES (" ~ getAllFieldPlaceholderList(ei) ~ ")";
+    /// Returns an SQL query to insert all columns aside from the key, as is the case when
+    /// calling `Session.save(Object)` and the key, the `@Id` column, is set.
+    override public string generateInsertAllFieldsForEntity(Object obj, Dialect dialect, const EntityInfo ei) const {
+        return "INSERT INTO " ~ dialect.quoteIfNeeded(ei.tableName) ~ "(" ~ getAllFieldListForInsert(obj, dialect, ei)
+                ~ ") VALUES (" ~ getAllFieldPlaceholderList(obj, ei) ~ ")";
     }
 
-    override public string generateInsertNoKeyForEntity(Dialect dialect, const EntityInfo ei) const {
-        return "INSERT INTO " ~ dialect.quoteIfNeeded(ei.tableName) ~ "(" ~ getAllFieldList(dialect, ei, true) ~ ") VALUES (" ~ getAllFieldPlaceholderList(ei, true) ~ ")";
+    /// Returns an SQL query to insert all columns aside from the key, as is the case when
+    /// calling `Session.save(Object)` and the key, the `@Id` column, is not set.
+    override public string generateInsertNoKeyForEntity(Object obj, Dialect dialect, const EntityInfo ei) const {
+        return "INSERT INTO " ~ dialect.quoteIfNeeded(ei.tableName) ~ "(" ~ getAllFieldListForInsert(obj, dialect, ei, true)
+                ~ ") VALUES (" ~ getAllFieldPlaceholderList(obj, ei, true) ~ ")";
     }
 
     /// Generates an update query for a dialect-specific PreparedStatement.
-    override public string generateUpdateForEntity(Dialect dialect, const EntityInfo ei) const {
+    override public string generateUpdateForEntity(Object obj, Dialect dialect, const EntityInfo ei) const {
         string query = "UPDATE " ~ dialect.quoteIfNeeded(ei.tableName)
-                ~ " SET " ~ getAllFieldListForUpdate(dialect, ei, true)
+                ~ " SET " ~ getAllFieldListForUpdate(obj, dialect, ei, true)
                 ~ " WHERE ";
         if (ei.getKeyProperty().relation == RelationType.Embedded) {
             auto embeddedEntityInfo = ei.getKeyProperty().referencedEntity;
@@ -3467,8 +3556,8 @@ abstract class SchemaInfo : EntityMetaData {
         return generateFindByPkForEntity(dialect, findEntity(entityName));
     }
 
-    override public string generateInsertAllFieldsForEntity(Dialect dialect, string entityName) const {
-        return generateInsertAllFieldsForEntity(dialect, findEntity(entityName));
+    override public string generateInsertAllFieldsForEntity(Object obj, Dialect dialect, string entityName) const {
+        return generateInsertAllFieldsForEntity(obj, dialect, findEntity(entityName));
     }
 }
 
@@ -3632,8 +3721,11 @@ class DBInfo {
         auto map = arrayToMap(existingTables);
         string[] res;
         foreach(table; tables) {
-            if (existingTables is null || (table.tableName in map) is null)
-                res ~= table.getCreateTableSQL();
+            if (existingTables is null || (table.tableName in map) is null) {
+                string createTableSQL = table.getCreateTableSQL();
+                trace("Generating table SQL: ", createTableSQL);
+                res ~= createTableSQL;
+            }
         }
         return res;
     }

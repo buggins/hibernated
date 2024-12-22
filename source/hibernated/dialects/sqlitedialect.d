@@ -1,10 +1,10 @@
 /**
- * HibernateD - Object-Relation Mapping for D programming language, with interface similar to Hibernate. 
- * 
+ * HibernateD - Object-Relation Mapping for D programming language, with interface similar to Hibernate.
+ *
  * Source file hibernated/dialects/sqlitedialect.d.
  *
  * This module contains implementation of SQLiteDialect class which provides implementation specific SQL syntax information.
- * 
+ *
  * Copyright: Copyright 2013
  * License:   $(LINK www.boost.org/LICENSE_1_0.txt, Boost License 1.0).
  * Author:   Vadim Lopatin
@@ -19,7 +19,7 @@ import hibernated.type;
 import ddbc.core : SqlType;
 
 
-string[] SQLITE_RESERVED_WORDS = 
+string[] SQLITE_RESERVED_WORDS =
     [
      "ABORT",
      "ACTION",
@@ -150,7 +150,7 @@ class SQLiteDialect : Dialect {
     override char closeQuote() const { return '`'; }
     ///The character specific to this dialect used to begin a quoted identifier.
     override char  openQuote() const { return '`'; }
-    
+
     // returns string like "BIGINT(20) NOT NULL" or "VARCHAR(255) NULL"
     override string getColumnTypeDefinition(const PropertyInfo pi, const PropertyInfo overrideTypeFrom = null) {
         immutable Type type = overrideTypeFrom !is null ? overrideTypeFrom.columnType : pi.columnType;
@@ -158,9 +158,13 @@ class SQLiteDialect : Dialect {
         bool fk = pi is null;
         string nullablility = !fk && pi.nullable ? " NULL" : " NOT NULL";
         string pk = !fk && pi.key ? " PRIMARY KEY" : "";
-        string autoinc = !fk && pi.generated ? " AUTO_INCREMENT" : "";
-        if (!fk && pi.generated)
-            return "INTEGER PRIMARY KEY";
+        // Sqlite3 only supports AUTOINCREMENT on the primary key.
+        string autoinc = (!fk && pi.generated)
+                ? (pi.key
+                    ? " AUTOINCREMENT"
+                    // Without a generator, use a default so that it it is optional for insert/update.
+                    : " DEFAULT " ~ getImplicitDefaultByType(sqlType))
+                : "";
         string def = "";
         int len = 0;
         string unsigned = "";
@@ -181,7 +185,7 @@ class SQLiteDialect : Dialect {
             case SqlType.NUMERIC:
             case SqlType.SMALLINT:
             case SqlType.TINYINT:
-                return "INT" ~ modifiers;
+                return "INTEGER" ~ modifiers;
             case SqlType.FLOAT:
             case SqlType.DOUBLE:
             case SqlType.DECIMAL:
@@ -206,7 +210,7 @@ class SQLiteDialect : Dialect {
                 return "TEXT";
         }
     }
-    
+
     override string getCheckTableExistsSQL(string tableName) {
         return "SELECT name FROM sqlite_master WHERE type='table' AND name=" ~ quoteSqlString(tableName);
     }
@@ -221,3 +225,36 @@ class SQLiteDialect : Dialect {
     }
 }
 
+private string getImplicitDefaultByType(SqlType sqlType) {
+    switch (sqlType) {
+        case SqlType.BIGINT:
+        case SqlType.BIT:
+        case SqlType.DECIMAL:
+        case SqlType.DOUBLE:
+        case SqlType.FLOAT:
+        case SqlType.INTEGER:
+        case SqlType.NUMERIC:
+        case SqlType.SMALLINT:
+        case SqlType.TINYINT:
+            return "0";
+        case SqlType.BOOLEAN:
+            return "false";
+        case SqlType.CHAR:
+        case SqlType.LONGNVARCHAR:
+        case SqlType.LONGVARBINARY:
+        case SqlType.LONGVARCHAR:
+        case SqlType.NCHAR:
+        case SqlType.NCLOB:
+        case SqlType.NVARCHAR:
+        case SqlType.VARBINARY:
+        case SqlType.VARCHAR:
+            return "''";
+        case SqlType.DATE:
+        case SqlType.DATETIME:
+            return "'1970-01-01'";
+        case SqlType.TIME:
+            return "'00:00:00'";
+        default:
+            return "''";
+    }
+}
