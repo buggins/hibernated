@@ -4,6 +4,7 @@ import std.typecons;
 import std.stdio;
 import std.format;
 import std.conv;
+import std.algorithm : canFind;
 
 import hibernated.core;
 
@@ -195,7 +196,8 @@ class GeneralTest : HibernateTest {
     assert(u11.roles[0].name == "role10" || u11.roles.get()[0].name == "role11");
     assert(u11.roles[1].name == "role10" || u11.roles.get()[1].name == "role11");
     assert(u11.roles[0].users.length == 3);
-    assert(u11.roles[0].users[0] == u10);
+    // no ORDER BY: the order of the joined rows is unspecified
+    assert(u11.roles[0].users.get().canFind(u10));
 
     assert(u11.addresses.length == 1);
     assert(u11.addresses[0].street == "Some Street");

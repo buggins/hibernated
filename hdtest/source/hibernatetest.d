@@ -35,6 +35,8 @@ abstract class HibernateTest {
             Dialect dialect = new MySQLDialect();
         } else version (USE_PGSQL) {
             Dialect dialect = new PGSQLDialect();
+        } else version (USE_CLICKHOUSE) {
+            Dialect dialect = new ClickHouseDialect();
         }
         return dialect;
     }
@@ -61,6 +63,13 @@ abstract class HibernateTest {
             params["ssl"] = "true";
 
             DataSource ds = new ConnectionPoolDataSourceImpl(new PGSQLDriver(), url, params);
+        } else version( USE_CLICKHOUSE ) {
+            import ddbc.drivers.clickhouseddbc;
+            immutable string url = ClickHouseDriver.generateUrl(
+                    connectionParams.host, connectionParams.port, connectionParams.database);
+            string[string] params = ClickHouseDriver.setUserAndPassword(
+                    connectionParams.user, connectionParams.pass);
+            DataSource ds = new ConnectionPoolDataSourceImpl(new ClickHouseDriver(), url, params);
         }
         return ds;
     }

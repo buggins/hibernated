@@ -18,6 +18,9 @@ import std.stdio;
 import std.string;
 
 import hibernated.metadata;
+import hibernated.type : HibernatedException;
+import ddbc.core : Connection;
+import std.variant : Variant;
 
 /// Represents a dialect of SQL implemented by a particular RDBMS. -- generated from JavaDocs on org.hibernate.dialect.Dialect
 abstract class Dialect {
@@ -74,6 +77,8 @@ abstract class Dialect {
     string getUniqueIndexSQL(string tableName, string indexName, string[] columnNames) {
         return "CREATE UNIQUE INDEX " ~ quoteIfNeeded(indexName) ~ " ON " ~ quoteIfNeeded(tableName) ~ createFieldListSQL(columnNames);
     }
+    /// Statements for indexes and foreign keys may return null when the database does not support them;
+    /// they are then left out of the schema.
     string getForeignKeySQL(string tableName, string indexName, string[] columnNames, string referencedTableName, string[] referencedFieldNames) {
         assert(columnNames.length == referencedFieldNames.length);
         return "ALTER TABLE " ~ quoteIfNeeded(tableName) ~ " ADD CONSTRAINT " ~ quoteIfNeeded(indexName) ~ " FOREIGN KEY " ~ createFieldListSQL(columnNames) ~ " REFERENCES " ~ quoteIfNeeded(referencedTableName) ~ createFieldListSQL(referencedFieldNames);
@@ -88,6 +93,42 @@ abstract class Dialect {
     /// for some of RDBMS it's necessary to pass additional clauses in query to get generated value (e.g. in Postgres - " returing id"
     string appendInsertToFetchGeneratedKey(string query, const EntityInfo entity) {
         return query;
+    }
+
+    /**
+     * Text appended to CREATE TABLE statements, e.g. a table engine. Empty by default.
+     * Params:
+     *   embeddedKeyColumns = the columns of an `@EmbeddedId`; such tables have no PRIMARY KEY clause.
+     */
+    string getCreateTableSuffix(const string[] embeddedKeyColumns) {
+        return "";
+    }
+
+    /// Beginning of an UPDATE statement, up to the column assignments: "UPDATE <table> SET " by default.
+    string getUpdatePrefix(string quotedTableName) {
+        return "UPDATE " ~ quotedTableName ~ " SET ";
+    }
+
+    /// Text appended to UPDATE statements after the WHERE clause. Empty by default.
+    string getUpdateSuffix() {
+        return "";
+    }
+
+    /// Whether the database supports transactions. When false, beginning a transaction throws.
+    bool supportsTransactions() {
+        return true;
+    }
+
+    /// Whether the database generates `@Generated` keys itself (auto-increment, serial).
+    /// When false, `generateKey` is called before the insert instead.
+    bool supportsGeneratedKeys() {
+        return true;
+    }
+
+    /// Generates a key for a new entity with a `@Generated` key, for databases that cannot
+    /// (see `supportsGeneratedKeys`). The result is converted to the key's type.
+    Variant generateKey(Connection conn, const EntityInfo entity) {
+        throw new HibernatedException("This dialect cannot generate keys for " ~ entity.name);
     }
 
     /// returns comma separated quoted identifier list in () parenthesis
@@ -407,7 +448,8 @@ abstract class Dialect {
 version (USE_MYSQL) {
 } else version (USE_SQLITE) {
 } else version (USE_PGSQL) {
+} else version (USE_CLICKHOUSE) {
 } else {
-    pragma(msg, "No DB type version definition specified. Add one or more versions to command line: USE_MYSQL, USE_PGSQL, USE_SQLITE");
+    pragma(msg, "No DB type version definition specified. Add one or more versions to command line: USE_MYSQL, USE_PGSQL, USE_SQLITE, USE_CLICKHOUSE");
 }
 

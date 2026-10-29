@@ -177,8 +177,12 @@ class EmbeddedIdTest : HibernateTest {
                 (Connection c) {
                     Statement stmt = c.createStatement();
                     scope (exit) stmt.close();
-                    stmt.executeUpdate("UPDATE invoice SET currency = 'USD' "
-                            ~ "WHERE vendor_no = 'ABC123' AND invoice_no = 'L1005-2330'");
+                    version (USE_CLICKHOUSE)
+                        stmt.executeUpdate("ALTER TABLE invoice UPDATE currency = 'USD' "
+                                ~ "WHERE vendor_no = 'ABC123' AND invoice_no = 'L1005-2330' SETTINGS mutations_sync = 2");
+                    else
+                        stmt.executeUpdate("UPDATE invoice SET currency = 'USD' "
+                                ~ "WHERE vendor_no = 'ABC123' AND invoice_no = 'L1005-2330'");
                 });
 
         // Make sure that the entity picks up the out-of-session changes.
