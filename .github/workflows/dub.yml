@@ -33,7 +33,7 @@ jobs:
           - ldc-1.28.1 # eq to dmd v2.098.1 (exclude on Windows)
           - ldc-1.27.1 # eq to dmd v2.097.2 (exclude on Windows)
         include:
-          - { os: macos-13, compiler: dmd-latest } ## Cannot use dmd on Apple silicon (latest is 14 with M1 cpu)
+          - { os: macos-15-intel, compiler: dmd-latest } ## dmd needs an Intel runner (macos-13 is retired)
           - { os: macos-latest, compiler: ldc-latest }
           - { os: 'ubuntu-latest', compiler: 'ldc-1.28.1' }
           - { os: 'ubuntu-latest', compiler: 'ldc-1.27.1' }
@@ -69,7 +69,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, windows-latest, macos-13 ]
+        os: [ ubuntu-latest, windows-latest, macos-15-intel ]
         compiler:
           - dmd-latest
           - ldc-latest
@@ -96,7 +96,7 @@ jobs:
 
   integration-tests:
     name: Integration Tests
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
 
     services:
       mysql:
@@ -141,12 +141,15 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Install latest DMD
         uses: dlang-community/setup-dlang@v1
         with:
           compiler: dmd-latest
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install libpq-dev libsqlite3-dev -y
 
       - name: HD Test (SQLite)
         working-directory: ./hdtest
