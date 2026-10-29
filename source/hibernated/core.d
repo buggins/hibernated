@@ -36,3 +36,7 @@ version( USE_MYSQL )
 {
     public import hibernated.dialects.mysqldialect;
 }
+version( USE_CLICKHOUSE )
+{
+    public import hibernated.dialects.clickhousedialect;
+}

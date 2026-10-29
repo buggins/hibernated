@@ -22,6 +22,16 @@ void enableTraceLogging() {
     globalLogLevel = LogLevel.trace;
 }
 
+version (USE_CLICKHOUSE) void runNoTransactionsTest(TransactionTest test) {
+  import std.exception : assertThrown;
+  test.setup();
+  scope(exit) test.teardown();
+  Session sess = test.sessionFactory.openSession();
+  scope(exit) sess.close();
+  assertThrown!HibernatedException(sess.beginTransaction());
+  writeln("transaction.unsupported: ok");
+}
+
 int main(string[] args) {
 
   // Use this to enable trace() logs, useful to inspect generated SQL.
@@ -55,7 +65,12 @@ int main(string[] args) {
   // TODO: Some tests that run after this have errors, find out why.
   TransactionTest test5 = new TransactionTest();
   test5.setConnectionParams(par);
-  runTests(test5);
+  version (USE_CLICKHOUSE) {
+    // ClickHouse has no transactions: beginTransaction() must refuse instead of silently not rolling back
+    runNoTransactionsTest(test5);
+  } else {
+    runTests(test5);
+  }
 
   writeln("All scenarios worked successfully");
   return 0;

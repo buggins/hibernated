@@ -3532,8 +3532,8 @@ abstract class SchemaInfo : EntityMetaData {
 
     /// Generates an update query for a dialect-specific PreparedStatement.
     override public string generateUpdateForEntity(Object obj, Dialect dialect, const EntityInfo ei) const {
-        string query = "UPDATE " ~ dialect.quoteIfNeeded(ei.tableName)
-                ~ " SET " ~ getAllFieldListForUpdate(obj, dialect, ei, true)
+        string query = dialect.getUpdatePrefix(dialect.quoteIfNeeded(ei.tableName))
+                ~ getAllFieldListForUpdate(obj, dialect, ei, true)
                 ~ " WHERE ";
         if (ei.getKeyProperty().relation == RelationType.Embedded) {
             auto embeddedEntityInfo = ei.getKeyProperty().referencedEntity;
@@ -3549,7 +3549,7 @@ abstract class SchemaInfo : EntityMetaData {
         } else {
             query ~= dialect.quoteIfNeeded(ei.getKeyProperty().columnName) ~ "=?";
         }
-        return query;
+        return query ~ dialect.getUpdateSuffix();
     }
 
     override public string generateFindByPkForEntity(Dialect dialect, string entityName) const {
@@ -3824,8 +3824,9 @@ class TableInfo {
         }
         addColumn(c1);
         addColumn(c2);
-        pkDef = "PRIMARY KEY (" ~ schema.dialect.quoteIfNeeded(c1.columnName) ~ ", " ~ schema.dialect.quoteIfNeeded(c2.columnName) ~ "), " ~
-            schema.dialect.getUniqueIndexItemSQL(tableName ~ "_reverse_index", [c2.columnName, c1.columnName]);
+        string reverseIndex = schema.dialect.getUniqueIndexItemSQL(tableName ~ "_reverse_index", [c2.columnName, c1.columnName]);
+        pkDef = "PRIMARY KEY (" ~ schema.dialect.quoteIfNeeded(c1.columnName) ~ ", " ~ schema.dialect.quoteIfNeeded(c2.columnName) ~ ")" ~
+            (reverseIndex.length ? ", " ~ reverseIndex : "");
         addForeignKey(tableName, entity, joinTable.column1, null);
         addForeignKey(tableName, entity2, joinTable.column2, null);
     }
@@ -3842,12 +3843,17 @@ class TableInfo {
         return columnNameMap[columnName];
     }
 
-    private void appendColumns(const EntityInfo entity, string columnPrefix="") {
+    /// Columns of an `@EmbeddedId`, in declaration order.
+    string[] embeddedKeyColumns;
+    private void appendColumns(const EntityInfo entity, string columnPrefix="", bool inKey=false) {
         foreach(pi; entity) {
             if (pi.embedded) {
-                appendColumns(pi.referencedEntity, pi.columnName);
+                appendColumns(pi.referencedEntity, pi.columnName, inKey || pi.key);
             } else if (pi.simple || (pi.columnName !is null)) {
-                addColumn(new ColumnInfo(this, pi, columnPrefix));
+                ColumnInfo col = new ColumnInfo(this, pi, columnPrefix);
+                addColumn(col);
+                if (inKey)
+                    embeddedKeyColumns ~= col.columnName;
                 if (pi.simple && pi.uniqueIndex !is null) //pi.unique)
                     addUniqueColumnIndex(pi);
             } else if (pi.manyToMany) {
@@ -3917,7 +3923,8 @@ class TableInfo {
         }
         if (pkDef !is null)
             res ~= ", " ~ pkDef;
-        return "CREATE TABLE " ~ schema.dialect.quoteIfNeeded(tableName) ~ " (" ~ res ~ ")";
+        return "CREATE TABLE " ~ schema.dialect.quoteIfNeeded(tableName) ~ " (" ~ res ~ ")"
+            ~ schema.dialect.getCreateTableSuffix(embeddedKeyColumns);
     }
     string getDropTableSQL() {
         return "DROP TABLE IF EXISTS " ~ schema.dialect.quoteIfNeeded(tableName);
@@ -4006,29 +4013,39 @@ class IndexInfo {
         this.table = table;
         this.type = type;
     }
+    // Statements the dialect returns as null are not supported by the database and are left out.
     string[] getDropIndexSQL() {
         final switch(type) {
             case IndexType.Unique:
             case IndexType.Index:
-                return [table.schema.dialect.getDropIndexSQL(table.tableName, indexName)];
+                return withoutNulls([table.schema.dialect.getDropIndexSQL(table.tableName, indexName)]);
             case IndexType.ForeignKey:
             case IndexType.UniqueForeignKey:
-                return [table.schema.dialect.getDropForeignKeySQL(table.tableName, indexName),
-                        table.schema.dialect.getDropIndexSQL(table.tableName, indexName)];
+                string dropForeignKey = table.schema.dialect.getDropForeignKeySQL(table.tableName, indexName);
+                if (dropForeignKey is null)
+                    return null; // no foreign keys, so no index created for one either
+                return withoutNulls([dropForeignKey, table.schema.dialect.getDropIndexSQL(table.tableName, indexName)]);
         }
     }
     string[] getCreateIndexSQL() {
         final switch(type) {
             case IndexType.Unique:
-                return [table.schema.dialect.getUniqueIndexSQL(table.tableName, indexName, columnNames)];
+                return withoutNulls([table.schema.dialect.getUniqueIndexSQL(table.tableName, indexName, columnNames)]);
             case IndexType.Index:
-                return [table.schema.dialect.getIndexSQL(table.tableName, indexName, columnNames)];
+                return withoutNulls([table.schema.dialect.getIndexSQL(table.tableName, indexName, columnNames)]);
             case IndexType.ForeignKey:
-                return [table.schema.dialect.getForeignKeySQL(table.tableName, indexName, columnNames, referencedTable, referencedColumnNames)];
+                return withoutNulls([table.schema.dialect.getForeignKeySQL(table.tableName, indexName, columnNames, referencedTable, referencedColumnNames)]);
             case IndexType.UniqueForeignKey:
-                return [table.schema.dialect.getUniqueIndexSQL(table.tableName, indexName, columnNames),
-                        table.schema.dialect.getForeignKeySQL(table.tableName, indexName, columnNames, referencedTable, referencedColumnNames)];
+                return withoutNulls([table.schema.dialect.getUniqueIndexSQL(table.tableName, indexName, columnNames),
+                        table.schema.dialect.getForeignKeySQL(table.tableName, indexName, columnNames, referencedTable, referencedColumnNames)]);
         }
+    }
+    private static string[] withoutNulls(string[] statements) {
+        string[] res;
+        foreach (s; statements)
+            if (s !is null)
+                res ~= s;
+        return res;
     }
 }
 
