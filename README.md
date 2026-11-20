@@ -76,7 +76,7 @@ class Role {
 int main() {
 
     // create metadata from annotations
-    EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, 
+    EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType,
             Address, Role);
 
 
@@ -189,7 +189,7 @@ ALTER TABLE invoices
 ```
 
 To represent this using HibernateD, the following code would be used:
-```
+```D
 @Embeddable
 class InvoiceId {
     string vendorNo;
