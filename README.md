@@ -90,7 +90,7 @@ class Role {
 int main() {
 
     // create metadata from annotations
-    EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, 
+    EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType,
             Address, Role);
 
 
@@ -113,7 +113,9 @@ int main() {
         string[string] params;
         Dialect dialect = new SQLiteDialect();
     }
-    DataSource ds = new ConnectionPoolDataSourceImpl(driver, url, params);
+    // each open Session holds one connection: allow up to 10 at once
+    // (the default, 1, makes a second Session wait, then fail)
+    DataSource ds = new ConnectionPoolDataSourceImpl(driver, url, params, 10);
 
 
     // create session factory
@@ -203,7 +205,7 @@ ALTER TABLE invoices
 ```
 
 To represent this using HibernateD, the following code would be used:
-```
+```D
 @Embeddable
 class InvoiceId {
     string vendorNo;

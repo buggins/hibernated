@@ -17,7 +17,11 @@ import transactiontest : TransactionTest;
 import generatedtest : GeneratedTest;
 
 void enableTraceLogging() {
-    import std.logger : sharedLog, LogLevel, globalLogLevel;
+    static if (__traits(compiles, (){ import std.logger; })) {
+        import std.logger : sharedLog, LogLevel, globalLogLevel;
+    } else {
+        import std.experimental.logger : sharedLog, LogLevel, globalLogLevel; // Phobos before 2.101
+    }
     (cast() sharedLog).logLevel = LogLevel.trace;
     globalLogLevel = LogLevel.trace;
 }

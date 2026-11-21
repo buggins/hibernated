@@ -35,9 +35,20 @@ jobs:
         include:
           - { os: macos-15-intel, compiler: dmd-latest } ## dmd needs an Intel runner (macos-13 is retired)
           - { os: macos-latest, compiler: ldc-latest }
-          - { os: 'ubuntu-latest', compiler: 'ldc-1.28.1' }
-          - { os: 'ubuntu-latest', compiler: 'ldc-1.27.1' }
+          ## ubuntu-latest (Ubuntu 26.04) has libxml2.so.16 only: the binaries of LDC 1.40 and older
+          ## need libxml2.so.2 and don't start there, so they run on ubuntu-22.04 (the oldest image
+          ## GitHub offers); DMD and LDC 1.41+ run on ubuntu-latest
+          - { os: ubuntu-22.04, compiler: ldc-1.33.0 }
+          - { os: ubuntu-22.04, compiler: ldc-1.32.2 }
+          - { os: ubuntu-22.04, compiler: ldc-1.29.0 }
+          - { os: ubuntu-22.04, compiler: ldc-1.28.1 }
+          - { os: ubuntu-22.04, compiler: ldc-1.27.1 }
         exclude:
+          - { os: ubuntu-latest, compiler: ldc-1.33.0 }
+          - { os: ubuntu-latest, compiler: ldc-1.32.2 }
+          - { os: ubuntu-latest, compiler: ldc-1.29.0 }
+          - { os: ubuntu-latest, compiler: ldc-1.28.1 }
+          - { os: ubuntu-latest, compiler: ldc-1.27.1 }
           - { os: windows-latest, compiler: dmd-2.098.1 }
           - { os: windows-latest, compiler: dmd-2.097.2 }
           - { os: windows-latest, compiler: ldc-1.28.1 }
@@ -62,7 +73,15 @@ jobs:
 
       - name: build with SQLite config
         run: dub build --config=SQLite
-  
+
+      # Building a library compiles hibernated alone; an executable also compiles its
+      # dependencies (ddbc, dbwire) with this compiler. Linux only: the Windows and macOS
+      # runners have no SQLite library to link for LDC (see build-examples)
+      - name: build example1 with its dependencies
+        if: startsWith(matrix.os, 'ubuntu')
+        working-directory: examples/example1
+        run: dub build
+
   build-examples:
     name: Test ${{ matrix.compiler }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}

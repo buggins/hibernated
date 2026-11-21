@@ -73,7 +73,8 @@
             string[string] params;
             Dialect dialect = new SQLiteDialect();
         }
-        DataSource ds = new ConnectionPoolDataSourceImpl(driver, url, params);
+        // each open Session holds one connection: allow up to 10 at once
+        DataSource ds = new ConnectionPoolDataSourceImpl(driver, url, params, 10);
         
 
         // create session factory
