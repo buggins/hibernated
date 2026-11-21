@@ -114,6 +114,7 @@ class EmbeddedIdTest : HibernateTest {
     @Test("embeddedid.update")
     void updateTest() {
         Session sess = sessionFactory.openSession();
+        scope(exit) sess.close();
 
         // Get a record that we will be updating.
         InvoiceId id1 = new InvoiceId();
@@ -132,13 +133,12 @@ class EmbeddedIdTest : HibernateTest {
         Invoice i2 = sess.get!Invoice(id1);
         assert(i2 !is null);
         assert(i2.currency == "USD");
-
-        sess.close();
     }
 
     @Test("embeddedid.delete")
     void deleteTest() {
         Session sess = sessionFactory.openSession();
+        scope(exit) sess.close();
 
         // Get an entity to delete.
         InvoiceId id1 = new InvoiceId();
@@ -155,13 +155,12 @@ class EmbeddedIdTest : HibernateTest {
 
         i1 = sess.get!Invoice(id1);
         assert(i1 is null);
-
-        sess.close();
     }
 
     @Test("embeddedid.refresh")
     void refreshTest() {
         Session sess = sessionFactory.openSession();
+        scope(exit) sess.close();
 
         // Create a new record that we can mutate outside the session.
         Invoice invoice = new Invoice();

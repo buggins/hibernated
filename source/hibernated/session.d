@@ -214,6 +214,8 @@ class TransactionImpl : Transaction {
         ACTIVE,
     }
     Status status = Status.INACTIVE;
+    /// The connection's auto-commit mode before `begin`, restored by `commit` and `rollback`.
+    private bool autoCommitBefore = true;
 
     this(Session session) {
         this.session = session;
@@ -228,6 +230,7 @@ class TransactionImpl : Transaction {
             throw new HibernatedException("Transaction is already active.");
         }
         session.doWork((conn) {
+            autoCommitBefore = conn.getAutoCommit();
             conn.setAutoCommit(false);
             status = Status.ACTIVE;
         });
@@ -244,6 +247,9 @@ class TransactionImpl : Transaction {
         session.doWork((conn) {
             conn.commit();
             status = Status.INACTIVE;
+            // Later work in this session must not run in an implicit transaction, which
+            // the connection pool rolls back when the session closes
+            conn.setAutoCommit(autoCommitBefore);
         });
     }
 
@@ -263,6 +269,7 @@ class TransactionImpl : Transaction {
         session.doWork((conn) {
             conn.rollback();
             status = Status.INACTIVE;
+            conn.setAutoCommit(autoCommitBefore);
         });
     }
 }

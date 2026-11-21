@@ -103,6 +103,7 @@ class EmbeddedTest : HibernateTest {
     @Test("embedded.update")
     void updateTest() {
         Session sess = sessionFactory.openSession();
+        scope(exit) sess.close();
 
         auto r1 = sess.createQuery("FROM Customer WHERE billingAddress.city = :City")
                 .setParameter("City", "Lametown");
@@ -121,13 +122,12 @@ class EmbeddedTest : HibernateTest {
         c1 = r1.uniqueResult!Customer();
         assert(c1 !is null);
         assert(c1.billingAddress.street == "17 Neat Street");
-
-        sess.close();
     }
 
     @Test("embedded.delete")
     void deleteTest() {
         Session sess = sessionFactory.openSession();
+        scope(exit) sess.close();
 
         auto r1 = sess.createQuery("FROM Customer WHERE billingAddress.city = :City")
                 .setParameter("City", "Lametown");
@@ -144,7 +144,5 @@ class EmbeddedTest : HibernateTest {
                 .setParameter("City", "Lametown");
         c1 = r1.uniqueResult!Customer();
         assert(c1 is null);
-
-        sess.close();
     }
 }

@@ -38,6 +38,7 @@ class TransactionTest : HibernateTest {
     @Test("transaction.commit")
     void commitTest() {
         Session sess = sessionFactory.openSession();
+        scope(exit) sess.close();
         Transaction transaction = sess.beginTransaction();
         assert(transaction.isActive() == true);
 
@@ -55,12 +56,12 @@ class TransactionTest : HibernateTest {
         auto q1 = sess.createQuery("FROM BankTxn WHERE amount = :Amount")
                 .setParameter("Amount", 5);
         assert(q1.uniqueResult!BankTxn() !is null);
-        sess.close();
     }
 
     @Test("transaction.rollback")
     void rollbackTest() {
         Session sess = sessionFactory.openSession();
+        scope(exit) sess.close();
         Transaction transaction = sess.beginTransaction();
         assert(transaction.isActive() == true);
 
@@ -78,12 +79,12 @@ class TransactionTest : HibernateTest {
         auto q1 = sess.createQuery("FROM BankTxn WHERE amount = :Amount")
                 .setParameter("Amount", 6);
         assert(q1.uniqueResult!BankTxn() is null);
-        sess.close();
     }
 
     @Test("transaction.closeSessionWithoutCommit")
     void closeSessionWithoutCommitTest() {
         Session sess = sessionFactory.openSession();
+        scope(exit) sess.close();
         Transaction transaction = sess.beginTransaction();
         assert(transaction.isActive() == true);
 
@@ -99,8 +100,42 @@ class TransactionTest : HibernateTest {
 
         sess = sessionFactory.openSession();
         auto q1 = sess.createQuery("FROM BankTxn WHERE amount = :Amount")
-                .setParameter("Amount", 6);
+                .setParameter("Amount", 7);
         assert(q1.uniqueResult!BankTxn() is null);
+    }
+
+    @Test("transaction.saveAfterCommit")
+    void saveAfterCommitTest() {
+        Session sess = sessionFactory.openSession();
+        scope(exit) sess.close();
+        Transaction transaction = sess.beginTransaction();
+
+        BankTxn committed = new BankTxn();
+        with (committed) {
+            crAcct = "0101";
+            drAcct = "0112";
+            amount = 8;
+        }
+        sess.save(committed);
+        transaction.commit();
+        assert(transaction.isActive() == false);
+
+        // After the commit the session is back in auto-commit mode: this save is not
+        // part of an open transaction that closing the session would roll back
+        BankTxn afterCommit = new BankTxn();
+        with (afterCommit) {
+            crAcct = "0101";
+            drAcct = "0112";
+            amount = 9;
+        }
+        sess.save(afterCommit);
         sess.close();
+
+        sess = sessionFactory.openSession();
+        foreach (amount; [8, 9]) {
+            auto q = sess.createQuery("FROM BankTxn WHERE amount = :Amount")
+                    .setParameter("Amount", amount);
+            assert(q.uniqueResult!BankTxn() !is null);
+        }
     }
 }
