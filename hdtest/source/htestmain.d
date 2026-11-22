@@ -67,13 +67,10 @@ int main(string[] args) {
   test4.setConnectionParams(par);
   runTests(test4);
 
-  // Dates outside DateTime's 1970 to 2106 and TimeOfDay stored as text; ClickHouse only for now
-  // (the SQLite driver cannot read back the TimeOfDay values it writes)
-  version (USE_CLICKHOUSE) {
-    TemporalTest test6 = new TemporalTest();
-    test6.setConnectionParams(par);
-    runTests(test6);
-  }
+  // Dates outside 1970 to 2106 (ClickHouse's DateTime range) and TimeOfDay values
+  TemporalTest test6 = new TemporalTest();
+  test6.setConnectionParams(par);
+  runTests(test6);
 
   // TODO: Some tests that run after this have errors, find out why.
   TransactionTest test5 = new TransactionTest();
