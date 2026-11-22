@@ -1151,6 +1151,11 @@ class QueryParser {
 		addFromSQL(dialect, res);
 		addWhereSQL(dialect, res);
 		addOrderBySQL(dialect, res);
+		string suffix = dialect.getQuerySuffix();
+		if (suffix.length) {
+			res.appendSpace();
+			res.appendSQL(suffix);
+		}
 		return res;
 	}
 	

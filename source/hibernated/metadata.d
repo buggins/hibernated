@@ -3275,6 +3275,25 @@ abstract class SchemaInfo : EntityMetaData {
     }
 
     /**
+     * Whether `columnName` is a column of the `@EmbeddedId` of `ei`. A `@ManyToOne` or `@OneToOne` that
+     * shares such a column as its join column doesn't write it: inserts write it with the key (listing it
+     * twice is an error on some databases), and updates leave the key alone (the WHERE clause matches it;
+     * the relation would overwrite it with its own value or NULL, and ClickHouse refuses to update
+     * sorting-key columns). The key's value wins: a related entity whose key differs from it is not
+     * stored, and loading the entity again gives the one the key column refers to.
+     */
+    private static bool isEmbeddedKeyColumn(const EntityInfo ei, string columnName) {
+        auto key = ei.getKeyProperty();
+        if (key is null || !key.embedded)
+            return false;
+        string prefix = key.columnName == "" ? "" : key.columnName ~ "_";
+        foreach (kpi; key.referencedEntity)
+            if (prefix ~ kpi.columnName == columnName)
+                return true;
+        return false;
+    }
+
+    /**
      * For an `UPDATE <table> SET field1=?, field2=?, ...` parameterized query, list the updatable fields.
      * Each field is set to `?`, which must be set as a positional query parameter.
      *
@@ -3293,7 +3312,7 @@ abstract class SchemaInfo : EntityMetaData {
                 auto emei = pi.referencedEntity;
                 appendCommaDelimitedList(query, getAllFieldListForUpdate(obj, dialect, emei, exceptKey, pi.columnName == "" ? "" : pi.columnName ~ "_"));
             } else if (pi.oneToOne || pi.manyToOne) {
-                if (pi.columnName != null) {
+                if (pi.columnName != null && !isEmbeddedKeyColumn(ei, pi.columnName)) {
                     // read FK column
                     appendCommaDelimitedList(query, dialect.quoteIfNeeded(pi.columnName) ~ "=?");
                 }
@@ -3320,7 +3339,7 @@ abstract class SchemaInfo : EntityMetaData {
                 auto emei = pi.referencedEntity;
                 appendCommaDelimitedList(query, getAllFieldListForInsert(obj, dialect, emei, exceptKey, pi.columnName == "" ? "" : pi.columnName ~ "_"));
             } else if (pi.oneToOne || pi.manyToOne) {
-                if (pi.columnName != null) {
+                if (pi.columnName != null && !isEmbeddedKeyColumn(ei, pi.columnName)) {
                     // read FK column
                     appendCommaDelimitedList(query, dialect.quoteIfNeeded(pi.columnName));
                 }
@@ -3394,7 +3413,7 @@ abstract class SchemaInfo : EntityMetaData {
                 auto emei = pi.referencedEntity;
                 appendCommaDelimitedList(query, getAllFieldPlaceholderList(obj, emei));
             } else if (pi.oneToOne || pi.manyToOne) {
-                if (pi.columnName != null) {
+                if (pi.columnName != null && !isEmbeddedKeyColumn(ei, pi.columnName)) {
                     // read FK column
                     appendCommaDelimitedList(query, "?");
                 }
@@ -3462,7 +3481,7 @@ abstract class SchemaInfo : EntityMetaData {
                 //writeln("written");
                 columnCount += columnsWritten;
             } else if (pi.oneToOne || pi.manyToOne) {
-                if (pi.columnName !is null) {
+                if (pi.columnName !is null && !isEmbeddedKeyColumn(ei, pi.columnName)) {
                     Object objFunc = pi.getObjectFunc(obj);
                     if (objFunc is null) {
                         w.setNull(startColumn + columnCount);

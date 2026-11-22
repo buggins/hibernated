@@ -26,10 +26,24 @@ class InvoiceId {
     }
 }
 
+// The vendor of an invoice: its join column is also a column of the invoice's key.
+@Entity
+class Vendor {
+    @Id
+    string vendorNo;
+    string name;
+}
+
 @Entity
 class Invoice {
     @EmbeddedId
     InvoiceId invoiceId;
+
+    // Shares the key column vendor_no: updates must not assign it (with no vendor loaded, they
+    // set the key to NULL; ClickHouse refuses to update a sorting-key column at all).
+    @ManyToOne
+    @JoinColumn("vendor_no")
+    Vendor vendor;
 
     string currency;
     int amountE4;
@@ -38,7 +52,7 @@ class Invoice {
 class EmbeddedIdTest : HibernateTest {
     override
     EntityMetaData buildSchema() {
-        return new SchemaInfoImpl!(Invoice, InvoiceId);
+        return new SchemaInfoImpl!(Invoice, InvoiceId, Vendor);
     }
 
     @Test("embeddedid.creation")

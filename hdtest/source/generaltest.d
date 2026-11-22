@@ -256,6 +256,24 @@ class GeneralTest : HibernateTest {
     }
   }
 
+  @Test("left join without a match")
+  void leftJoinWithoutMatchTest() {
+    Session sess = sessionFactory.openSession();
+    scope(exit) sess.close();
+
+    User loner = new User();
+    loner.name = "Loner"; // no group
+    sess.save(loner);
+    scope(exit) sess.remove(loner);
+
+    // The unmatched side of a LEFT JOIN must be NULL (ClickHouse gives 0 and '' without join_use_nulls)
+    User[] users = sess.createQuery("SELECT u FROM User AS u LEFT JOIN u.group AS g WHERE g.id IS NULL")
+        .list!User();
+    assert(users.length == 1, "users without a group: " ~ to!string(users.length));
+    assert(users[0].name == "Loner");
+    assert(users[0].group is null);
+  }
+
   @Test("quote escape test")
   void quoteEscapeTest() {
       Session sess = sessionFactory.openSession();

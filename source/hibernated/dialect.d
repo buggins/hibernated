@@ -114,6 +114,11 @@ abstract class Dialect {
         return "";
     }
 
+    /// Text appended to the SELECT statements generated from HQL, e.g. settings. Empty by default.
+    string getQuerySuffix() {
+        return "";
+    }
+
     /// Whether the database supports transactions. When false, beginning a transaction throws.
     bool supportsTransactions() {
         return true;
