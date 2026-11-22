@@ -37,6 +37,13 @@
             "subConfigurations": {
                 "hibernated": "PGSQL"
             }
+        },
+        {
+            "name": "ClickHouse",
+            "versions": ["USE_CLICKHOUSE"],
+            "subConfigurations": {
+                "hibernated": "ClickHouse"
+            }
         }
     ]
 }

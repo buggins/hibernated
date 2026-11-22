@@ -147,6 +147,30 @@ jobs:
           --health-timeout 3s
           --health-retries 3
 
+      clickhouse:
+        image: clickhouse/clickhouse-server
+        ports: [9000]
+        env:
+          CLICKHOUSE_SKIP_USER_SETUP: 1
+        # Set health checks to wait until clickhouse service has started
+        options: >-
+          --health-cmd "clickhouse-client -q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 5
+
+      # the oldest ClickHouse version the dialect supports
+      clickhouse23:
+        image: clickhouse/clickhouse-server:23.8
+        ports: [9000]
+        env:
+          CLICKHOUSE_SKIP_USER_SETUP: 1
+        options: >-
+          --health-cmd "clickhouse-client -q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -176,4 +200,18 @@ jobs:
           PORT: ${{ job.services.postgres.ports[5432] }}
         run: |
           dub build --config=PGSQL && ./bin/hdtest --host=127.0.0.1 --port=$PORT --database=hdtest --user=testuser --password=passw0rd
+
+      - name: HD Test (ClickHouse)
+        working-directory: ./hdtest
+        env:
+          PORT: ${{ job.services.clickhouse.ports[9000] }}
+        run: |
+          dub build --config=ClickHouse && ./bin/hdtest --host=127.0.0.1 --port=$PORT --database=default --user=default
+
+      - name: HD Test (ClickHouse 23.8)
+        working-directory: ./hdtest
+        env:
+          PORT: ${{ job.services.clickhouse23.ports[9000] }}
+        run: |
+          dub build --config=ClickHouse && ./bin/hdtest --host=127.0.0.1 --port=$PORT --database=default --user=default
 

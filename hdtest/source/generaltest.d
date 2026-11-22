@@ -4,6 +4,7 @@ import std.typecons;
 import std.stdio;
 import std.format;
 import std.conv;
+import std.algorithm : canFind;
 
 import hibernated.core;
 
@@ -195,7 +196,8 @@ class GeneralTest : HibernateTest {
     assert(u11.roles[0].name == "role10" || u11.roles.get()[0].name == "role11");
     assert(u11.roles[1].name == "role10" || u11.roles.get()[1].name == "role11");
     assert(u11.roles[0].users.length == 3);
-    assert(u11.roles[0].users[0] == u10);
+    // no ORDER BY: the order of the joined rows is unspecified
+    assert(u11.roles[0].users.get().canFind(u10));
 
     assert(u11.addresses.length == 1);
     assert(u11.addresses[0].street == "Some Street");
@@ -252,6 +254,24 @@ class GeneralTest : HibernateTest {
       auto allUsers = sess.createQuery("FROM User").list!User();
       assert(allUsers.length == 2); // Should only be 2 users now
     }
+  }
+
+  @Test("left join without a match")
+  void leftJoinWithoutMatchTest() {
+    Session sess = sessionFactory.openSession();
+    scope(exit) sess.close();
+
+    User loner = new User();
+    loner.name = "Loner"; // no group
+    sess.save(loner);
+    scope(exit) sess.remove(loner);
+
+    // The unmatched side of a LEFT JOIN must be NULL (ClickHouse gives 0 and '' without join_use_nulls)
+    User[] users = sess.createQuery("SELECT u FROM User AS u LEFT JOIN u.group AS g WHERE g.id IS NULL")
+        .list!User();
+    assert(users.length == 1, "users without a group: " ~ to!string(users.length));
+    assert(users[0].name == "Loner");
+    assert(users[0].group is null);
   }
 
   @Test("quote escape test")

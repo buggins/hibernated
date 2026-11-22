@@ -16,7 +16,7 @@
         "dub": ">=1.14.0",
         "frontend": ">=2.097"
     },
-    "systemDependencies": "Depending on configuration: ODBC, PostgreSQL and/or SQLite v3",
+    "systemDependencies": "Depending on configuration: ODBC, PostgreSQL and/or SQLite v3 (none for ClickHouse)",
     "configurations": [
         {
             "name": "full",
@@ -48,6 +48,13 @@
             "libs-windows": ["libpq"],
             "subConfigurations": {
                 "ddbc": "PGSQL"
+            }
+        },
+        {
+            "name": "ClickHouse",
+            "versions": ["USE_CLICKHOUSE"],
+            "subConfigurations": {
+                "ddbc": "ClickHouse"
             }
         }
     ]
