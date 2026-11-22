@@ -36,7 +36,9 @@ ClickHouse is an analytics database. The `ClickHouseDialect` maps entities onto 
    time-based unique ids for `long`/`ulong` keys, UUIDs for `string` keys, and `max(key) + 1` for narrower
    integer keys. The last one is only safe when one process writes the table, so prefer `long` keys.
    ClickHouse does not check that keys are unique: a duplicate key gives two rows.
- - Dates and times are stored as `Date32` and `DateTime64(0)`, from 1900-01-01 to 2299-12-31.
+ - Dates and times are stored as `Date32` and `DateTime64(0)`, from 1900-01-01 to 2299-12-31; values outside
+   that range are rejected. `TimeOfDay` properties are stored as text (`hh:mm:ss`), since ClickHouse 23.8 has
+   no time-of-day type.
  - HQL queries run with `join_use_nulls = 1`, so that a `LEFT JOIN` without a match gives NULL, as in SQL.
 
 ## Sample code:

@@ -19,7 +19,8 @@
  *        with a random part per process) for `long`/`ulong` keys, UUIDs for string keys, and `max(key) + 1`
  *        for narrower integer keys, which is only safe when one process writes the table. ClickHouse does not
  *        check that keys are unique: a duplicate key gives two rows.)
- *   $(LI Dates and times are stored as `Date32` and `DateTime64(0)`, from 1900-01-01 to 2299-12-31.)
+ *   $(LI Dates and times are stored as `Date32` and `DateTime64(0)`, from 1900-01-01 to 2299-12-31; values
+ *        outside that range are rejected (ddbc 0.14.1). `TimeOfDay` values are stored as `String` `hh:mm:ss`.)
  *   $(LI HQL queries run with `join_use_nulls = 1`, so that a `LEFT JOIN` without a match gives NULL.)
  * )
  *
