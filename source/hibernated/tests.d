@@ -224,6 +224,25 @@ version(unittest) {
         byte[] byte_array_field;
         ubyte[] ubyte_array_field;
     }
+
+    // the one nullable type TypeTest lacks
+    @Entity
+    static class NullableUintTest {
+        int id;
+        Uint value;
+    }
+
+    // Nullable properties through a getter/setter pair and an @property pair (#117)
+    @Entity
+    static class NullableAccessorTest {
+        int id;
+        private Nullable!int _count;
+        private Nullable!Date _day;
+        Nullable!int getCount() { return _count; }
+        void setCount(Nullable!int v) { _count = v; }
+        @property Nullable!Date day() { return _day; }
+        @property void day(Nullable!Date v) { _day = v; }
+    }
     
     import ddbc.drivers.sqliteddbc;
     import ddbc.common;
@@ -352,6 +371,50 @@ unittest {
     assert(pgsql["role"].getCreateTableSQL() == "CREATE TABLE role (id SERIAL PRIMARY KEY, name TEXT NOT NULL)");
     assert(pgsql["generator_test"].getCreateTableSQL() == "CREATE TABLE generator_test (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL)");
     assert(pgsql["role_users"].getCreateTableSQL() == "CREATE TABLE role_users (role_fk INT NOT NULL, user_fk BIGINT NOT NULL, PRIMARY KEY (role_fk, user_fk), UNIQUE (user_fk, role_fk))");
+}
+
+unittest {
+    // Nullable properties set from a Variant: a null Variant makes them null (#117)
+    EntityMetaData schema = new SchemaInfoImpl!(TypeTest);
+    auto info = schema["TypeTest"];
+    auto e = new TypeTest();
+    static foreach (f; [
+            ["nullable_byte_field", "cast(byte) -5"], ["nullable_short_field", "cast(short) -300"],
+            ["nullable_int_field", "-70000"], ["nullable_long_field", "-5_000_000_000L"],
+            ["nullable_ubyte_field", "cast(ubyte) 200"], ["nullable_ushort_field", "cast(ushort) 60000"],
+            ["nullable_ulong_field", "10_000_000_000UL"], ["nullable_float_field", "1.5f"],
+            ["nullable_double_field", "2.25"], ["nullable_datetime_field", "DateTime(2019, 9, 15, 15, 18, 51)"],
+            ["nullable_date_field", "Date(2019, 9, 15)"], ["nullable_time_field", "TimeOfDay(15, 18, 51)"]]) {{
+        info.setPropertyValue(e, f[0], Variant(mixin(f[1])));
+        assert(!__traits(getMember, e, f[0]).isNull && __traits(getMember, e, f[0]).get == mixin(f[1]), f[0]);
+        info.setPropertyValue(e, f[0], Variant(null));
+        assert(__traits(getMember, e, f[0]).isNull, f[0]);
+    }}
+
+    EntityMetaData uintSchema = new SchemaInfoImpl!(NullableUintTest);
+    auto u = new NullableUintTest();
+    uintSchema["NullableUintTest"].setPropertyValue(u, "value", Variant(4_000_000_000U));
+    assert(u.value.get == 4_000_000_000U);
+    uintSchema["NullableUintTest"].setPropertyValue(u, "value", Variant(null));
+    assert(u.value.isNull);
+
+    EntityMetaData accessorSchema = new SchemaInfoImpl!(NullableAccessorTest);
+    auto ai = accessorSchema["NullableAccessorTest"];
+    auto a = new NullableAccessorTest();
+    ai.setPropertyValue(a, "count", Variant(5));
+    assert(a.getCount().get == 5);
+    assert(ai.getPropertyValue(a, "count") == 5);
+    ai.setPropertyValue(a, "count", Variant(7L)); // a long Variant, as ddbc returns for integers (generated keys)
+    assert(a.getCount().get == 7);
+    ai.setPropertyValue(a, "count", Variant(null));
+    assert(a.getCount().isNull);
+    assert(ai.getPropertyValue(a, "count") == null);
+    ai.setPropertyValue(a, "day", Variant(Date(2019, 9, 15)));
+    assert(a.day.get == Date(2019, 9, 15));
+    assert(ai.getPropertyValue(a, "day") == Date(2019, 9, 15));
+    ai.setPropertyValue(a, "day", Variant(null));
+    assert(a.day.isNull);
+    assert(ai.getPropertyValue(a, "day") == null);
 }
 
 unittest {
