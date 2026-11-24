@@ -151,29 +151,46 @@ abstract class Dialect {
 		return '\'';
 	}
 
+	/// Quotes `s` as an SQL string literal. This version writes backslash escapes
+	/// (`quoteSqlStringWithBackslashEscapes`), the form for MySQL and ClickHouse. On any database no value can end
+	/// the literal early, but one that doesn't read backslash escapes stores backslashes and control characters as
+	/// escape text (`\\`, `\n`, ...): dialects for such databases must override it, as SQLite and PostgreSQL do
+	/// (#113).
 	string quoteSqlString(string s) {
+		return quoteSqlStringWithBackslashEscapes(s);
+	}
+
+	/// `quoteSqlString` in the SQL standard form, for databases that don't read backslash escapes: `'` doubled,
+	/// every other character as is. Must not be used for a database that reads them: there `\'` would end the
+	/// literal.
+	/// Throws: `HibernatedException` if `s` contains a NUL character, which such a literal can't hold.
+	protected final string quoteSqlStringStandard(string s) {
+		import std.array : replace;
+		if (s.indexOf('\0') >= 0)
+			throw new HibernatedException("A string literal can't contain a NUL character");
+		// All dialects support the SQL-standard way of escaping a (') character via ('').
+		return "'" ~ s.replace("'", "''") ~ "'";
+	}
+
+	/// `quoteSqlString` for databases whose string literals read backslash escapes (MySQL, ClickHouse): `'`
+	/// doubled; a backslash, NUL, backspace, newline, carriage return and tab written as `\\`, `\0`, `\b`, `\n`,
+	/// `\r`, `\t`; every other character as is.
+	protected final string quoteSqlStringWithBackslashEscapes(string s) {
 		string res = "'";
 		foreach(ch; s) {
 			switch(ch) {
-                // All dialects support the SQL-standard way of escaping a (') character via ('').
 				case '\'': res ~= "''"; break;
-				case '\"': res ~= "\\\""; break;
 				case '\\': res ~= "\\\\"; break;
-				case '\0': res ~= "\\n"; break;
-				case '\a': res ~= "\\a"; break;
+				case '\0': res ~= "\\0"; break;
 				case '\b': res ~= "\\b"; break;
-				case '\f': res ~= "\\f"; break;
 				case '\n': res ~= "\\n"; break;
 				case '\r': res ~= "\\r"; break;
 				case '\t': res ~= "\\t"; break;
-				case '\v': res ~= "\\v"; break;
 				default:
 					res ~= ch;
 			}
 		}
-		res ~= "'";
-		//writeln("quoted " ~ s ~ " is " ~ res);
-		return res;
+		return res ~ "'";
 	}
 
 /+

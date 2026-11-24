@@ -331,6 +331,7 @@ shared static this() {
 unittest {
     auto d = new ClickHouseDialect();
     assert(d.quoteIfNeeded("group") == "`group`");
+    assert(d.quoteSqlString("a'b\\c\0d\ne\x07") == `'a''b\\c\0d\ne` ~ "\x07'"); // #113
     assert(d.getUpdatePrefix("`users`") == "ALTER TABLE `users` UPDATE ");
     assert(d.getCreateTableSuffix(null) == " ENGINE = MergeTree");
     assert(d.getCreateTableSuffix(["a", "order"]) == " ENGINE = MergeTree ORDER BY (a, `order`) SETTINGS allow_nullable_key = 1");

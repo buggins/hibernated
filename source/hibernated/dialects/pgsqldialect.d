@@ -228,6 +228,16 @@ class PGSQLDialect : Dialect {
         return "select relname from pg_class where relname = " ~ quoteSqlString(tableName) ~ " and relkind='r'";
     }
 
+    /// The SQL standard form, or an escape string `E'...'` with doubled backslashes when `s` contains a backslash:
+    /// that reads the same whatever `standard_conforming_strings` is set to (#113).
+    override string quoteSqlString(string s) {
+        import std.array : replace;
+        import std.string : indexOf;
+        if (s.indexOf('\\') < 0)
+            return quoteSqlStringStandard(s);
+        return "E" ~ quoteSqlStringStandard(s.replace("\\", "\\\\"));
+    }
+
     override string getUniqueIndexItemSQL(string indexName, string[] columnNames) {
         return "UNIQUE " ~ createFieldListSQL(columnNames);
     }
@@ -274,4 +284,13 @@ private string getImplicitDefaultByType(SqlType sqlType) {
         default:
             return "''";
     }
+}
+
+unittest {
+    // the standard form without backslashes, an escape string with them (#113)
+    import std.exception : assertThrown;
+    Dialect d = new PGSQLDialect();
+    assert(d.quoteSqlString("a'b\nc") == "'a''b\nc'");
+    assert(d.quoteSqlString(`a\b'c`) == `E'a\\b''c'`);
+    assertThrown!HibernatedException(d.quoteSqlString("a\0b"));
 }

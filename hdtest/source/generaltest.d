@@ -282,6 +282,7 @@ class GeneralTest : HibernateTest {
       auto a1 = new Asset();
       a1.name = "Bucky O'Hare";
       int id = sess.save(a1).get!int;
+      scope(exit) sess.remove(a1); // other tests count all assets
 
       auto result = sess.createQuery("FROM Asset WHERE name=:Name")
               .setParameter("Name", "Bucky O'Hare")
@@ -291,6 +292,17 @@ class GeneralTest : HibernateTest {
       result = sess.createQuery("FROM Asset WHERE name='Bucky O''Hare'")
               .list!Asset();
       assert(result.length == 1);
+
+      // a backslash, a double quote and control characters in an HQL string literal mean themselves on every
+      // database (#113: they used to be written with MySQL backslash escapes)
+      auto a2 = new Asset();
+      a2.name = "C:\\dir \"x\"\nline\ttab\r";
+      sess.save(a2);
+      scope(exit) sess.remove(a2);
+      result = sess.createQuery("FROM Asset WHERE name='C:\\dir \"x\"\nline\ttab\r'")
+              .list!Asset();
+      assert(result.length == 1, "assets matched by a literal with escapes: " ~ to!string(result.length));
+      assert(result[0].name == a2.name);
   }
 }
 
