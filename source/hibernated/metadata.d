@@ -2116,6 +2116,22 @@ string getColumnTypeDatasetReadCode(T, string m)() {
     return ColumnTypeDatasetReaderCode[getPropertyMemberType!(T,m)()];
 }
 
+/// Internal: used by the generated property setters. The value of `value` as a `T`, or `nv` if `value` is null
+/// (`nv` is evaluated either way). For `TimeOfDay` properties it replaces `(value == null ? nv : value.get!T)`,
+/// which crashes DMD in builds without `-O` (seen in CI from 2.097.2 to 2.107.1; a 3-byte struct from
+/// `Variant.get` in a conditional expression, #104). The generated code calls it fully qualified, since it's mixed
+/// in after imports of the entities' modules.
+T variantValueOr(T)(Variant value, T nv) {
+    if (value == null)
+        return nv;
+    return value.get!T;
+}
+
+unittest {
+    assert(variantValueOr(Variant(TimeOfDay(1, 2, 3)), TimeOfDay(4, 5, 6)) == TimeOfDay(1, 2, 3));
+    assert(variantValueOr(Variant(null), TimeOfDay(4, 5, 6)) == TimeOfDay(4, 5, 6));
+}
+
 /*
  * Due to to change in dmd [issue #72] "Implicit conversion with alias Nullable.get this will be removed after 2.096", nullable types (except string) have to make call to .get
 */
@@ -2146,7 +2162,7 @@ static immutable string[] ColumnTypeVariantReadCode =
      "(value == null ? nv : value.get!(string))", //NULLABLE_STRING_TYPE   // String
      "(value == null ? nv : value.get!(DateTime))", //DATETIME_TYPE, // std.datetime.DateTime
      "(value == null ? nv : value.get!(Date))", //DATE_TYPE, // std.datetime.Date
-     "(value == null ? nv : value.get!(TimeOfDay))", //TIME_TYPE, // std.datetime.TimeOfDay
+     "hibernated.metadata.variantValueOr(value, nv)", //TIME_TYPE, // std.datetime.TimeOfDay (see variantValueOr)
      "(value == null ? nv.get : value.get!(DateTime))", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
      "(value == null ? nv.get : value.get!(Date))", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
      "(value == null ? nv.get : value.get!(TimeOfDay))", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
