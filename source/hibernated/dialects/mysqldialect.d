@@ -239,6 +239,7 @@ unittest {
 	assert(dialect.quoteSqlString("abc") == "'abc'");
 	assert(dialect.quoteSqlString("a'b'c") == "'a''b''c'"); // the SQL standard form since #95
 	assert(dialect.quoteSqlString("a\nc") == "'a\\nc'");
+	assert(dialect.quoteSqlString("a\\b\0c\"d\te\r\x07") == `'a\\b\0c"d\te\r` ~ "\x07'"); // #113
 	assert(dialect.quoteIfNeeded("blabla") == "blabla");
 	assert(dialect.quoteIfNeeded("true") == "`true`");
 }

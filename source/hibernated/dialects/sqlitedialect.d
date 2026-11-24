@@ -211,6 +211,11 @@ class SQLiteDialect : Dialect {
         }
     }
 
+    /// SQLite never reads backslash escapes in string literals: the SQL standard form (#113).
+    override string quoteSqlString(string s) {
+        return quoteSqlStringStandard(s);
+    }
+
     override string getCheckTableExistsSQL(string tableName) {
         return "SELECT name FROM sqlite_master WHERE type='table' AND name=" ~ quoteSqlString(tableName);
     }
@@ -257,4 +262,13 @@ private string getImplicitDefaultByType(SqlType sqlType) {
         default:
             return "''";
     }
+}
+
+unittest {
+    // SQLite never interprets backslashes in string literals: only (') is escaped (#113)
+    import std.exception : assertThrown;
+    Dialect d = new SQLiteDialect();
+    assert(d.quoteSqlString("a'b") == "'a''b'");
+    assert(d.quoteSqlString("a\\b\"c\nd\te") == "'a\\b\"c\nd\te'");
+    assertThrown!HibernatedException(d.quoteSqlString("a\0b"));
 }
