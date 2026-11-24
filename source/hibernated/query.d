@@ -1769,7 +1769,7 @@ unittest {
 	Dialect dialect = new MySQLDialect();
 	
 	assert(dialect.quoteSqlString("abc") == "'abc'");
-	assert(dialect.quoteSqlString("a'b'c") == "'a\\'b\\'c'");
+	assert(dialect.quoteSqlString("a'b'c") == "'a''b''c'"); // the SQL standard form since #95
 	assert(dialect.quoteSqlString("a\nc") == "'a\\nc'");
 	
 	parser = new QueryParser(schema, "FROM User AS u WHERE id = :Id and u.name like '%test%'");
