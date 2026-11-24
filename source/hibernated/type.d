@@ -127,91 +127,106 @@ unittest {
 /// base class for all HibernateD exceptions
 class HibernatedException : Exception {
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
-    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+    /// Keeps the cause's message, and the cause as `next` (#110).
+    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, causedBy, f, l); }
+}
+
+// the cause is chained, in subclasses too (#110)
+unittest {
+    auto cause = new Exception("driver error");
+    auto e = new HibernatedException(cause);
+    assert(e.msg == "driver error" && e.next is cause);
+    auto t = new TransientObjectException(cause);
+    assert(t.msg == "driver error" && t.next is cause);
+    // two levels: through QueryException and UnresolvableObjectException
+    auto q = new QuerySyntaxException(cause);
+    assert(q.msg == "driver error" && q.next is cause);
+    auto o = new ObjectNotFoundException(cause);
+    assert(o.msg == "driver error" && o.next is cause);
 }
 
 /// Thrown when the user passes a transient instance to a Session method that expects a persistent instance. 
 class TransientObjectException : HibernatedException {
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
-    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy, f, l); }
 }
 
 /// Something went wrong in the cache
 class CacheException : HibernatedException {
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
-    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy, f, l); }
 }
 
 /// Thrown when the (illegal) value of a property can not be persisted. There are two main causes: a property declared not-null="true" is null or an association references an unsaved transient instance 
 class PropertyValueException : HibernatedException {
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
-    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy, f, l); }
 }
 
 /// A problem occurred translating a Hibernate query to SQL due to invalid query syntax, etc. 
 class QueryException : HibernatedException {
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
-    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy, f, l); }
 }
 
 /// Exception thrown when there is a syntax error in the HQL. 
 class QuerySyntaxException : QueryException {
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
-    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy, f, l); }
 }
 
 /// Parameter invalid or not found in the query
 class QueryParameterException : QueryException {
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
-    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy, f, l); }
 }
 
 /// Indicates that a transaction could not be begun, committed or rolled back. 
 class TransactionException : HibernatedException {
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
-    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy, f, l); }
 }
 
 /// Indicates access to unfetched data outside of a session context. For example, when an uninitialized proxy or collection is accessed after the session was closed. 
 class LazyInitializationException : HibernatedException {
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
-    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy, f, l); }
 }
 
 /// An exception that usually occurs as a result of something screwy in the O-R mappings. 
 class MappingException : HibernatedException {
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
-    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy, f, l); }
 }
 
 /// Thrown when Hibernate could not resolve an object by id, especially when loading an association.
 class UnresolvableObjectException : HibernatedException {
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
-    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy, f, l); }
 }
 
 /// An exception occurs when query result is expected but object is not found in DB.
 class ObjectNotFoundException : UnresolvableObjectException {
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
-    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy, f, l); }
 }
 
 /// Thrown when the user tries to do something illegal with a deleted object. 
 class ObjectDeletedException : UnresolvableObjectException {
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
-    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy, f, l); }
 }
 
 /// Thrown when the user calls a method of a Session that is in an inappropropriate state for the given call (for example, the the session is closed or disconnected). 
 class SessionException : HibernatedException {
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
-    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy, f, l); }
 }
 
 /// Thrown when the application calls Query.uniqueResult() and the query returned more than one result. Unlike all other Hibernate exceptions, this one is recoverable! 
 class NonUniqueResultException : HibernatedException {
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
-    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy, f, l); }
 }
 
 
