@@ -23,6 +23,25 @@ But since the underlying DDBC library now has ODBC support some work is underway
  - SQL Server (2017 & 2019)
  - Oracle (due to the size of the docker image for Oracle this may not be tested during CI)
 
+### SQLite
+
+The SQLite dialect stores dates and timestamps in `TEXT` columns, in the form ddbc writes. **Since hibernated 0.7
+(ddbc 0.15) that is `YYYY-MM-DD` and `YYYY-MM-DD HH:MM:SS`**, which SQLite's date and time functions understand;
+before, it was `YYYYMMDD` and `YYYYMMDDTHHMMSS`. Old values are still read, but SQLite compares text byte by byte, so
+queries (`where day = :d`, ranges, `order by`, entities keyed by a date) don't match old rows against new values.
+Convert existing databases once, for each date and timestamp column:
+
+```sql
+UPDATE t SET d = substr(d, 1, 4) || '-' || substr(d, 5, 2) || '-' || substr(d, 7, 2)
+ WHERE d GLOB '[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]';
+UPDATE t SET dt = substr(dt, 1, 4) || '-' || substr(dt, 5, 2) || '-' || substr(dt, 7, 2) || ' '
+               || substr(dt, 10, 2) || ':' || substr(dt, 12, 2) || ':' || substr(dt, 14, 2)
+ WHERE dt GLOB '[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]';
+```
+
+More on this, including `TIME` values and columns that ddbc's own users declared differently, is in
+[ddbc's README](https://github.com/buggins/ddbc#sqlite).
+
 ### ClickHouse
 
 ClickHouse is an analytics database. The `ClickHouseDialect` maps entities onto it, with some differences from the other databases:
