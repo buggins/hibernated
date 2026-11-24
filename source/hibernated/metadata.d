@@ -2132,8 +2132,25 @@ unittest {
     assert(variantValueOr(Variant(null), TimeOfDay(4, 5, 6)) == TimeOfDay(4, 5, 6));
 }
 
+/// Internal: used by the generated setters of `Nullable!T` properties. An empty `Nullable!T` if `value` is null,
+/// else `converted` (evaluated only then) in a `Nullable!T` (#117: the null case used to call `get` on an empty
+/// Nullable). It uses `if`/`return`: a `?:` with `Variant.get` in a branch and a `Nullable!Date` or
+/// `Nullable!DateTime` result crashes DMD 2.097 to 2.107 in builds without `-O`, as `TimeOfDay` does (see
+/// variantValueOr).
+Nullable!T nullableFromVariant(T)(Variant value, lazy T converted) {
+    if (value == null)
+        return Nullable!T.init;
+    return Nullable!T(converted);
+}
+
+unittest {
+    assert(nullableFromVariant(Variant(null), Date(2019, 9, 15)).isNull);
+    assert(nullableFromVariant(Variant(5), 5).get == 5);
+}
+
 /*
- * Due to to change in dmd [issue #72] "Implicit conversion with alias Nullable.get this will be removed after 2.096", nullable types (except string) have to make call to .get
+ * Due to to change in dmd [issue #72] "Implicit conversion with alias Nullable.get this will be removed after 2.096",
+ * nullable types (except string) go through nullableFromVariant.
 */
 static immutable string[] ColumnTypeVariantReadCode =
     [
@@ -2146,26 +2163,26 @@ static immutable string[] ColumnTypeVariantReadCode =
      "(value == null ? nv : (value.convertsTo!(ushort) ? value.get!(ushort) : (value.convertsTo!(ulong) ? to!ushort(value.get!(ulong)) : to!ushort((value.get!(long))))))", //USHORT_TYPE,  // ushort
      "(value == null ? nv : (value.convertsTo!(uint) ? value.get!(uint) : (value.convertsTo!(ulong) ? to!uint(value.get!(ulong)) : to!uint((value.get!(long))))))", //UINT_TYPE,    // uint
      "(value == null ? nv : (value.convertsTo!(ulong) ? value.get!(ulong) : to!ulong(value.get!(long))))", //ULONG_TYPE,   // ulong
-     "(value == null ? nv.get : (value.convertsTo!(byte) ? value.get!(byte) : (value.convertsTo!(long) ? to!byte(value.get!(long)) : to!byte((value.get!(ulong))))))", //NULLABLE_BYTE_TYPE,  // Nullable!byte
-     "(value == null ? nv.get : (value.convertsTo!(short) ? value.get!(short) : (value.convertsTo!(long) ? to!short(value.get!(long)) : to!short((value.get!(ulong))))))", //NULLABLE_SHORT_TYPE, // Nullable!short
-     "(value == null ? nv.get : (value.convertsTo!(int) ? value.get!(int) : (value.convertsTo!(long) ? to!int(value.get!(long)) : to!int((value.get!(ulong))))))", //NULLABLE_INT_TYPE,   // Nullable!int
-     "(value == null ? nv.get : (value.convertsTo!(long) ? value.get!(long) : to!long(value.get!(ulong))))", //NULLABLE_LONG_TYPE,  // Nullable!long
-     "(value == null ? nv.get : (value.convertsTo!(ubyte) ? value.get!(ubyte) : (value.convertsTo!(ulong) ? to!ubyte(value.get!(ulong)) : to!ubyte((value.get!(long))))))", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
-     "(value == null ? nv.get : (value.convertsTo!(ushort) ? value.get!(ushort) : (value.convertsTo!(ulong) ? to!ushort(value.get!(ulong)) : to!ushort((value.get!(long))))))", //NULLABLE_USHORT_TYPE,// Nullable!ushort
-     "(value == null ? nv.get : (value.convertsTo!(uint) ? value.get!(uint) : (value.convertsTo!(ulong) ? to!uint(value.get!(ulong)) : to!uint((value.get!(long))))))", //NULLABLE_UINT_TYPE,  // Nullable!uint
-     "(value == null ? nv.get : (value.convertsTo!(ulong) ? value.get!(ulong) : to!ulong(value.get!(long))))", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+     "hibernated.metadata.nullableFromVariant(value, (value.convertsTo!(byte) ? value.get!(byte) : (value.convertsTo!(long) ? to!byte(value.get!(long)) : to!byte((value.get!(ulong))))))", //NULLABLE_BYTE_TYPE,  // Nullable!byte
+     "hibernated.metadata.nullableFromVariant(value, (value.convertsTo!(short) ? value.get!(short) : (value.convertsTo!(long) ? to!short(value.get!(long)) : to!short((value.get!(ulong))))))", //NULLABLE_SHORT_TYPE, // Nullable!short
+     "hibernated.metadata.nullableFromVariant(value, (value.convertsTo!(int) ? value.get!(int) : (value.convertsTo!(long) ? to!int(value.get!(long)) : to!int((value.get!(ulong))))))", //NULLABLE_INT_TYPE,   // Nullable!int
+     "hibernated.metadata.nullableFromVariant(value, (value.convertsTo!(long) ? value.get!(long) : to!long(value.get!(ulong))))", //NULLABLE_LONG_TYPE,  // Nullable!long
+     "hibernated.metadata.nullableFromVariant(value, (value.convertsTo!(ubyte) ? value.get!(ubyte) : (value.convertsTo!(ulong) ? to!ubyte(value.get!(ulong)) : to!ubyte((value.get!(long))))))", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
+     "hibernated.metadata.nullableFromVariant(value, (value.convertsTo!(ushort) ? value.get!(ushort) : (value.convertsTo!(ulong) ? to!ushort(value.get!(ulong)) : to!ushort((value.get!(long))))))", //NULLABLE_USHORT_TYPE,// Nullable!ushort
+     "hibernated.metadata.nullableFromVariant(value, (value.convertsTo!(uint) ? value.get!(uint) : (value.convertsTo!(ulong) ? to!uint(value.get!(ulong)) : to!uint((value.get!(long))))))", //NULLABLE_UINT_TYPE,  // Nullable!uint
+     "hibernated.metadata.nullableFromVariant(value, (value.convertsTo!(ulong) ? value.get!(ulong) : to!ulong(value.get!(long))))", //NULLABLE_ULONG_TYPE, // Nullable!ulong
      "(value == null ? nv : (value.convertsTo!(float) ? value.get!(float) : to!float(value.get!(double))))",//FLOAT_TYPE,   // float
      "(value == null ? nv : (value.convertsTo!(double) ? value.get!(double) : to!double(value.get!(double))))",//DOUBLE_TYPE,   // double
-     "(value == null ? nv.get : (value.convertsTo!(float) ? value.get!(float) : to!float(value.get!(double))))", //NULLABLE_FLOAT_TYPE, // Nullable!float
-     "(value == null ? nv.get : (value.convertsTo!(double) ? value.get!(double) : to!double(value.get!(double))))", //NULLABLE_DOUBLE_TYPE,// Nullable!double
+     "hibernated.metadata.nullableFromVariant(value, (value.convertsTo!(float) ? value.get!(float) : to!float(value.get!(double))))", //NULLABLE_FLOAT_TYPE, // Nullable!float
+     "hibernated.metadata.nullableFromVariant(value, (value.convertsTo!(double) ? value.get!(double) : to!double(value.get!(double))))", //NULLABLE_DOUBLE_TYPE,// Nullable!double
      "(value == null ? nv : value.get!(string))", //STRING_TYPE   // string
      "(value == null ? nv : value.get!(string))", //NULLABLE_STRING_TYPE   // String
      "(value == null ? nv : value.get!(DateTime))", //DATETIME_TYPE, // std.datetime.DateTime
      "(value == null ? nv : value.get!(Date))", //DATE_TYPE, // std.datetime.Date
      "hibernated.metadata.variantValueOr(value, nv)", //TIME_TYPE, // std.datetime.TimeOfDay (see variantValueOr)
-     "(value == null ? nv.get : value.get!(DateTime))", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
-     "(value == null ? nv.get : value.get!(Date))", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
-     "(value == null ? nv.get : value.get!(TimeOfDay))", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
+     "hibernated.metadata.nullableFromVariant(value, value.get!(DateTime))", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
+     "hibernated.metadata.nullableFromVariant(value, value.get!(Date))", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
+     "hibernated.metadata.nullableFromVariant(value, value.get!(TimeOfDay))", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
      "(value == null ? nv : value.get!(byte[]))", //BYTE_ARRAY_TYPE, // byte[]
      "(value == null ? nv : value.get!(ubyte[]))", //UBYTE_ARRAY_TYPE, // ubyte[]
      ];
