@@ -237,7 +237,7 @@ class MySQLDialect : Dialect {
 unittest {
 	Dialect dialect = new MySQLDialect();
 	assert(dialect.quoteSqlString("abc") == "'abc'");
-	assert(dialect.quoteSqlString("a'b'c") == "'a\\'b\\'c'");
+	assert(dialect.quoteSqlString("a'b'c") == "'a''b''c'"); // the SQL standard form since #95
 	assert(dialect.quoteSqlString("a\nc") == "'a\\nc'");
 	assert(dialect.quoteIfNeeded("blabla") == "blabla");
 	assert(dialect.quoteIfNeeded("true") == "`true`");

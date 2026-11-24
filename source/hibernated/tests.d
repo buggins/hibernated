@@ -165,6 +165,32 @@ version(unittest) {
         string name;
     }
     
+    // a @Generator on a property that isn't the key: id stays the key (#104)
+    @Entity
+    static class GeneratedTokenTest {
+        @Id long id;
+        @Generator(UUID_GENERATOR)
+        string token;
+        string name;
+    }
+
+    // no @Id: the property named id is the key, not the one with a @Generator (#104)
+    @Entity
+    static class GeneratedTokenNoIdTest {
+        long id;
+        @Generator(UUID_GENERATOR)
+        string token;
+    }
+
+    // @Id after another member: a property named id isn't a second key (hasAnyKeyPropertyAnnotation
+    // looked at the first public member only, #104)
+    @Entity
+    static class IdNotFirstTest {
+        string name;
+        @Id long code;
+        long id;
+    }
+
     @Entity
     static class TypeTest {
         //@Generated
@@ -199,8 +225,6 @@ version(unittest) {
         ubyte[] ubyte_array_field;
     }
     
-    import ddbc.drivers.mysqlddbc;
-    import ddbc.drivers.pgsqlddbc;
     import ddbc.drivers.sqliteddbc;
     import ddbc.common;
     import hibernated.dialects.mysqldialect;
@@ -208,30 +232,6 @@ version(unittest) {
     import hibernated.dialects.pgsqldialect;
 
     
-    string[] UNIT_TEST_DROP_TABLES_SCRIPT = 
-        [
-         "DROP TABLE IF EXISTS role_users",
-         "DROP TABLE IF EXISTS account_type",
-         "DROP TABLE IF EXISTS users",
-         "DROP TABLE IF EXISTS customers",
-         "DROP TABLE IF EXISTS person",
-         "DROP TABLE IF EXISTS person_info",
-         "DROP TABLE IF EXISTS person_info2",
-         "DROP TABLE IF EXISTS role",
-         "DROP TABLE IF EXISTS generator_test",
-         ];
-    string[] UNIT_TEST_CREATE_TABLES_SCRIPT = 
-        [
-         "CREATE TABLE IF NOT EXISTS role (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)",
-         "CREATE TABLE IF NOT EXISTS account_type (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)",
-         "CREATE TABLE IF NOT EXISTS users (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags INT, comment TEXT, customer_fk BIGINT NULL)",
-         "CREATE TABLE IF NOT EXISTS customers (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, zip varchar(20), city varchar(100), street_address varchar(255), account_type_fk int)",
-         "CREATE TABLE IF NOT EXISTS person_info (id int not null primary key AUTO_INCREMENT, flags bigint)",
-         "CREATE TABLE IF NOT EXISTS person (id int not null primary key AUTO_INCREMENT, first_name varchar(255) not null, last_name varchar(255) not null, more_info_fk int)",
-         "CREATE TABLE IF NOT EXISTS person_info2 (id int not null primary key AUTO_INCREMENT, flags bigint, person_info_fk int)",
-         "CREATE TABLE IF NOT EXISTS role_users (role_fk int not null, user_fk int not null, primary key (role_fk, user_fk), unique index(user_fk, role_fk))",
-         "CREATE TABLE IF NOT EXISTS generator_test (id varchar(64) not null primary key, name varchar(255) not null)",
-         ];
     string[] UNIT_TEST_FILL_TABLES_SCRIPT = 
         [
          "INSERT INTO role (name) VALUES ('admin')",
@@ -265,21 +265,43 @@ version(unittest) {
          "INSERT INTO role_users (role_fk, user_fk) VALUES (3, 5)",
          ];
 
-    void recreateTestSchema(bool dropTables, bool createTables, bool fillTables) {
+    /// Runs `queries` one after the other (ddbc no longer has this helper either).
+    void unitTestExecuteBatch(Connection conn, string[] queries) {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+        foreach (query; queries)
+            stmt.executeUpdate(query);
+    }
+
+    /// Fills the test tables, which `updateDBSchema` creates from the entity metadata.
+    void fillTestTables() {
         DataSource connectionPool = getUnitTestDataSource();
         if (connectionPool is null)
             return; // DB tests disabled
         Connection conn = connectionPool.getConnection();
         scope(exit) conn.close();
-        if (dropTables)
-            unitTestExecuteBatch(conn, UNIT_TEST_DROP_TABLES_SCRIPT);
-        if (createTables)
-            unitTestExecuteBatch(conn, UNIT_TEST_CREATE_TABLES_SCRIPT);
-        if (fillTables)
-            unitTestExecuteBatch(conn, UNIT_TEST_FILL_TABLES_SCRIPT);
+        unitTestExecuteBatch(conn, UNIT_TEST_FILL_TABLES_SCRIPT);
     }
 
-    immutable bool DB_TESTS_ENABLED = SQLITE_TESTS_ENABLED || MYSQL_TESTS_ENABLED || PGSQL_TESTS_ENABLED;
+    // ddbc no longer defines these switches and data sources (buggins/ddbc#111): the unit tests use SQLite
+    // in memory when it's built in. MySQL and PostgreSQL are tested by hdtest, against real servers (#104).
+    version (USE_SQLITE)
+        immutable bool SQLITE_TESTS_ENABLED = true;
+    else
+        immutable bool SQLITE_TESTS_ENABLED = false;
+
+    static if (SQLITE_TESTS_ENABLED) {
+        /// An in-memory database: the pool keeps its one connection, and with it the data. So only one
+        /// connection may be open at a time: opening a second one fails at once (wait time-out 0), where it
+        /// happens. Time-to-live 0 (no limit) keeps the connection; the pool would still replace it if it broke
+        /// (e.g. failed its check), and the tests after that would find an empty database.
+        DataSource createUnitTestSQLITEDataSource() {
+            import ddbc.common : createConnectionPool;
+            return createConnectionPool("sqlite::memory:", null, 1, 0, 0);
+        }
+    }
+
+    immutable bool DB_TESTS_ENABLED = SQLITE_TESTS_ENABLED;
 
 
     package DataSource _unitTestConnectionPool;
@@ -289,12 +311,6 @@ version(unittest) {
             static if (SQLITE_TESTS_ENABLED) {
                 pragma(msg, "Will use SQLite for HibernateD unit tests");
                 _unitTestConnectionPool = createUnitTestSQLITEDataSource();
-            } else if (MYSQL_TESTS_ENABLED) {
-                pragma(msg, "Will use MySQL for HibernateD unit tests");
-                _unitTestConnectionPool = createUnitTestMySQLDataSource();
-            } else if (PGSQL_TESTS_ENABLED) {
-                pragma(msg, "Will use PGSQL for HibernateD unit tests");
-                _unitTestConnectionPool = createUnitTestPGSQLDataSource();
             }
         }
         return _unitTestConnectionPool;
@@ -303,10 +319,6 @@ version(unittest) {
 
         static if (SQLITE_TESTS_ENABLED) {
             return new SQLiteDialect();
-        } else if (MYSQL_TESTS_ENABLED) {
-            return new MySQLDialect();
-        } else if (PGSQL_TESTS_ENABLED) {
-            return new PGSQLDialect();
         } else {
             return null; // disabled
         }
@@ -320,6 +332,43 @@ version(unittest) {
     }
 }
 
+
+unittest {
+    // CREATE TABLE text of the MySQL and PostgreSQL dialects: no server needed (hdtest runs them against servers)
+    EntityMetaData schema = new SchemaInfoImpl!(User, Customer, AccountType, T1, TypeTest, Address, Role, GeneratorTest, Person, MoreInfo, EvenMoreInfo);
+    DBInfo mysql = new DBInfo(new MySQLDialect(), schema);
+    assert(mysql["users"].getCreateTableSQL() == "CREATE TABLE users (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags BIGINT NULL, comment VARCHAR(1024) NULL, customer_fk INT NULL)");
+    assert(mysql["customers"].getCreateTableSQL() == "CREATE TABLE customers (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, zip VARCHAR(255) NULL, city VARCHAR(255) NULL, street_address VARCHAR(255) NULL, account_type_fk INT NULL)");
+    assert(mysql["account_type"].getCreateTableSQL() == "CREATE TABLE account_type (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)");
+    assert(mysql["t1"].getCreateTableSQL() == "CREATE TABLE t1 (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags BIGINT NOT NULL, comment VARCHAR(255) NULL)");
+    assert(mysql["role"].getCreateTableSQL() == "CREATE TABLE role (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)");
+    assert(mysql["generator_test"].getCreateTableSQL() == "CREATE TABLE generator_test (id VARCHAR(255) NOT NULL PRIMARY KEY, name VARCHAR(255) NOT NULL)");
+    assert(mysql["role_users"].getCreateTableSQL() == "CREATE TABLE role_users (role_fk INT NOT NULL, user_fk BIGINT NOT NULL, PRIMARY KEY (role_fk, user_fk), UNIQUE INDEX role_users_reverse_index (user_fk, role_fk))");
+    DBInfo pgsql = new DBInfo(new PGSQLDialect(), schema);
+    assert(pgsql["users"].getCreateTableSQL() == "CREATE TABLE users (id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, flags BIGINT NULL, comment TEXT NULL, customer_fk INT NULL)");
+    assert(pgsql["customers"].getCreateTableSQL() == "CREATE TABLE customers (id SERIAL PRIMARY KEY, name TEXT NOT NULL, zip TEXT NULL, city TEXT NULL, street_address TEXT NULL, account_type_fk INT NULL)");
+    assert(pgsql["account_type"].getCreateTableSQL() == "CREATE TABLE account_type (id SERIAL PRIMARY KEY, name TEXT NOT NULL)");
+    assert(pgsql["t1"].getCreateTableSQL() == "CREATE TABLE t1 (id SERIAL PRIMARY KEY, name TEXT NOT NULL, flags BIGINT NOT NULL, comment TEXT NULL)");
+    assert(pgsql["role"].getCreateTableSQL() == "CREATE TABLE role (id SERIAL PRIMARY KEY, name TEXT NOT NULL)");
+    assert(pgsql["generator_test"].getCreateTableSQL() == "CREATE TABLE generator_test (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL)");
+    assert(pgsql["role_users"].getCreateTableSQL() == "CREATE TABLE role_users (role_fk INT NOT NULL, user_fk BIGINT NOT NULL, PRIMARY KEY (role_fk, user_fk), UNIQUE (user_fk, role_fk))");
+}
+
+unittest {
+    // which property is the key (#104)
+    EntityMetaData schema = new SchemaInfoImpl!(GeneratorTest, GeneratedTokenTest, GeneratedTokenNoIdTest, IdNotFirstTest);
+    assert(schema["GeneratorTest"].getKeyProperty().propertyName == "id");
+    assert(!schema["GeneratorTest"]["id"].generated); // the generator makes the values, not the database
+    assert(schema["GeneratorTest"]["id"].generatorFunc !is null);
+    assert(schema["GeneratedTokenTest"].getKeyProperty().propertyName == "id");
+    assert(!schema["GeneratedTokenTest"]["token"].key);
+    assert(!schema["GeneratedTokenTest"]["token"].generated);
+    assert(schema["GeneratedTokenNoIdTest"].getKeyProperty().propertyName == "id");
+    assert(schema["GeneratedTokenNoIdTest"]["id"].generated);
+    assert(!schema["GeneratedTokenNoIdTest"]["token"].key);
+    assert(schema["IdNotFirstTest"].getKeyProperty().propertyName == "code");
+    assert(!schema["IdNotFirstTest"]["id"].key);
+}
 
 unittest {
     
@@ -439,7 +488,6 @@ unittest {
 
 unittest {
     if (DB_TESTS_ENABLED) {
-        recreateTestSchema(true, false, false);
 
 
         //writeln("metadata test 2");
@@ -456,22 +504,14 @@ unittest {
 //        foreach(t; createIndexes)
 //            writeln(t);
         static if (SQLITE_TESTS_ENABLED) {
-            assert(db["users"].getCreateTableSQL() == "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, flags INT NULL, comment TEXT NULL, customer_fk INT NULL)");
-            assert(db["customers"].getCreateTableSQL() == "CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL, zip TEXT NULL, city TEXT NULL, street_address TEXT NULL, account_type_fk INT NULL)");
-            assert(db["account_type"].getCreateTableSQL() == "CREATE TABLE account_type (id INTEGER PRIMARY KEY, name TEXT NOT NULL)");
-            assert(db["t1"].getCreateTableSQL() == "CREATE TABLE t1 (id INTEGER PRIMARY KEY, name TEXT NOT NULL, flags INT NOT NULL, comment TEXT NULL)");
-            assert(db["role"].getCreateTableSQL() == "CREATE TABLE role (id INTEGER PRIMARY KEY, name TEXT NOT NULL)");
+            // the SQLite dialect writes INTEGER and AUTOINCREMENT since #96
+            assert(db["users"].getCreateTableSQL() == "CREATE TABLE users (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, flags INTEGER NULL, comment TEXT NULL, customer_fk INTEGER NULL)");
+            assert(db["customers"].getCreateTableSQL() == "CREATE TABLE customers (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, zip TEXT NULL, city TEXT NULL, street_address TEXT NULL, account_type_fk INTEGER NULL)");
+            assert(db["account_type"].getCreateTableSQL() == "CREATE TABLE account_type (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)");
+            assert(db["t1"].getCreateTableSQL() == "CREATE TABLE t1 (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, flags INTEGER NOT NULL, comment TEXT NULL)");
+            assert(db["role"].getCreateTableSQL() == "CREATE TABLE role (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)");
             assert(db["generator_test"].getCreateTableSQL() == "CREATE TABLE generator_test (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL)");
-            assert(db["role_users"].getCreateTableSQL() == "CREATE TABLE role_users (role_fk INT NOT NULL, user_fk INT NOT NULL, PRIMARY KEY (role_fk, user_fk), UNIQUE (user_fk, role_fk))");
-        } else static if (MYSQL_TESTS_ENABLED) {
-            assert(db["users"].getCreateTableSQL() == "CREATE TABLE users (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags BIGINT NULL, comment VARCHAR(1024) NULL, customer_fk INT NULL)");
-            assert(db["customers"].getCreateTableSQL() == "CREATE TABLE customers (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, zip VARCHAR(255) NULL, city VARCHAR(255) NULL, street_address VARCHAR(255) NULL, account_type_fk INT NULL)");
-            assert(db["account_type"].getCreateTableSQL() == "CREATE TABLE account_type (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)");
-            assert(db["t1"].getCreateTableSQL() == "CREATE TABLE t1 (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL, flags BIGINT NOT NULL, comment VARCHAR(255) NULL)");
-            assert(db["role"].getCreateTableSQL() == "CREATE TABLE role (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL)");
-            assert(db["generator_test"].getCreateTableSQL() == "CREATE TABLE generator_test (id VARCHAR(255) NOT NULL PRIMARY KEY, name VARCHAR(255) NOT NULL)");
-            assert(db["role_users"].getCreateTableSQL() == "CREATE TABLE role_users (role_fk INT NOT NULL, user_fk BIGINT NOT NULL, PRIMARY KEY (role_fk, user_fk), UNIQUE INDEX role_users_reverse_index (user_fk, role_fk))");
-        } else static if (PGSQL_TESTS_ENABLED) {
+            assert(db["role_users"].getCreateTableSQL() == "CREATE TABLE role_users (role_fk INTEGER NOT NULL, user_fk INTEGER NOT NULL, PRIMARY KEY (role_fk, user_fk), UNIQUE (user_fk, role_fk))");
         }
 
 
@@ -480,18 +520,15 @@ unittest {
         if (ds is null)
             return; // DB tests disabled
         SessionFactory factory = new SessionFactoryImpl(schema, dialect, ds);
+        scope(exit) factory.close();
         db = factory.getDBMetaData();
         {
             Connection conn = ds.getConnection();
             scope(exit) conn.close();
             db.updateDBSchema(conn, true, true);
-            recreateTestSchema(false, false, true);
         }
+        fillTestTables(); // after closing conn: the in-memory pool has one connection
 
-
-
-
-        scope(exit) factory.close();
         {
             Session sess = factory.openSession();
             scope(exit) sess.close();
@@ -855,10 +892,10 @@ unittest {
     }
     
     if (DB_TESTS_ENABLED) {
-        //recreateTestSchema();
+        // uses the tables that the previous DB unittest created (updateDBSchema) and filled (fillTestTables),
+        // in the same in-memory database
         
         //writeln("metadata test 2");
-        import hibernated.dialects.mysqldialect;
         
         // Checking generated metadata
         Dialect dialect = getUnitTestDialect();
@@ -872,12 +909,14 @@ unittest {
             scope(exit) sess.close();
 
             auto p1 = sess.get!Person(1);
+            assert(p1 !is null, "person 1 missing: this test needs the rows the previous DB unittest inserted");
             assert(p1.firstName == "Andrei");
             
 
             // all non-null oneToOne relations
             auto q = sess.createQuery("FROM Person WHERE id=:Id").setParameter("Id", Variant(1));
             Person p2 = q.uniqueResult!Person();
+            assert(p2 !is null);
             assert(p2.firstName == "Andrei");
             assert(p2.moreInfo !is null);
             assert(p2.moreInfo.person !is null);
@@ -892,6 +931,7 @@ unittest {
             // null oneToOne relation
             q = sess.createQuery("FROM Person WHERE id=:Id").setParameter("Id", Variant(3));
             p2 = q.uniqueResult!Person();
+            assert(p2 !is null);
             assert(p2.firstName == "John");
             assert(p2.moreInfo !is null);
             assert(p2.moreInfo.person !is null);
