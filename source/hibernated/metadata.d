@@ -2122,7 +2122,7 @@ string getColumnTypeDatasetReadCode(T, string m)() {
 /// `Variant.get` in a conditional expression, #104). The generated code calls it fully qualified, since it's mixed
 /// in after imports of the entities' modules.
 T variantValueOr(T)(Variant value, T nv) {
-    if (value == null)
+    if (isNullVariant(value))
         return nv;
     return value.get!T;
 }
@@ -2138,7 +2138,7 @@ unittest {
 /// `Nullable!DateTime` result crashes DMD 2.097 to 2.107 in builds without `-O`, as `TimeOfDay` does (see
 /// variantValueOr).
 Nullable!T nullableFromVariant(T)(Variant value, lazy T converted) {
-    if (value == null)
+    if (isNullVariant(value))
         return Nullable!T.init;
     return Nullable!T(converted);
 }
@@ -2146,6 +2146,94 @@ Nullable!T nullableFromVariant(T)(Variant value, lazy T converted) {
 unittest {
     assert(nullableFromVariant(Variant(null), Date(2019, 9, 15)).isNull);
     assert(nullableFromVariant(Variant(5), 5).get == 5);
+    assert(nullableFromVariant(Variant(), Date(2019, 9, 15)).isNull);
+}
+
+/// Internal: used by the generated property setters. True if `value` stands for NULL: `Variant(null)`, or an empty
+/// `Variant` (no value), the form some ddbc drivers return for NULL (#118). Not `value == null`, which is also true
+/// for an empty string or array.
+bool isNullVariant(Variant value) {
+    return !value.hasValue || value.type == typeid(typeof(null));
+}
+
+unittest {
+    assert(isNullVariant(Variant()));
+    assert(isNullVariant(Variant(null)));
+    assert(!isNullVariant(Variant(0)));
+    assert(!isNullVariant(Variant("")));
+    assert(!isNullVariant(Variant(cast(ubyte[]) [])));
+}
+
+/// Internal: used by the generated setters of integer properties. The integer, `bool` or character stored in `value`,
+/// converted to `T` with a range check: throws `ConvOverflowException` when it doesn't fit (#119: `Variant.convertsTo!long` is true
+/// for a stored `ulong` and the reverse, so converting through those reinterpreted the bits). A value of any other
+/// type goes through `Variant.get!T`.
+T variantToInteger(T)(Variant value) {
+    import std.meta : AliasSeq;
+    // Compare with the unqualified type: comparing with a const or immutable TypeInfo allocates its name.
+    TypeInfo stored = value.type;
+    auto qualified = cast(TypeInfo_Const) stored; // const or immutable (a shared value fails in get!(const S))
+    if (qualified !is null)
+        stored = qualified.base;
+    static foreach (S; AliasSeq!(bool, byte, ubyte, short, ushort, int, uint, long, ulong)) {
+        if (stored == typeid(S))
+            return to!T(qualified is null ? value.get!S : value.get!(const S)); // get!S refuses a stored const(S)
+    }
+    // characters by their code: to! converts a character to an integer of its size without a range check
+    static foreach (C; AliasSeq!(char, wchar, dchar)) {
+        if (stored == typeid(C)) {
+            const C c = qualified is null ? value.get!C : value.get!(const C);
+            static if (is(C == char))
+                return to!T(cast(ubyte) c);
+            else static if (is(C == wchar))
+                return to!T(cast(ushort) c);
+            else
+                return to!T(cast(uint) c);
+        }
+    }
+    return value.get!T;
+}
+
+unittest {
+    assert(variantToInteger!long(Variant(-5)) == -5);
+    assert(variantToInteger!ulong(Variant(5L)) == 5);
+    assert(variantToInteger!ubyte(Variant(cast(ubyte) 200)) == 200);
+    assert(variantToInteger!int(Variant(true)) == 1);
+    assert(variantToInteger!int(Variant('a')) == 97);
+    assertThrown!ConvOverflowException(variantToInteger!byte(Variant(cast(wchar) 300)));
+    assertThrown!ConvOverflowException(variantToInteger!byte(Variant(cast(char) 200)));
+    assertThrown!ConvOverflowException(variantToInteger!int(Variant(cast(dchar) 0xFFFF_FFFF)));
+    assert(variantToInteger!ubyte(Variant(cast(char) 200)) == 200);
+    assert(variantToInteger!int(Variant(cast(const dchar) 'z')) == 122);
+    assert(variantToInteger!long(Variant(cast(const ulong) 7)) == 7);
+    assert(variantToInteger!int(Variant(cast(immutable short) -7)) == -7);
+    assert(variantToInteger!long(Variant(long.max)) == long.max);
+    assert(variantToInteger!ulong(Variant(ulong.max)) == ulong.max);
+    assertThrown!ConvOverflowException(variantToInteger!long(Variant(ulong.max)));
+    assertThrown!ConvOverflowException(variantToInteger!ulong(Variant(-1L)));
+    assertThrown!ConvOverflowException(variantToInteger!ulong(Variant(-1)));
+    assertThrown!ConvOverflowException(variantToInteger!byte(Variant(128)));
+    assertThrown!ConvOverflowException(variantToInteger!uint(Variant(-1)));
+    assertThrown!VariantException(variantToInteger!int(Variant(1.5)));
+}
+
+/// Internal: used by the generated setters of `byte[]` and `ubyte[]` properties. The array in `value`, which may also
+/// hold the other signedness (a driver's `getBytes`/`getUbytes`), viewed as `T[]`.
+T[] variantToBytes(T)(Variant value) if (is(T == byte) || is(T == ubyte)) {
+    static if (is(T == byte))
+        alias Other = ubyte;
+    else
+        alias Other = byte;
+    if (auto other = value.peek!(Other[]))
+        return cast(T[]) *other;
+    return value.get!(T[]);
+}
+
+unittest {
+    assert(variantToBytes!byte(Variant(cast(ubyte[]) [1, 255])) == [1, -1]);
+    assert(variantToBytes!ubyte(Variant(cast(byte[]) [1, -1])) == [1, 255]);
+    assert(variantToBytes!ubyte(Variant(cast(ubyte[]) [])).length == 0);
+    assertThrown!VariantException(variantToBytes!byte(Variant("x")));
 }
 
 /*
@@ -2154,37 +2242,37 @@ unittest {
 */
 static immutable string[] ColumnTypeVariantReadCode =
     [
-     "(value == null ? nv : value.get!(bool))", //BOOL_TYPE,    // bool
-     "(value == null ? nv : (value.convertsTo!(byte) ? value.get!(byte) : (value.convertsTo!(long) ? to!byte(value.get!(long)) : to!byte((value.get!(ulong))))))", //BYTE_TYPE,    // byte
-     "(value == null ? nv : (value.convertsTo!(short) ? value.get!(short) : (value.convertsTo!(long) ? to!short(value.get!(long)) : to!short((value.get!(ulong))))))", //SHORT_TYPE,   // short
-     "(value == null ? nv : (value.convertsTo!(int) ? value.get!(int) : (value.convertsTo!(long) ? to!int(value.get!(long)) : to!int((value.get!(ulong))))))", //INT_TYPE,     // int
-     "(value == null ? nv : (value.convertsTo!(long) ? value.get!(long) : to!long(value.get!(ulong))))", //LONG_TYPE,    // long
-     "(value == null ? nv : (value.convertsTo!(ubyte) ? value.get!(ubyte) : (value.convertsTo!(ulong) ? to!ubyte(value.get!(ulong)) : to!ubyte((value.get!(long))))))", //UBYTE_TYPE,   // ubyte
-     "(value == null ? nv : (value.convertsTo!(ushort) ? value.get!(ushort) : (value.convertsTo!(ulong) ? to!ushort(value.get!(ulong)) : to!ushort((value.get!(long))))))", //USHORT_TYPE,  // ushort
-     "(value == null ? nv : (value.convertsTo!(uint) ? value.get!(uint) : (value.convertsTo!(ulong) ? to!uint(value.get!(ulong)) : to!uint((value.get!(long))))))", //UINT_TYPE,    // uint
-     "(value == null ? nv : (value.convertsTo!(ulong) ? value.get!(ulong) : to!ulong(value.get!(long))))", //ULONG_TYPE,   // ulong
-     "hibernated.metadata.nullableFromVariant(value, (value.convertsTo!(byte) ? value.get!(byte) : (value.convertsTo!(long) ? to!byte(value.get!(long)) : to!byte((value.get!(ulong))))))", //NULLABLE_BYTE_TYPE,  // Nullable!byte
-     "hibernated.metadata.nullableFromVariant(value, (value.convertsTo!(short) ? value.get!(short) : (value.convertsTo!(long) ? to!short(value.get!(long)) : to!short((value.get!(ulong))))))", //NULLABLE_SHORT_TYPE, // Nullable!short
-     "hibernated.metadata.nullableFromVariant(value, (value.convertsTo!(int) ? value.get!(int) : (value.convertsTo!(long) ? to!int(value.get!(long)) : to!int((value.get!(ulong))))))", //NULLABLE_INT_TYPE,   // Nullable!int
-     "hibernated.metadata.nullableFromVariant(value, (value.convertsTo!(long) ? value.get!(long) : to!long(value.get!(ulong))))", //NULLABLE_LONG_TYPE,  // Nullable!long
-     "hibernated.metadata.nullableFromVariant(value, (value.convertsTo!(ubyte) ? value.get!(ubyte) : (value.convertsTo!(ulong) ? to!ubyte(value.get!(ulong)) : to!ubyte((value.get!(long))))))", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
-     "hibernated.metadata.nullableFromVariant(value, (value.convertsTo!(ushort) ? value.get!(ushort) : (value.convertsTo!(ulong) ? to!ushort(value.get!(ulong)) : to!ushort((value.get!(long))))))", //NULLABLE_USHORT_TYPE,// Nullable!ushort
-     "hibernated.metadata.nullableFromVariant(value, (value.convertsTo!(uint) ? value.get!(uint) : (value.convertsTo!(ulong) ? to!uint(value.get!(ulong)) : to!uint((value.get!(long))))))", //NULLABLE_UINT_TYPE,  // Nullable!uint
-     "hibernated.metadata.nullableFromVariant(value, (value.convertsTo!(ulong) ? value.get!(ulong) : to!ulong(value.get!(long))))", //NULLABLE_ULONG_TYPE, // Nullable!ulong
-     "(value == null ? nv : (value.convertsTo!(float) ? value.get!(float) : to!float(value.get!(double))))",//FLOAT_TYPE,   // float
-     "(value == null ? nv : (value.convertsTo!(double) ? value.get!(double) : to!double(value.get!(double))))",//DOUBLE_TYPE,   // double
+     "(hibernated.metadata.isNullVariant(value) ? nv : value.get!(bool))", //BOOL_TYPE,    // bool
+     "(hibernated.metadata.isNullVariant(value) ? nv : hibernated.metadata.variantToInteger!(byte)(value))", //BYTE_TYPE,    // byte
+     "(hibernated.metadata.isNullVariant(value) ? nv : hibernated.metadata.variantToInteger!(short)(value))", //SHORT_TYPE,   // short
+     "(hibernated.metadata.isNullVariant(value) ? nv : hibernated.metadata.variantToInteger!(int)(value))", //INT_TYPE,     // int
+     "(hibernated.metadata.isNullVariant(value) ? nv : hibernated.metadata.variantToInteger!(long)(value))", //LONG_TYPE,    // long
+     "(hibernated.metadata.isNullVariant(value) ? nv : hibernated.metadata.variantToInteger!(ubyte)(value))", //UBYTE_TYPE,   // ubyte
+     "(hibernated.metadata.isNullVariant(value) ? nv : hibernated.metadata.variantToInteger!(ushort)(value))", //USHORT_TYPE,  // ushort
+     "(hibernated.metadata.isNullVariant(value) ? nv : hibernated.metadata.variantToInteger!(uint)(value))", //UINT_TYPE,    // uint
+     "(hibernated.metadata.isNullVariant(value) ? nv : hibernated.metadata.variantToInteger!(ulong)(value))", //ULONG_TYPE,   // ulong
+     "hibernated.metadata.nullableFromVariant(value, hibernated.metadata.variantToInteger!(byte)(value))", //NULLABLE_BYTE_TYPE,  // Nullable!byte
+     "hibernated.metadata.nullableFromVariant(value, hibernated.metadata.variantToInteger!(short)(value))", //NULLABLE_SHORT_TYPE, // Nullable!short
+     "hibernated.metadata.nullableFromVariant(value, hibernated.metadata.variantToInteger!(int)(value))", //NULLABLE_INT_TYPE,   // Nullable!int
+     "hibernated.metadata.nullableFromVariant(value, hibernated.metadata.variantToInteger!(long)(value))", //NULLABLE_LONG_TYPE,  // Nullable!long
+     "hibernated.metadata.nullableFromVariant(value, hibernated.metadata.variantToInteger!(ubyte)(value))", //NULLABLE_UBYTE_TYPE, // Nullable!ubyte
+     "hibernated.metadata.nullableFromVariant(value, hibernated.metadata.variantToInteger!(ushort)(value))", //NULLABLE_USHORT_TYPE,// Nullable!ushort
+     "hibernated.metadata.nullableFromVariant(value, hibernated.metadata.variantToInteger!(uint)(value))", //NULLABLE_UINT_TYPE,  // Nullable!uint
+     "hibernated.metadata.nullableFromVariant(value, hibernated.metadata.variantToInteger!(ulong)(value))", //NULLABLE_ULONG_TYPE, // Nullable!ulong
+     "(hibernated.metadata.isNullVariant(value) ? nv : (value.convertsTo!(float) ? value.get!(float) : to!float(value.get!(double))))",//FLOAT_TYPE,   // float
+     "(hibernated.metadata.isNullVariant(value) ? nv : (value.convertsTo!(double) ? value.get!(double) : to!double(value.get!(double))))",//DOUBLE_TYPE,   // double
      "hibernated.metadata.nullableFromVariant(value, (value.convertsTo!(float) ? value.get!(float) : to!float(value.get!(double))))", //NULLABLE_FLOAT_TYPE, // Nullable!float
      "hibernated.metadata.nullableFromVariant(value, (value.convertsTo!(double) ? value.get!(double) : to!double(value.get!(double))))", //NULLABLE_DOUBLE_TYPE,// Nullable!double
-     "(value == null ? nv : value.get!(string))", //STRING_TYPE   // string
-     "(value == null ? nv : value.get!(string))", //NULLABLE_STRING_TYPE   // String
-     "(value == null ? nv : value.get!(DateTime))", //DATETIME_TYPE, // std.datetime.DateTime
-     "(value == null ? nv : value.get!(Date))", //DATE_TYPE, // std.datetime.Date
+     "(hibernated.metadata.isNullVariant(value) ? nv : value.get!(string))", //STRING_TYPE   // string
+     "(hibernated.metadata.isNullVariant(value) ? nv : value.get!(string))", //NULLABLE_STRING_TYPE   // String
+     "(hibernated.metadata.isNullVariant(value) ? nv : value.get!(DateTime))", //DATETIME_TYPE, // std.datetime.DateTime
+     "(hibernated.metadata.isNullVariant(value) ? nv : value.get!(Date))", //DATE_TYPE, // std.datetime.Date
      "hibernated.metadata.variantValueOr(value, nv)", //TIME_TYPE, // std.datetime.TimeOfDay (see variantValueOr)
      "hibernated.metadata.nullableFromVariant(value, value.get!(DateTime))", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
      "hibernated.metadata.nullableFromVariant(value, value.get!(Date))", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
      "hibernated.metadata.nullableFromVariant(value, value.get!(TimeOfDay))", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
-     "(value == null ? nv : value.get!(byte[]))", //BYTE_ARRAY_TYPE, // byte[]
-     "(value == null ? nv : value.get!(ubyte[]))", //UBYTE_ARRAY_TYPE, // ubyte[]
+     "(hibernated.metadata.isNullVariant(value) ? nv : hibernated.metadata.variantToBytes!(byte)(value))", //BYTE_ARRAY_TYPE, // byte[]
+     "(hibernated.metadata.isNullVariant(value) ? nv : hibernated.metadata.variantToBytes!(ubyte)(value))", //UBYTE_ARRAY_TYPE, // ubyte[]
      ];
 
 /*
@@ -2238,13 +2326,13 @@ string getEmbeddedPropertyVariantWriteCode(T, string m, string className)() {
     immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
     final switch (kind) {
         case PropertyMemberKind.FIELD_MEMBER:
-            return "entity." ~ m ~ " = (value == null ? null : value.get!(" ~ className ~ "));";
+            return "entity." ~ m ~ " = (hibernated.metadata.isNullVariant(value) ? null : value.get!(" ~ className ~ "));";
         case PropertyMemberKind.GETTER_MEMBER:
-            return "entity." ~ getterNameToSetterName(m) ~ "(value == null ? null : value.get!(" ~ className ~ "));";
+            return "entity." ~ getterNameToSetterName(m) ~ "(hibernated.metadata.isNullVariant(value) ? null : value.get!(" ~ className ~ "));";
         case PropertyMemberKind.LAZY_MEMBER:
-            return "entity." ~ m ~ " = (value == null ? null : value.get!(" ~ className ~ "));";
+            return "entity." ~ m ~ " = (hibernated.metadata.isNullVariant(value) ? null : value.get!(" ~ className ~ "));";
         case PropertyMemberKind.PROPERTY_MEMBER:
-            return "entity." ~ m ~ " = (value == null ? null : value.get!(" ~ className ~ "));";
+            return "entity." ~ m ~ " = (hibernated.metadata.isNullVariant(value) ? null : value.get!(" ~ className ~ "));";
         case PropertyMemberKind.UNSUPPORTED_MEMBER:
             assert(false, "Unsupported member kind " ~ T.stringof ~ "." ~ m);
     }
@@ -2254,13 +2342,13 @@ string getCollectionPropertyVariantWriteCode(T, string m, string className)() {
     immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
     final switch (kind) {
         case PropertyMemberKind.FIELD_MEMBER:
-            return "entity." ~ m ~ " = (value == null ? null : value.get!(" ~ className ~ "[]));";
+            return "entity." ~ m ~ " = (hibernated.metadata.isNullVariant(value) ? null : value.get!(" ~ className ~ "[]));";
         case PropertyMemberKind.GETTER_MEMBER:
-            return "entity." ~ getterNameToSetterName(m) ~ "(value == null ? null : value.get!(" ~ className ~ "[]));";
+            return "entity." ~ getterNameToSetterName(m) ~ "(hibernated.metadata.isNullVariant(value) ? null : value.get!(" ~ className ~ "[]));";
         case PropertyMemberKind.LAZY_MEMBER:
-            return "entity." ~ m ~ " = (value == null ? null : value.get!(" ~ className ~ "[]));";
+            return "entity." ~ m ~ " = (hibernated.metadata.isNullVariant(value) ? null : value.get!(" ~ className ~ "[]));";
         case PropertyMemberKind.PROPERTY_MEMBER:
-            return "entity." ~ m ~ " = (value == null ? null : value.get!(" ~ className ~ "[]));";
+            return "entity." ~ m ~ " = (hibernated.metadata.isNullVariant(value) ? null : value.get!(" ~ className ~ "[]));";
         case PropertyMemberKind.UNSUPPORTED_MEMBER:
             assert(false, "Unsupported member kind " ~ T.stringof ~ "." ~ m);
     }

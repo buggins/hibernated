@@ -225,6 +225,14 @@ version(unittest) {
         ubyte[] ubyte_array_field;
     }
 
+    // a generator that returns no value (#118)
+    @Entity
+    static class EmptyGeneratorTest {
+        @Generator("Variant()")
+        string id;
+        string name;
+    }
+
     // the one nullable type TypeTest lacks
     @Entity
     static class NullableUintTest {
@@ -415,6 +423,85 @@ unittest {
     ai.setPropertyValue(a, "day", Variant(null));
     assert(a.day.isNull);
     assert(ai.getPropertyValue(a, "day") == null);
+}
+
+unittest {
+    // an empty Variant (no value) sets a property like Variant(null) does (#118)
+    import std.conv : ConvOverflowException;
+    import std.exception : assertThrown;
+    EntityMetaData schema = new SchemaInfoImpl!(TypeTest);
+    auto info = schema["TypeTest"];
+    auto e = new TypeTest();
+    e.string_field = "a";
+    e.int_field = 5;
+    e.ulong_field = 6;
+    e.date_field = Date(2019, 9, 15);
+    e.time_field = TimeOfDay(15, 18, 51);
+    e.ubyte_array_field = [1, 2];
+    e.nullable_int_field = 7;
+    e.nullable_date_field = Date(2019, 9, 15);
+    foreach (name; ["string_field", "int_field", "ulong_field", "date_field", "time_field", "ubyte_array_field",
+            "nullable_int_field", "nullable_date_field"])
+        info.setPropertyValue(e, name, Variant());
+    assert(e.string_field is null && e.int_field == 0 && e.ulong_field == 0);
+    assert(e.date_field == Date.init && e.time_field == TimeOfDay.init && e.ubyte_array_field is null);
+    assert(e.nullable_int_field.isNull && e.nullable_date_field.isNull);
+
+    // integer properties convert with a range check (#119)
+    info.setPropertyValue(e, "long_field", Variant(long.max));
+    assert(e.long_field == long.max);
+    info.setPropertyValue(e, "ulong_field", Variant(ulong.max));
+    assert(e.ulong_field == ulong.max);
+    info.setPropertyValue(e, "ulong_field", Variant(5L)); // ddbc returns integers (generated keys) as long
+    assert(e.ulong_field == 5);
+    info.setPropertyValue(e, "byte_field", Variant(-128L));
+    assert(e.byte_field == -128);
+    assertThrown!ConvOverflowException(info.setPropertyValue(e, "long_field", Variant(ulong.max)));
+    assertThrown!ConvOverflowException(info.setPropertyValue(e, "ulong_field", Variant(-1L)));
+    assertThrown!ConvOverflowException(info.setPropertyValue(e, "int_field", Variant(uint.max)));
+    assertThrown!ConvOverflowException(info.setPropertyValue(e, "byte_field", Variant(128)));
+    assertThrown!ConvOverflowException(info.setPropertyValue(e, "ushort_field", Variant(-1)));
+    assertThrown!ConvOverflowException(info.setPropertyValue(e, "nullable_long_field", Variant(ulong.max)));
+    assertThrown!ConvOverflowException(info.setPropertyValue(e, "nullable_ubyte_field", Variant(256)));
+    assert(e.long_field == long.max && e.ulong_field == 5 && e.byte_field == -128); // unchanged
+    assert(e.nullable_long_field.isNull);
+
+    // byte arrays of either signedness
+    info.setPropertyValue(e, "byte_array_field", Variant(cast(ubyte[]) [1, 255]));
+    assert(e.byte_array_field == [1, -1]);
+    info.setPropertyValue(e, "ubyte_array_field", Variant(cast(byte[]) [-1]));
+    assert(e.ubyte_array_field == [255]);
+
+    // keys above long.max stay ulongs, equal keys of different integer types normalize to the same key
+    assert(hibernated.session.normalize(Variant(ulong.max)).get!ulong == ulong.max);
+    assert(hibernated.session.normalize(Variant(5UL)) == hibernated.session.normalize(Variant(5)));
+
+    // an empty string or array is a value, not NULL
+    info.setPropertyValue(e, "nullable_string_field", Variant(""));
+    assert(!e.nullable_string_field.isNull);
+    info.setPropertyValue(e, "nullable_string_field", Variant(null));
+    assert(e.nullable_string_field.isNull);
+}
+
+unittest {
+    // a key generator that returns no value fails save instead of storing a default key (#118)
+    EntityMetaData schema = new SchemaInfoImpl!(EmptyGeneratorTest);
+    DataSource ds = getUnitTestDataSource();
+    if (ds is null)
+        return; // DB tests disabled
+    SessionFactory factory = new SessionFactoryImpl(schema, getUnitTestDialect(), ds);
+    scope(exit) factory.close();
+    Session sess = factory.openSession();
+    scope(exit) sess.close();
+    auto e = new EmptyGeneratorTest();
+    e.name = "x";
+    try {
+        sess.save(e);
+        assert(false, "save with an empty generated key must fail");
+    } catch (HibernatedException ex) {
+        assert(ex.msg == "The key generator returned no key for EmptyGeneratorTest", ex.msg);
+    }
+    assert(e.id is null);
 }
 
 unittest {

@@ -728,6 +728,7 @@ class SessionImpl : Session {
             if (info.getKeyProperty().generated && !dialect.supportsGeneratedKeys()) {
                 // the database cannot generate keys: the dialect generates it before the insert
                 Variant generatedKey = dialect.generateKey(conn, info);
+                enforceKeyGenerated(generatedKey, info, "The dialect generated no key");
                 info.setKey(obj, generatedKey);
                 string query = metaData.generateInsertAllFieldsForEntity(obj, dialect, info);
                 PreparedStatement stmt = conn.prepareStatement(query);
@@ -742,10 +743,12 @@ class SessionImpl : Session {
 				metaData.writeAllColumns(obj, stmt, 1, true);
 				Variant generatedKey;
 				stmt.executeUpdate(generatedKey);
+				enforceKeyGenerated(generatedKey, info, "The database returned no generated key (the row was inserted)");
 			    info.setKey(obj, generatedKey);
             } else if (info.getKeyProperty().generatorFunc !is null) {
                 // has generator function
                 Variant generatedKey = info.getKeyProperty().generatorFunc(conn, info.getKeyProperty());
+                enforceKeyGenerated(generatedKey, info, "The key generator returned no key");
                 info.setKey(obj, generatedKey);
                 string query = metaData.generateInsertAllFieldsForEntity(obj, dialect, info);
                 PreparedStatement stmt = conn.prepareStatement(query);
@@ -930,6 +933,8 @@ struct ObjectList {
 
 Variant normalize(Variant v) {
     // variants of different type are not equal, normalize to make sure that keys Variant(1) and Variant(1L) are the same
+    if (v.type == typeid(ulong) && v.get!ulong > long.max)
+        return v; // convertsTo!long is true for a ulong too, and get!long would make it negative (#119)
     if (v.convertsTo!long)
         return Variant(v.get!long);
     else if (v.convertsTo!ulong)
@@ -968,6 +973,13 @@ class PropertyLoadItem {
         assert(map.length > 0);
         return .createCommaSeparatedKeyList(map.keys);
     }
+}
+
+/// Throws `HibernatedException` (`what` ~ " for " ~ the entity's name) if `key` is null or empty: setting it would
+/// make the key 0 or its type's default.
+private void enforceKeyGenerated(Variant key, const EntityInfo info, string what) {
+    if (isNullVariant(key))
+        throw new HibernatedException(what ~ " for " ~ info.name);
 }
 
 string createKeySQL(Variant id) {
