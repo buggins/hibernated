@@ -16,6 +16,7 @@ import embeddedidtest : EmbeddedIdTest;
 import transactiontest : TransactionTest;
 import generatedtest : GeneratedTest;
 import temporaltest : TemporalTest;
+import relationkeytest : RelationKeyTest;
 
 void enableTraceLogging() {
     static if (__traits(compiles, (){ import std.logger; })) {
@@ -71,6 +72,11 @@ int main(string[] args) {
   TemporalTest test6 = new TemporalTest();
   test6.setConnectionParams(par);
   runTests(test6);
+
+  // Many-to-many relations between entities keyed by strings with ' and \, and by dates (#122)
+  RelationKeyTest test7 = new RelationKeyTest();
+  test7.setConnectionParams(par);
+  runTests(test7);
 
   // TODO: Some tests that run after this have errors, find out why.
   TransactionTest test5 = new TransactionTest();

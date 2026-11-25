@@ -255,8 +255,9 @@ private string getImplicitDefaultByType(SqlType sqlType) {
         case SqlType.VARCHAR:
             return "''";
         case SqlType.DATE:
-        case SqlType.DATETIME:
             return "'1970-01-01'";
+        case SqlType.DATETIME:
+            return "'1970-01-01 00:00:00'"; // the form ddbc 0.15 stores a DateTime in (#122)
         case SqlType.TIME:
             return "'00:00:00'";
         default:
@@ -271,4 +272,10 @@ unittest {
     assert(d.quoteSqlString("a'b") == "'a''b'");
     assert(d.quoteSqlString("a\\b\"c\nd\te") == "'a\\b\"c\nd\te'");
     assertThrown!HibernatedException(d.quoteSqlString("a\0b"));
+}
+
+unittest {
+    // a generated non-key DATETIME column defaults to the form ddbc stores a DateTime in (#122)
+    assert(getImplicitDefaultByType(SqlType.DATE) == "'1970-01-01'");
+    assert(getImplicitDefaultByType(SqlType.DATETIME) == "'1970-01-01 00:00:00'");
 }
