@@ -225,6 +225,13 @@ version(unittest) {
         ubyte[] ubyte_array_field;
     }
 
+    // a bool property, set from integers (#124)
+    @Entity
+    static class BoolTest {
+        int id;
+        bool flag;
+    }
+
     // a generator that returns no value (#118)
     @Entity
     static class EmptyGeneratorTest {
@@ -1094,4 +1101,26 @@ unittest {
     }
 }
 
-
+unittest {
+    // bool properties accept integers 0 and 1, which several drivers return for booleans (#124)
+    import std.conv : ConvOverflowException;
+    import std.exception : assertThrown;
+    EntityMetaData schema = new SchemaInfoImpl!(BoolTest);
+    auto info = schema["BoolTest"];
+    auto e = new BoolTest();
+    info.setPropertyValue(e, "flag", Variant(1L));
+    assert(e.flag);
+    info.setPropertyValue(e, "flag", Variant(0));
+    assert(!e.flag);
+    info.setPropertyValue(e, "flag", Variant(cast(ubyte) 1));
+    assert(e.flag);
+    info.setPropertyValue(e, "flag", Variant(false));
+    assert(!e.flag);
+    info.setPropertyValue(e, "flag", Variant(true));
+    // out of range: the property stays unchanged
+    assertThrown!ConvOverflowException(info.setPropertyValue(e, "flag", Variant(2)));
+    assertThrown!ConvOverflowException(info.setPropertyValue(e, "flag", Variant(-1L)));
+    assert(e.flag);
+    info.setPropertyValue(e, "flag", Variant());
+    assert(!e.flag); // NULL sets the default
+}
