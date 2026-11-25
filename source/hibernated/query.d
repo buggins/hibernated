@@ -1529,23 +1529,23 @@ Token[] tokenize(string s) {
 				res[$ - 1].spaceAfter = text;
 			}
 		} else if (ch == '\'') {
-			// string constant
-			i++;
-			for(int j=i; j<len; j++) {
-				// In HQL, (') characters are quoted as (''), so undo that escaping.
-				if (s[j] == '\'' && j+1 < len && s[j+1] == '\'') {
-					text ~= s[j];
-					j++;
-				}
-				else if (s[j] != '\'') {
-					text ~= s[j];
-					i = j;
-				} else {
+			// string constant; i ends on the closing quote (#125: it used to miss it after '' and in an empty string)
+			int j = i + 1;
+			for (;;) {
+				enforceHelper!QuerySyntaxException(j < len, "Unfinished string near " ~ cast(string)s[startpos .. $]);
+				if (s[j] == '\'') {
+					// In HQL, (') characters are quoted as (''), so undo that escaping.
+					if (j + 1 < len && s[j + 1] == '\'') {
+						text ~= '\'';
+						j += 2;
+						continue;
+					}
 					break;
 				}
+				text ~= s[j];
+				j++;
 			}
-			enforceHelper!QuerySyntaxException(i < len - 1 && s[i + 1] == '\'', "Unfinished string near " ~ cast(string)s[startpos .. $]);
-			i++;
+			i = j;
 			res ~= new Token(startpos, TokenType.String, text);
 		} else if (isDigit(ch) || (ch == '.' && isDigit(ch2))) {
 			// numeric constant
@@ -1633,6 +1633,28 @@ unittest {
 	assert(tokens[16].text == "john");
 	assert(tokens[22].type == TokenType.Keyword);
 	assert(tokens[22].text == "ASC");
+}
+
+unittest {
+	// string literals: '' inside a literal is one ', also at its end and in an empty literal (#125)
+	import std.exception : assertThrown;
+	string literal(string hql) {
+		Token[] tokens = tokenize("FROM User WHERE name = " ~ hql ~ " AND id = 1");
+		assert(tokens.length == 10, hql);
+		assert(tokens[5].type == TokenType.String, hql);
+		assert(tokens[6].text == "AND", hql); // the tokens after the literal are found
+		return tokens[5].text;
+	}
+	assert(literal("'x'") == "x");
+	assert(literal("''") == "");
+	assert(literal("'O'''") == "O'");
+	assert(literal("''''") == "'");
+	assert(literal("'a''b'") == "a'b");
+	assert(literal("'''a'") == "'a");
+	assert(tokenize("name=''")[$ - 1].text == ""); // at the end of the query
+	assertThrown!QuerySyntaxException(tokenize("name='abc"));
+	assertThrown!QuerySyntaxException(tokenize("name='"));
+	assertThrown!QuerySyntaxException(tokenize("name='a''"));
 }
 
 class ParameterValues {
