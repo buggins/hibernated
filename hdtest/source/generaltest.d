@@ -303,6 +303,20 @@ class GeneralTest : HibernateTest {
               .list!Asset();
       assert(result.length == 1, "assets matched by a literal with escapes: " ~ to!string(result.length));
       assert(result[0].name == a2.name);
+
+      // a literal ending in '' and the empty literal (#125: the HQL lexer rejected both)
+      auto a3 = new Asset();
+      a3.name = "O'";
+      sess.save(a3);
+      scope(exit) sess.remove(a3);
+      result = sess.createQuery("FROM Asset WHERE name='O'''").list!Asset();
+      assert(result.length == 1 && result[0].name == "O'", "assets named O': " ~ to!string(result.length));
+      auto a4 = new Asset();
+      a4.name = "";
+      sess.save(a4);
+      scope(exit) sess.remove(a4);
+      result = sess.createQuery("FROM Asset WHERE name=''").list!Asset();
+      assert(result.length == 1 && result[0].name == "", "assets with an empty name: " ~ to!string(result.length));
   }
 }
 
