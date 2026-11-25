@@ -2217,6 +2217,51 @@ unittest {
     assertThrown!VariantException(variantToInteger!int(Variant(1.5)));
 }
 
+/// Internal: used by the generated setters of `bool` properties. A stored `bool`, or an integer that is 0 or 1 (also
+/// `const` or `immutable`): several ddbc drivers return booleans as integers (SQLite has no boolean type, ClickHouse's
+/// `Bool` is a `UInt8`), and `Variant.get!bool` refuses them (#124). Other integers throw `ConvOverflowException`.
+/// Characters and values of any other type go to `Variant.get!bool`, which throws `VariantException` for them.
+bool variantToBool(Variant value) {
+    import std.meta : AliasSeq;
+    TypeInfo stored = value.type;
+    if (auto qualified = cast(TypeInfo_Const) stored)
+        stored = qualified.base;
+    static foreach (S; AliasSeq!(bool, byte, ubyte, short, ushort, int, uint, long, ulong)) {
+        if (stored == typeid(S)) {
+            ubyte b;
+            try
+                b = variantToInteger!ubyte(value);
+            catch (ConvOverflowException)
+                b = 2; // the same message for every value out of range
+            if (b > 1)
+                throw new ConvOverflowException("Conversion to bool: " ~ value.toString() ~ " is neither 0 nor 1");
+            return b != 0;
+        }
+    }
+    return value.get!bool;
+}
+
+unittest {
+    assert(variantToBool(Variant(true)) == true);
+    assert(variantToBool(Variant(false)) == false);
+    assert(variantToBool(Variant(cast(const bool) true)) == true);
+    assert(variantToBool(Variant(0L)) == false);
+    assert(variantToBool(Variant(1)) == true);
+    assert(variantToBool(Variant(cast(ubyte) 1)) == true);
+    assert(variantToBool(Variant(cast(immutable ulong) 1)) == true);
+    assertThrown!ConvOverflowException(variantToBool(Variant(2)));
+    assertThrown!ConvOverflowException(variantToBool(Variant(-1L)));
+    assertThrown!ConvOverflowException(variantToBool(Variant(256)));
+    assertThrown!ConvOverflowException(variantToBool(Variant(ulong.max)));
+    assert(collectExceptionMsg(variantToBool(Variant(256))) == "Conversion to bool: 256 is neither 0 nor 1");
+    assert(collectExceptionMsg(variantToBool(Variant(-1L))) == "Conversion to bool: -1 is neither 0 nor 1");
+    assertThrown!VariantException(variantToBool(Variant("true")));
+    assertThrown!VariantException(variantToBool(Variant(1.0)));
+    assertThrown!VariantException(variantToBool(Variant('1')));
+    assertThrown!VariantException(variantToBool(Variant(cast(char) 1)));
+    assertThrown!VariantException(variantToBool(Variant(cast(const dchar) 0)));
+}
+
 /// Internal: used by the generated setters of `byte[]` and `ubyte[]` properties. The array in `value`, which may also
 /// hold the other signedness (a driver's `getBytes`/`getUbytes`), viewed as `T[]`.
 T[] variantToBytes(T)(Variant value) if (is(T == byte) || is(T == ubyte)) {
@@ -2242,7 +2287,7 @@ unittest {
 */
 static immutable string[] ColumnTypeVariantReadCode =
     [
-     "(hibernated.metadata.isNullVariant(value) ? nv : value.get!(bool))", //BOOL_TYPE,    // bool
+     "(hibernated.metadata.isNullVariant(value) ? nv : hibernated.metadata.variantToBool(value))", //BOOL_TYPE,    // bool
      "(hibernated.metadata.isNullVariant(value) ? nv : hibernated.metadata.variantToInteger!(byte)(value))", //BYTE_TYPE,    // byte
      "(hibernated.metadata.isNullVariant(value) ? nv : hibernated.metadata.variantToInteger!(short)(value))", //SHORT_TYPE,   // short
      "(hibernated.metadata.isNullVariant(value) ? nv : hibernated.metadata.variantToInteger!(int)(value))", //INT_TYPE,     // int
