@@ -632,19 +632,42 @@ class SessionImpl : Session {
         Object[] relations = p.getCollectionFunc(obj);
         Variant thisId = p.entity.getKey(obj);
         if (relations !is null && relations.length > 0) {
-            string sql = p.joinTable.getInsertSQL(dialect);
-            string list;
-            foreach(r; relations) {
-                Variant otherId = p.referencedEntity.getKey(r);
-                if (list.length != 0)
-                    list ~= ", ";
-                list ~= createKeyPairSQL(thisId, otherId);
-            }
-            sql ~= list;
-            Statement stmt = conn.createStatement();
+            Variant[] otherIds;
+            foreach(r; relations)
+                otherIds ~= p.referencedEntity.getKey(r);
+            insertRelationRows(p, thisId, otherIds);
+        }
+    }
+
+    // The keys of join-table rows are bound as parameters, not written into the SQL: the driver then writes them
+    // as it writes the entity's own key column (dates in the stored form, strings without any escaping), #122.
+    // Statements bind at most about 900 parameters: SQLite before 3.32 allows 999 per statement.
+    private enum maxRelationParameters = 900;
+
+    private void insertRelationRows(const PropertyInfo p, Variant thisId, Variant[] otherIds) {
+        import std.range : chunks;
+        foreach (chunk; otherIds.chunks(maxRelationParameters / 2)) {
+            PreparedStatement stmt = conn.prepareStatement(p.joinTable.getInsertSQL(dialect, chunk.length));
             scope(exit) stmt.close();
-            //trace("sql: " ~ sql);
-            stmt.executeUpdate(sql);
+            int index = 1;
+            foreach (otherId; chunk) {
+                stmt.setVariant(index++, thisId);
+                stmt.setVariant(index++, otherId);
+            }
+            stmt.executeUpdate();
+        }
+    }
+
+    private void deleteRelationRows(const PropertyInfo p, Variant thisId, Variant[] otherIds) {
+        import std.range : chunks;
+        foreach (chunk; otherIds.chunks(maxRelationParameters - 1)) {
+            PreparedStatement stmt = conn.prepareStatement(p.joinTable.getDeleteSQL(dialect, chunk.length));
+            scope(exit) stmt.close();
+            stmt.setVariant(1, thisId);
+            int index = 2;
+            foreach (otherId; chunk)
+                stmt.setVariant(index++, otherId);
+            stmt.executeUpdate();
         }
     }
 
@@ -666,10 +689,10 @@ class SessionImpl : Session {
 
     private Variant[] readRelationIds(const PropertyInfo p, Variant thisId) {
         Variant[] res;
-        string q = p.joinTable.getOtherKeySelectSQL(dialect, createKeySQL(thisId));
-        Statement stmt = conn.createStatement();
+        PreparedStatement stmt = conn.prepareStatement(p.joinTable.getOtherKeySelectSQL(dialect));
         scope(exit) stmt.close();
-        ResultSet rs = stmt.executeQuery(q);
+        stmt.setVariant(1, thisId);
+        ResultSet rs = stmt.executeQuery();
         scope(exit) rs.close();
         while (rs.next()) {
             res ~= rs.getVariant(1);
@@ -681,43 +704,40 @@ class SessionImpl : Session {
         Variant thisId = p.entity.getKey(obj);
         Variant[] oldRelIds = readRelationIds(p, thisId);
         Variant[] newRelIds = p.getCollectionIds(obj);
-        bool[string] oldmap;
+        // Keys are compared by their text: the ones read back may have another type than the entity's key
+        // (an int for a long, a SQLite date as text).
+        Variant[string] oldmap;
         foreach(v; oldRelIds)
-            oldmap[createKeySQL(v)] = true;
-        bool[string] newmap;
+            oldmap[keyText(v)] = v;
+        Variant[string] newmap;
         foreach(v; newRelIds)
-            newmap[createKeySQL(v)] = true;
-        string[] keysToDelete;
-        string[] keysToAdd;
-        foreach(v; newmap.keys)
-            if ((v in oldmap) is null)
+            newmap[keyText(v)] = v;
+        Variant[] keysToDelete;
+        Variant[] keysToAdd;
+        foreach(k, v; newmap)
+            if ((k in oldmap) is null)
                 keysToAdd ~= v;
-        foreach(v; oldmap.keys)
-            if ((v in newmap) is null)
+        foreach(k, v; oldmap)
+            if ((k in newmap) is null)
                 keysToDelete ~= v;
-        if (keysToAdd.length > 0) {
-            Statement stmt = conn.createStatement();
-            scope(exit) stmt.close();
-            stmt.executeUpdate(p.joinTable.getInsertSQL(dialect, createKeySQL(thisId), keysToAdd));
-        }
-        if (keysToDelete.length > 0) {
-            Statement stmt = conn.createStatement();
-            scope(exit) stmt.close();
-            stmt.executeUpdate(p.joinTable.getDeleteSQL(dialect, createKeySQL(thisId), keysToDelete));
-        }
+        // Delete first: if a key reads back in a form keyText doesn't match, its row is deleted and inserted again;
+        // inserting first would insert it twice and then delete both, losing the relation on every update. The cost:
+        // without a transaction (always on ClickHouse), a failing insert leaves the removed relations deleted.
+        if (keysToDelete.length > 0)
+            deleteRelationRows(p, thisId, keysToDelete);
+        if (keysToAdd.length > 0)
+            insertRelationRows(p, thisId, keysToAdd);
     }
 
     private void deleteRelations(const PropertyInfo p, Object obj) {
         Variant thisId = p.entity.getKey(obj);
-        Variant[] oldRelIds = readRelationIds(p, thisId);
-        string[] ids;
-        foreach(v; oldRelIds)
-            ids ~= createKeySQL(v);
-        if (ids.length > 0) {
-            Statement stmt = conn.createStatement();
-            scope(exit) stmt.close();
-            stmt.executeUpdate(p.joinTable.getDeleteSQL(dialect, createKeySQL(thisId), ids));
-        }
+        // only when there are rows: a DELETE is a mutation on ClickHouse, much more expensive than the SELECT
+        if (readRelationIds(p, thisId).length == 0)
+            return;
+        PreparedStatement stmt = conn.prepareStatement(p.joinTable.getDeleteAllSQL(dialect));
+        scope(exit) stmt.close();
+        stmt.setVariant(1, thisId);
+        stmt.executeUpdate();
     }
 
 
@@ -943,7 +963,7 @@ Variant normalize(Variant v) {
         // Warning: Objects need to define `bool opEquals(...)` to make this reliable.
         return Variant(v.get!Object);
     }
-    return Variant(v.toString());
+    return Variant(keyText(v)); // dates as the text SQLite returns for them (#122)
 }
 
 /// task to load reference entity
@@ -982,16 +1002,51 @@ private void enforceKeyGenerated(Variant key, const EntityInfo info, string what
         throw new HibernatedException(what ~ " for " ~ info.name);
 }
 
+/// The text of a key value: integers as digits, `Date`, `DateTime` and `TimeOfDay` in the ISO form that ddbc stores
+/// and that every supported database reads (`YYYY-MM-DD`, `YYYY-MM-DD HH:MM:SS`, `HH:MM:SS`), anything else as
+/// `toString`; `const` and `immutable` values too. A `SysTime` gives the `DateTime` text of its time in its own
+/// timezone: ddbc's ClickHouse driver reads a `DateTime64(0)` column, which stores `DateTime` properties, as a
+/// `SysTime` in the column timezone. On Windows clickhoused can't resolve that timezone and uses UTC, so with a
+/// server in another timezone the text differs from the key's (a reference to an entity keyed by a `DateTime` isn't
+/// found then). Before #122 dates used `toString` (`2019-Sep-15`), which matches no stored value.
+package string keyText(Variant id) {
+    import std.datetime : Date, DateTime, SysTime, TimeOfDay;
+    import std.meta : AliasSeq;
+    TypeInfo stored = id.type;
+    auto qualified = cast(TypeInfo_Const) stored;
+    if (qualified !is null)
+        stored = qualified.base;
+    static foreach (T; AliasSeq!(Date, DateTime, SysTime, TimeOfDay)) {
+        if (stored == typeid(T)) {
+            const T value = qualified is null ? id.get!T : id.get!(const T); // get!T refuses a stored const(T)
+            static if (is(T == Date) || is(T == TimeOfDay))
+                return value.toISOExtString();
+            else {
+                static if (is(T == SysTime))
+                    const DateTime dt = cast(DateTime) value;
+                else
+                    alias dt = value;
+                return dt.date.toISOExtString() ~ " " ~ dt.timeOfDay.toISOExtString();
+            }
+        }
+    }
+    return id.toString();
+}
+
+/// The key as an HQL literal: integers as digits, anything else as `keyText` in quotes, with `'` doubled (the SQL
+/// standard form, which the HQL lexer reads; the dialect then quotes the value for its database). Not for SQL:
+/// join-table statements bind the keys as parameters (#122).
 string createKeySQL(Variant id) {
     import std.string : translate;
     if (id.convertsTo!long || id.convertsTo!ulong) {
         return id.toString();
     } else {
         // Quote (') in strings as ('') according to the SQL standard.
-        return "'" ~ id.toString().translate(['\'': "''"]) ~ "'";
+        return "'" ~ keyText(id).translate(['\'': "''"]) ~ "'";
     }
 }
 
+deprecated("Join-table keys are bound as parameters now (#122); a string key written by this breaks on MySQL and ClickHouse")
 string createKeyPairSQL(Variant id1, Variant id2) {
     return "(" ~ createKeySQL(id1) ~ ", " ~ createKeySQL(id2) ~ ")";
 }

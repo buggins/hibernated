@@ -1124,3 +1124,33 @@ unittest {
     info.setPropertyValue(e, "flag", Variant());
     assert(!e.flag); // NULL sets the default
 }
+
+unittest {
+    // join-table statements bind the keys as parameters; HQL key literals write dates in ISO form (#122)
+    import hibernated.dialects.mysqldialect : MySQLDialect;
+    auto jt = new JoinTableInfo("role_users", "role_fk", "user_fk");
+    Dialect d = new MySQLDialect();
+    assert(jt.getOtherKeySelectSQL(d) == "SELECT user_fk FROM role_users WHERE role_fk=?");
+    assert(jt.getInsertSQL(d, 2) == "INSERT INTO role_users(role_fk, user_fk) VALUES (?, ?), (?, ?)");
+    assert(jt.getDeleteSQL(d, 3) == "DELETE FROM role_users WHERE role_fk=? AND user_fk IN (?, ?, ?)");
+    assert(jt.getDeleteAllSQL(d) == "DELETE FROM role_users WHERE role_fk=?");
+
+    assert(keyText(Variant(Date(2019, 9, 15))) == "2019-09-15");
+    assert(keyText(Variant(DateTime(2019, 9, 15, 1, 2, 3))) == "2019-09-15 01:02:03");
+    assert(keyText(Variant(TimeOfDay(1, 2, 3))) == "01:02:03");
+    assert(keyText(Variant(cast(const) Date(2019, 9, 15))) == "2019-09-15");
+    assert(keyText(Variant(cast(immutable) DateTime(2019, 9, 15, 1, 2, 3))) == "2019-09-15 01:02:03");
+    assert(keyText(Variant(cast(const) TimeOfDay(1, 2, 3))) == "01:02:03");
+    // ClickHouse reads a DateTime key back as a SysTime in the column timezone
+    immutable plusOne = new immutable SimpleTimeZone(dur!"hours"(1));
+    assert(keyText(Variant(SysTime(DateTime(2019, 9, 15, 1, 2, 3), plusOne))) == "2019-09-15 01:02:03");
+    assert(keyText(Variant(5)) == keyText(Variant(5L)));
+    // SQLite reads a date key back as text: updateRelations must see the same key
+    assert(keyText(Variant(Date(2019, 9, 15))) == keyText(Variant("2019-09-15")));
+
+    assert(createKeySQL(Variant(42L)) == "42");
+    assert(createKeySQL(Variant("O'Brien")) == "'O''Brien'");
+    assert(createKeySQL(Variant("C:\\dir\\")) == "'C:\\dir\\'"); // HQL: the dialect quotes the value again
+    assert(createKeySQL(Variant(Date(2019, 9, 15))) == "'2019-09-15'");
+    assert(createKeySQL(Variant(DateTime(2019, 9, 15, 1, 2, 3))) == "'2019-09-15 01:02:03'");
+}

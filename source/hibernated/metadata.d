@@ -446,10 +446,41 @@ class JoinTableInfo {
         return "INSERT INTO " ~ dialect.quoteIfNeeded(_tableName) ~ "(" ~ dialect.quoteIfNeeded(_column1) ~ ", " ~ dialect.quoteIfNeeded(column2) ~ ") VALUES ";
     }
 
+    /// `SELECT column2 FROM table WHERE column1 = ?`: the keys of the other side, with this side's key as parameter 1.
+    string getOtherKeySelectSQL(const Dialect dialect) const {
+        return "SELECT " ~ dialect.quoteIfNeeded(column2) ~ " FROM " ~ dialect.quoteIfNeeded(_tableName) ~ " WHERE " ~ dialect.quoteIfNeeded(_column1) ~ "=?";
+    }
+
+    /// `INSERT INTO table (column1, column2) VALUES (?, ?), ...` with `rows` rows (at least 1). The parameters are
+    /// this side's key and the other side's key, for each row.
+    string getInsertSQL(const Dialect dialect, size_t rows) const {
+        import std.array : join, replicate;
+        assert(rows > 0);
+        return getInsertSQL(dialect) ~ replicate(["(?, ?)"], rows).join(", ");
+    }
+
+    /// `DELETE FROM table WHERE column1 = ? AND column2 IN (?, ...)` with `otherKeys` keys of the other side (at
+    /// least 1): parameter 1 is this side's key, the other keys follow.
+    string getDeleteSQL(const Dialect dialect, size_t otherKeys) const {
+        import std.array : join, replicate;
+        assert(otherKeys > 0);
+        return "DELETE FROM " ~ dialect.quoteIfNeeded(_tableName) ~ " WHERE " ~ dialect.quoteIfNeeded(_column1) ~ "=? AND " ~ dialect.quoteIfNeeded(_column2) ~ " IN (" ~ replicate(["?"], otherKeys).join(", ") ~ ")";
+    }
+
+    /// `DELETE FROM table WHERE column1 = ?`: all rows of one entity, its key as parameter 1.
+    string getDeleteAllSQL(const Dialect dialect) const {
+        return "DELETE FROM " ~ dialect.quoteIfNeeded(_tableName) ~ " WHERE " ~ dialect.quoteIfNeeded(_column1) ~ "=?";
+    }
+
+    /// The same statements with the keys as SQL text (`createKeySQL`), which quotes string keys only in the SQL
+    /// standard form: broken on MySQL and ClickHouse for keys with a backslash. Use the forms above (#122).
+    deprecated("Bind the keys as parameters: getOtherKeySelectSQL(dialect) (#122)")
     string getOtherKeySelectSQL(const Dialect dialect, string thisKeySQL) const {
         return "SELECT " ~ dialect.quoteIfNeeded(column2) ~ " FROM " ~ dialect.quoteIfNeeded(_tableName) ~ " WHERE " ~ dialect.quoteIfNeeded(_column1) ~ "=" ~ thisKeySQL;
     }
 
+    /// ditto
+    deprecated("Bind the keys as parameters: getInsertSQL(dialect, rows) (#122)")
     string getInsertSQL(const Dialect dialect, string thisKeySQL, string[] otherKeysSQL) const {
         string list;
         foreach(otherKeySQL; otherKeysSQL) {
@@ -460,6 +491,8 @@ class JoinTableInfo {
         return getInsertSQL(dialect) ~ list;
     }
 
+    /// ditto
+    deprecated("Bind the keys as parameters: getDeleteSQL(dialect, otherKeys) (#122)")
     string getDeleteSQL(const Dialect dialect, string thisKeySQL, string[] otherKeysSQL) const {
         string sql = "DELETE FROM " ~ dialect.quoteIfNeeded(_tableName) ~ " WHERE " ~ dialect.quoteIfNeeded(_column1) ~ "=" ~ thisKeySQL ~ " AND " ~ dialect.quoteIfNeeded(_column2) ~ " IN ";
         string list;
