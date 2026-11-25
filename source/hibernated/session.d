@@ -41,10 +41,10 @@ static if(__VERSION__ < 2080) {
 // For backwards compatibily (since D 2.101, logger is no longer in std.experimental)
 static if (__traits(compiles, (){ import std.logger; } )) {
     pragma(msg, "Hibernated will log using 'std.logger'.");
-    import std.logger : trace;
+    import std.logger : trace, warning;
 } else {
     pragma(msg, "Hibernated will log using 'std.experimental.logger'.");
-    import std.experimental.logger : trace;
+    import std.experimental.logger : trace, warning;
 }
 
 /**
@@ -84,7 +84,8 @@ abstract class Session
 	/// not supported in current implementation
 	void cancelQuery();
 
-	/// not supported in current implementation
+	/// Evicts all entities from the session's cache: later loads read them from the database again. Rolling a
+	/// transaction back does it too.
 	void clear();
 
 	/// Closes the session.
@@ -185,6 +186,8 @@ interface Transaction {
   /**
    * Commit the current resource transaction, writing any unflushed changes to the database.
    *
+   * If the commit fails, the transaction stays active: call `rollback()` (which ends it also when it fails).
+   *
    * Throws:
    * - IllegalStateException if `isActive()` is false
    * - RollbackException if the commit fails
@@ -262,17 +265,36 @@ class TransactionImpl : Transaction {
         return status == Status.ACTIVE;
     }
 
+    /++
+    Rolls the transaction back. It is over afterwards also when the rollback fails (e.g. the connection is lost,
+    and with it the transaction): `isActive` is false and `begin` works again (#135). The session's cache is
+    cleared (`Session.clear`): its entities may hold state the rollback undid. Objects saved in the transaction
+    keep their generated keys; save new objects (or use a new session) when retrying. If restoring the connection's
+    auto-commit mode fails after a successful rollback, the exception says so, and later work in the session would
+    run in an implicit transaction: close the session then.
+    +/
     override
     void rollback() {
         if (!session.isOpen()) {
-            throw new HibernatedException("Cannot commit Transaction on closed Session.");
+            throw new HibernatedException("Cannot roll back Transaction on closed Session.");
         }
         if (!isActive()) {
-            throw new HibernatedException("Cannot commit inactive Transaction.");
+            throw new HibernatedException("Cannot roll back inactive Transaction.");
+        }
+        scope (exit) {
+            status = Status.INACTIVE;
+            // the cache directly: nothing may throw here while a rollback error unwinds (LDC aborts on that)
+            if (auto impl = cast(SessionImpl) session)
+                impl.cache = null;
         }
         session.doWork((conn) {
-            conn.rollback();
-            status = Status.INACTIVE;
+            // not in a scope(exit): a second exception thrown while the first unwinds aborted LDC's unwinder
+            try
+                conn.rollback();
+            catch (Exception e) {
+                collectException(conn.setAutoCommit(autoCommitBefore)); // the rollback's error matters
+                throw e;
+            }
             conn.setAutoCommit(autoCommitBefore);
         });
     }
@@ -488,8 +510,10 @@ class SessionImpl : Session {
     override void cancelQuery() {
         throw new HibernatedException("Method not implemented");
     }
+    /// Evicts all entities from the session's cache: later loads read them from the database again.
     override void clear() {
-        throw new HibernatedException("Method not implemented");
+        checkClosed();
+        cache = null;
     }
     ///Does this session contain any changes which must be synchronized with the database? In other words, would any DML operations be executed if we flushed this session?
     override bool isDirty() {
@@ -503,9 +527,16 @@ class SessionImpl : Session {
     override bool isConnected() {
         return !closed;
     }
-    /// End the session by releasing the JDBC connection and cleaning up.
+    /++
+    End the session by releasing the JDBC connection and cleaning up. An active transaction is rolled back first:
+    closing the connection would commit it on some databases (Oracle's logoff does), #135.
+    +/
     override Connection close() {
         checkClosed();
+        if (currentTransaction !is null && currentTransaction.isActive()) {
+            if (auto e = collectException(currentTransaction.rollback())) // the session closes anyway
+                warning("Rolling back the active transaction while closing the session failed: " ~ e.msg);
+        }
         _accessor.onSessionClosed();
         closed = true;
         sessionFactory.sessionClosed(this);

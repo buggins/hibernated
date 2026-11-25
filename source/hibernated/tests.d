@@ -232,6 +232,14 @@ version(unittest) {
         bool flag;
     }
 
+    // transactions after errors (#135)
+    @Entity
+    static class TxStateTest {
+        @Id
+        int id;
+        string name;
+    }
+
     // a generator that returns no value (#118)
     @Entity
     static class EmptyGeneratorTest {
@@ -1153,4 +1161,70 @@ unittest {
     assert(createKeySQL(Variant("C:\\dir\\")) == "'C:\\dir\\'"); // HQL: the dialect quotes the value again
     assert(createKeySQL(Variant(Date(2019, 9, 15))) == "'2019-09-15'");
     assert(createKeySQL(Variant(DateTime(2019, 9, 15, 1, 2, 3))) == "'2019-09-15 01:02:03'");
+}
+
+unittest {
+    // transactions after errors (#135): rollback() ends the transaction also when it fails, and clears the
+    // session cache; Session.close() rolls an active transaction back
+    import std.exception : assertThrown, collectException;
+    import ddbc.common : createConnection;
+    EntityMetaData schema = new SchemaInfoImpl!(TxStateTest);
+    DataSource ds = getUnitTestDataSource();
+    if (ds is null)
+        return; // DB tests disabled
+    SessionFactory factory = new SessionFactoryImpl(schema, getUnitTestDialect(), ds);
+    scope(exit) factory.close();
+    {
+        Connection conn = ds.getConnection();
+        scope(exit) conn.close();
+        factory.getDBMetaData().updateDBSchema(conn, true, true);
+    }
+    {
+        Session sess = factory.openSession();
+        scope(exit) sess.close();
+        auto e = new TxStateTest();
+        e.id = 3;
+        e.name = "committed";
+        auto t = sess.beginTransaction();
+        sess.save(e);
+        t.commit();
+
+        // a change rolled back: the cached object must not keep it
+        t = sess.beginTransaction();
+        e.name = "rolled back";
+        sess.update(e);
+        t.rollback();
+        auto loaded = sess.get!TxStateTest(3);
+        assert(loaded !is null && loaded.name == "committed", "the session cache kept the rolled-back change");
+
+        // a rollback that fails (here: a closed connection) still ends the transaction
+        auto impl = cast(SessionImpl) sess;
+        auto good = impl.conn;
+        auto dead = createConnection("sqlite::memory:");
+        dead.close();
+        t = sess.beginTransaction();
+        impl.conn = dead;
+        assert(collectException(t.rollback()) !is null);
+        impl.conn = good;
+        assert(!t.isActive(), "a failed rollback left the transaction active");
+        good.rollback(); // the real connection's transaction (begin turned auto-commit off on it)
+        good.setAutoCommit(true);
+        t = sess.beginTransaction(); // begin works again
+        t.rollback();
+    }
+    {
+        Session sess = factory.openSession();
+        auto t = sess.beginTransaction();
+        auto e = new TxStateTest();
+        e.id = 4;
+        e.name = "never committed";
+        sess.save(e);
+        sess.close(); // with the transaction active
+        assert(!t.isActive(), "closing the session left its transaction active");
+    }
+    {
+        Session sess = factory.openSession();
+        scope(exit) sess.close();
+        assert(sess.get!TxStateTest(4) is null, "closing the session committed its transaction");
+    }
 }
