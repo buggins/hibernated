@@ -81,7 +81,18 @@ abstract class Session
 	 */
 	Transaction beginTransaction();
 
-	/// not supported in current implementation
+	/**
+	 * Cancels the query the session runs: its execution, or the reading of its rows (ddbc's `Statement.cancel()`).
+	 * It's the one method that may be called from another thread or vibe.d task. The cancelled call throws ddbc's
+	 * `SQLException` with SQLSTATE `57014`, and the session stays usable. Does nothing when no query runs, or after
+	 * `close()`.
+	 *
+	 * It reaches the statements the session prepares itself, not those of `doWork`, nor ClickHouse's key lookup on
+	 * `save()`. A cancel that comes while the statement is still being prepared may miss it: call it again if the
+	 * query goes on.
+	 *
+	 * Throws: ddbc's `SQLFeatureNotSupportedException` with MySQL, whose driver can't cancel, while a statement runs.
+	 */
 	void cancelQuery();
 
 	/// Evicts all entities from the session's cache: later loads read them from the database again. Rolling a
@@ -441,6 +452,8 @@ class SessionImpl : Session {
     DataSource connectionPool;
     Connection conn;
     Transaction currentTransaction;
+    private Statement lastStatement; // the open statement prepared last, which cancelQuery() cancels (under statementLock)
+    private Object statementLock;
 
     EntityCache[string] cache;
 
@@ -496,6 +509,23 @@ class SessionImpl : Session {
         this.connectionPool = connectionPool;
         this.conn = connectionPool.getConnection();
         this._accessor = new SessionAccessor(this);
+        this.statementLock = new Object();
+    }
+
+    /// Prepares `sql` on the session's connection: until closeStatement(), it's the statement cancelQuery() cancels.
+    package PreparedStatement prepareStatement(string sql) {
+        PreparedStatement stmt = conn.prepareStatement(sql);
+        synchronized (statementLock)
+            lastStatement = stmt;
+        return stmt;
+    }
+
+    /// Closes a statement from prepareStatement(): cancelQuery() no longer reaches it.
+    package void closeStatement(Statement stmt) {
+        synchronized (statementLock)
+            if (lastStatement is stmt)
+                lastStatement = null;
+        stmt.close();
     }
 
     override Transaction beginTransaction() {
@@ -508,7 +538,11 @@ class SessionImpl : Session {
         return currentTransaction;
     }
     override void cancelQuery() {
-        throw new HibernatedException("Method not implemented");
+        Statement stmt;
+        synchronized (statementLock)
+            stmt = lastStatement;
+        if (stmt !is null)
+            stmt.cancel(); // (ddbc: nothing happens unless this statement runs, also once it's closed)
     }
     /// Evicts all entities from the session's cache: later loads read them from the database again.
     override void clear() {
@@ -539,6 +573,8 @@ class SessionImpl : Session {
         }
         _accessor.onSessionClosed();
         closed = true;
+        synchronized (statementLock)
+            lastStatement = null; // cancelQuery() does nothing from now on
         sessionFactory.sessionClosed(this);
         trace("closing connection");
         assert(conn !is null);
@@ -628,8 +664,8 @@ class SessionImpl : Session {
         enforceHelper!TransientObjectException(info.isKeySet(obj), "Cannot refresh entity " ~ info.name ~ ": no Id specified");
         Variant id = info.getKey(obj);
         trace("refresh query: " ~ query);
-        PreparedStatement stmt = conn.prepareStatement(query);
-        scope(exit) stmt.close();
+        PreparedStatement stmt = prepareStatement(query);
+        scope(exit) closeStatement(stmt);
         if (info.keyProperty.relation == RelationType.Embedded) {
             int pos = 1;
             foreach (pi; info.keyProperty.referencedEntity()) {
@@ -678,8 +714,8 @@ class SessionImpl : Session {
     private void insertRelationRows(const PropertyInfo p, Variant thisId, Variant[] otherIds) {
         import std.range : chunks;
         foreach (chunk; otherIds.chunks(maxRelationParameters / 2)) {
-            PreparedStatement stmt = conn.prepareStatement(p.joinTable.getInsertSQL(dialect, chunk.length));
-            scope(exit) stmt.close();
+            PreparedStatement stmt = prepareStatement(p.joinTable.getInsertSQL(dialect, chunk.length));
+            scope(exit) closeStatement(stmt);
             int index = 1;
             foreach (otherId; chunk) {
                 stmt.setVariant(index++, thisId);
@@ -692,8 +728,8 @@ class SessionImpl : Session {
     private void deleteRelationRows(const PropertyInfo p, Variant thisId, Variant[] otherIds) {
         import std.range : chunks;
         foreach (chunk; otherIds.chunks(maxRelationParameters - 1)) {
-            PreparedStatement stmt = conn.prepareStatement(p.joinTable.getDeleteSQL(dialect, chunk.length));
-            scope(exit) stmt.close();
+            PreparedStatement stmt = prepareStatement(p.joinTable.getDeleteSQL(dialect, chunk.length));
+            scope(exit) closeStatement(stmt);
             stmt.setVariant(1, thisId);
             int index = 2;
             foreach (otherId; chunk)
@@ -720,8 +756,8 @@ class SessionImpl : Session {
 
     private Variant[] readRelationIds(const PropertyInfo p, Variant thisId) {
         Variant[] res;
-        PreparedStatement stmt = conn.prepareStatement(p.joinTable.getOtherKeySelectSQL(dialect));
-        scope(exit) stmt.close();
+        PreparedStatement stmt = prepareStatement(p.joinTable.getOtherKeySelectSQL(dialect));
+        scope(exit) closeStatement(stmt);
         stmt.setVariant(1, thisId);
         ResultSet rs = stmt.executeQuery();
         scope(exit) rs.close();
@@ -765,8 +801,8 @@ class SessionImpl : Session {
         // only when there are rows: a DELETE is a mutation on ClickHouse, much more expensive than the SELECT
         if (readRelationIds(p, thisId).length == 0)
             return;
-        PreparedStatement stmt = conn.prepareStatement(p.joinTable.getDeleteAllSQL(dialect));
-        scope(exit) stmt.close();
+        PreparedStatement stmt = prepareStatement(p.joinTable.getDeleteAllSQL(dialect));
+        scope(exit) closeStatement(stmt);
         stmt.setVariant(1, thisId);
         stmt.executeUpdate();
     }
@@ -782,15 +818,15 @@ class SessionImpl : Session {
                 enforceKeyGenerated(generatedKey, info, "The dialect generated no key");
                 info.setKey(obj, generatedKey);
                 string query = metaData.generateInsertAllFieldsForEntity(obj, dialect, info);
-                PreparedStatement stmt = conn.prepareStatement(query);
-                scope(exit) stmt.close();
+                PreparedStatement stmt = prepareStatement(query);
+                scope(exit) closeStatement(stmt);
                 metaData.writeAllColumns(obj, stmt, 1);
                 stmt.executeUpdate();
             } else if (info.getKeyProperty().generated) {
                 // autogenerated on DB side
                 string query = dialect.appendInsertToFetchGeneratedKey(metaData.generateInsertNoKeyForEntity(obj, dialect, info), info);
-				PreparedStatement stmt = conn.prepareStatement(query);
-				scope(exit) stmt.close();
+				PreparedStatement stmt = prepareStatement(query);
+				scope(exit) closeStatement(stmt);
 				metaData.writeAllColumns(obj, stmt, 1, true);
 				Variant generatedKey;
 				stmt.executeUpdate(generatedKey);
@@ -802,8 +838,8 @@ class SessionImpl : Session {
                 enforceKeyGenerated(generatedKey, info, "The key generator returned no key");
                 info.setKey(obj, generatedKey);
                 string query = metaData.generateInsertAllFieldsForEntity(obj, dialect, info);
-                PreparedStatement stmt = conn.prepareStatement(query);
-                scope(exit) stmt.close();
+                PreparedStatement stmt = prepareStatement(query);
+                scope(exit) closeStatement(stmt);
                 metaData.writeAllColumns(obj, stmt, 1);
                 stmt.executeUpdate();
             } else {
@@ -811,8 +847,8 @@ class SessionImpl : Session {
             }
         } else {
 			string query = metaData.generateInsertAllFieldsForEntity(obj, dialect, info);
-			PreparedStatement stmt = conn.prepareStatement(query);
-			scope(exit) stmt.close();
+			PreparedStatement stmt = prepareStatement(query);
+			scope(exit) closeStatement(stmt);
 			metaData.writeAllColumns(obj, stmt, 1);
 			stmt.executeUpdate();
         }
@@ -827,8 +863,8 @@ class SessionImpl : Session {
         auto info = metaData.findEntityForObject(obj);
         enforceHelper!TransientObjectException(info.isKeySet(obj), "Cannot persist entity w/o key assigned");
 		string query = metaData.generateInsertAllFieldsForEntity(obj, dialect, info);
-		PreparedStatement stmt = conn.prepareStatement(query);
-		scope(exit) stmt.close();
+		PreparedStatement stmt = prepareStatement(query);
+		scope(exit) closeStatement(stmt);
 		metaData.writeAllColumns(obj, stmt, 1);
 		stmt.executeUpdate();
         Variant key = info.getKey(obj);
@@ -842,8 +878,8 @@ class SessionImpl : Session {
         string query = metaData.generateUpdateForEntity(obj, dialect, info);
         //trace("Query: " ~ query);
         {
-            PreparedStatement stmt = conn.prepareStatement(query);
-            scope(exit) stmt.close();
+            PreparedStatement stmt = prepareStatement(query);
+            scope(exit) closeStatement(stmt);
             int columnCount = metaData.writeAllColumns(obj, stmt, 1, true);
             if (info.keyProperty.relation == RelationType.Embedded) {
                 metaData.writeAllColumns(info.getKey(obj).get!Object, stmt, columnCount + 1, false);
@@ -874,7 +910,8 @@ class SessionImpl : Session {
         } else {
             query ~= dialect.quoteIfNeeded(info.getKeyProperty().columnName) ~ "=?";
         }
-		PreparedStatement stmt = conn.prepareStatement(query);
+		PreparedStatement stmt = prepareStatement(query);
+		scope(exit) closeStatement(stmt);
         if (info.keyProperty.relation == RelationType.Embedded) {
             metaData.writeAllColumns(info.getKey(obj).get!Object, stmt, 1, false);
         } else {
@@ -1411,8 +1448,8 @@ class QueryImpl : Query
 
 
         trace("SQL: " ~ query.sql);
-        PreparedStatement stmt = sess.conn.prepareStatement(query.sql);
-        scope(exit) stmt.close();
+        PreparedStatement stmt = sess.prepareStatement(query.sql);
+        scope(exit) sess.closeStatement(stmt);
         params.applyParams(stmt);
         ResultSet rs = stmt.executeQuery();
         assert(query.select !is null && query.select.length > 0);
@@ -1442,8 +1479,8 @@ class QueryImpl : Query
 		Variant[][] res;
 
 		//trace("SQL: " ~ query.sql);
-		PreparedStatement stmt = sess.conn.prepareStatement(query.sql);
-		scope(exit) stmt.close();
+		PreparedStatement stmt = sess.prepareStatement(query.sql);
+		scope(exit) sess.closeStatement(stmt);
 		params.applyParams(stmt);
 		ResultSet rs = stmt.executeQuery();
 		scope(exit) rs.close();

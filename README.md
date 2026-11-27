@@ -211,6 +211,21 @@ int main() {
 
 ## Additional Features
 
+### Cancelling a query
+
+`Session.cancelQuery()` stops the query the session runs, as in Hibernate. It may be called from another thread or
+vibe.d task, and does nothing when no query runs. The cancelled call throws ddbc's `SQLException` with SQLSTATE
+`57014`, and the session stays usable. It uses ddbc's `Statement.cancel()` (ddbc 0.16), so what it can stop depends
+on the database: see [ddbc's README](https://github.com/buggins/ddbc#cancel-and-query-timeout). With MySQL it throws
+`SQLFeatureNotSupportedException` while a statement runs. It doesn't reach the statements of `doWork`, nor ClickHouse's
+key lookup on `save()`. A cancel that comes while the statement is still being prepared may miss it: call it again if
+the query goes on.
+
+```D
+// another thread or task
+sess.cancelQuery();
+```
+
 ### Composite Keys
 
 If a database contains tables with a composite primary key, the `@EmbeddedId` can be used to

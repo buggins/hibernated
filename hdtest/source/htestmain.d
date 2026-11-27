@@ -17,6 +17,7 @@ import transactiontest : TransactionTest;
 import generatedtest : GeneratedTest;
 import temporaltest : TemporalTest;
 import relationkeytest : RelationKeyTest;
+import cancelquerytest : CancelQueryTest;
 
 void enableTraceLogging() {
     static if (__traits(compiles, (){ import std.logger; })) {
@@ -77,6 +78,11 @@ int main(string[] args) {
   RelationKeyTest test7 = new RelationKeyTest();
   test7.setConnectionParams(par);
   runTests(test7);
+
+  // Session.cancelQuery() from another thread (#139)
+  CancelQueryTest test8 = new CancelQueryTest();
+  test8.setConnectionParams(par);
+  runTests(test8);
 
   // TODO: Some tests that run after this have errors, find out why.
   TransactionTest test5 = new TransactionTest();
