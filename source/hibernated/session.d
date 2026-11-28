@@ -351,6 +351,32 @@ abstract class Query
             return setParameterVariant(name, Variant(val));
         }
     }
+
+    /**
+     * Sets the time limit, in seconds, for each SQL statement the query runs, as in Hibernate (#141): ddbc's
+     * `Statement.setQueryTimeout` before each execution. It covers the queries that load the result's eager
+     * relations within the same call too, each with the full limit, but not lazy loads later. 0, the default, keeps
+     * the connection's own setting.
+     *
+     * When it runs out, the call throws ddbc's `SQLTimeoutException` (SQLSTATE `HYT00`; MySQL keeps the server's
+     * error), and the session stays usable. With MySQL, mysql-native drops the session's connection after the
+     * timeout's error, so an open transaction is lost. What counts depends on the database: see
+     * [ddbc's README](https://github.com/buggins/ddbc#cancel-and-query-timeout).
+     *
+     * Throws: `QueryException` if `seconds` is negative.
+     */
+    Query setTimeout(int seconds) {
+        enforceHelper!QueryException(seconds >= 0, "Query timeout must not be negative: " ~ to!string(seconds));
+        timeout = seconds;
+        return this;
+    }
+
+    /// The time limit set by `setTimeout`; 0 if none.
+    int getTimeout() {
+        return timeout;
+    }
+
+    protected int timeout; // seconds; 0 keeps the connection's setting (#141)
 }
 
 
@@ -1215,6 +1241,16 @@ class QueryImpl : Query
 		return query.hql;
 	}
 
+	/// Prepares the query's SQL, with the query timeout, as the statement `Session.cancelQuery()` cancels.
+	private PreparedStatement prepare() {
+		PreparedStatement stmt = sess.prepareStatement(query.sql);
+		if (timeout > 0) {
+			scope(failure) sess.closeStatement(stmt);
+			stmt.setQueryTimeout(timeout);
+		}
+		return stmt;
+	}
+
 	/// Convenience method to return a single instance that matches the query, or null if the query returns no results.
 	override Object uniqueObject() {
         return uniqueResult(cast(Object)null);
@@ -1367,6 +1403,7 @@ class QueryImpl : Query
                         string hql = "FROM " ~ pi.referencedEntity.name ~ " WHERE " ~ pi.referencedEntity.keyProperty.propertyName ~ " IN (" ~ createCommaSeparatedKeyList(unknownKeys) ~ ")";
                         trace("delayedLoadRelations: loading " ~ pi.propertyName ~ " HQL: " ~ hql);
                         QueryImpl q = cast(QueryImpl)sess.createQuery(hql);
+                        q.timeout = timeout;
                         Object[] fromDB = q.listObjects(null, loadMap);
                         list ~= fromDB;
                         trace("delayedLoadRelations: objects loaded " ~ to!string(fromDB.length));
@@ -1394,6 +1431,7 @@ class QueryImpl : Query
                 trace("delayedLoadRelations: loading " ~ pi.propertyName ~ " HQL: " ~ hql);
                 QueryImpl q = cast(QueryImpl)sess.createQuery(hql);
                 assert(q !is null);
+                q.timeout = timeout;
                 Object[] list = q.listObjects(null, loadMap);
                 trace("delayedLoadRelations oneToMany/manyToMany: objects loaded " ~ to!string(list.length));
                 EntityCollections collections = new EntityCollections();
@@ -1448,7 +1486,7 @@ class QueryImpl : Query
 
 
         trace("SQL: " ~ query.sql);
-        PreparedStatement stmt = sess.prepareStatement(query.sql);
+        PreparedStatement stmt = prepare();
         scope(exit) sess.closeStatement(stmt);
         params.applyParams(stmt);
         ResultSet rs = stmt.executeQuery();
@@ -1479,7 +1517,7 @@ class QueryImpl : Query
 		Variant[][] res;
 
 		//trace("SQL: " ~ query.sql);
-		PreparedStatement stmt = sess.prepareStatement(query.sql);
+		PreparedStatement stmt = prepare();
 		scope(exit) sess.closeStatement(stmt);
 		params.applyParams(stmt);
 		ResultSet rs = stmt.executeQuery();

@@ -226,6 +226,26 @@ the query goes on.
 sess.cancelQuery();
 ```
 
+### Query timeout
+
+`Query.setTimeout(seconds)` limits each SQL statement a query runs, as in Hibernate. The limit also covers the
+queries that load the result's eager relations within the same call (each with the full limit), but not lazy loads
+later. 0, the default, keeps the connection's own setting. When the limit runs out, the call throws ddbc's
+`SQLTimeoutException` (SQLSTATE `HYT00`; MySQL keeps the server's error), and the session stays usable. It uses ddbc's
+`Statement.setQueryTimeout()`, so what counts depends on the database: see
+[ddbc's README](https://github.com/buggins/ddbc#cancel-and-query-timeout). With MySQL, mysql-native drops the
+session's connection after the timeout's error, so an open transaction is lost.
+
+```D
+import ddbc.core : SQLTimeoutException;
+
+try {
+    Report[] rows = sess.createQuery("FROM Report").setTimeout(30).list!Report();
+} catch (SQLTimeoutException e) {
+    // the query took longer than 30 seconds
+}
+```
+
 ### Composite Keys
 
 If a database contains tables with a composite primary key, the `@EmbeddedId` can be used to
