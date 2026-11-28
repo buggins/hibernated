@@ -78,7 +78,7 @@ cd hdtest && dub build --config=PGSQL && ./bin/hdtest --host=127.0.0.1 --port=54
 
 ## D idioms and review lessons
 
-Learned from the review of the MySQL 8 work in mysql-native (mysql-d/mysql-native#288, 2026-11) and from the bugs fixed since in mysql-native, dbwire and the connectors. All of these work on the minimum frontend 2.097; checked with LDC 1.27.1.
+Learned from the review of the MySQL 8 work in mysql-native (mysql-d/mysql-native#288, 2026-11) and from the bugs fixed since in mysql-native, dbwire and the connectors. Bullets marked SDxxx adapt a rule of [camunda/safer-d](https://github.com/camunda/safer-d) to libraries that support frontend 2.097 on three compilers. All of these work on the minimum frontend 2.097; checked with LDC 1.27.1.
 
 - **`BigInt` and bytes: never go through hex or decimal strings.**
   - Bytes to `BigInt`: `BigInt(false, bytes)` takes any finite range of unsigned integers, most significant first.
@@ -91,10 +91,15 @@ Learned from the review of the MySQL 8 work in mysql-native (mysql-d/mysql-nativ
   - To parse untrusted input, loop over the members: `static foreach (m; __traits(allMembers, E)) if (name == m) return __traits(getMember, E, m);`. This is `nothrow @nogc` and compares the packet slice directly, with no `idup`. Don't use `to!E(name)`, which throws `ConvException` on unknown names.
   - Each name then appears once, instead of in a parse table and a format table that can drift apart.
   - With a `string`-based enum, `to!string` returns the member's identifier, not its value.
+- **`final switch` over enums** (SD014). Switch over an enum value with a `final switch` and no `default:`; members that need no action get a case with an empty body. A new member then makes the compiler point at every switch that must handle it.
+  - Only for values that are known members. A value outside the enum (decoded from the wire, or made by a cast) throws `SwitchError`, an `Error`, and in a `-release` build it is undefined behaviour: DMD 2.107 and LDC 1.36 halt with an illegal instruction, LDC 1.27.1 continues silently with a wrong result (checked 2026-11-28). Check a raw value before converting it: `foreach (m; EnumMembers!E) if (raw == m) return m;` (`std.traits`), or a range check when the members are contiguous.
 - **Small idioms:**
   - Test byte vectors: `cast(const(ubyte)[]) std.conv.hexString!"0a1b..."` instead of hand-written hex decoding.
   - Strip leading zero bytes with `find!(b => b != 0)`.
   - Copy (`idup`) a slice only where it must outlive the buffer; an error message built inside `enforce` is lazy, so copying there is fine.
+- **Integer arithmetic on lengths, counts and offsets** (SD010, SD011, SD020).
+  - Unsigned subtraction wraps: `a - b` with `a < b` gives a huge `size_t`, which then passes a later length check. With lengths and offsets from the wire or from the caller, compare before subtracting. For overflow-checked arithmetic, druntime's `core.checkedint` (`addu`, `subu`, `mulu` with an overflow flag) exists in 2.097.
+  - A narrowing `cast` (`cast(uint) len`, `cast(ubyte) x`) truncates silently, in `@safe` code too. When the value might not fit, check the range first, or use `std.conv.to!T`, which throws `ConvOverflowException`. Keep a bare `cast` for values whose range is proven, such as in hot paths, with a comment.
 - **Function attributes** (`@safe`, `@trusted`, `pure`, `nothrow`, `@nogc`, `scope`). Sources: the D spec (function.html, attribute.html), the D blog's memory-safety series, and the D forum consensus. Behaviour checked with LDC 1.27.1 and 1.36 (2026-11-08).
   - **Inference.** Templates, `auto` functions, nested functions and lambdas infer `@safe`, `pure`, `nothrow` and `@nogc`. Other functions infer nothing, even when their body is visible.
     - Write the attributes on ordinary functions, public API first.
@@ -108,16 +113,23 @@ Learned from the review of the MySQL 8 work in mysql-native (mysql-d/mysql-nativ
   - **Never mark a template `@trusted` if its body copies, constructs or destroys a `T`.** The attribute hides `T`'s `@system` postblit, copy constructor or destructor. Checked: `V wrap(T)(ref T v) @trusted { T copy = v; ... }` compiles in `@safe` code for a struct with a `@system` postblit. Trust only the `@system` call inside, which lets inference catch `T`, or constrain `T` (`!hasIndirections!T`, `!hasElaborateCopyConstructor!T`).
   - **`nothrow`**: only `Error`s may escape.
     - Wrap calls that can't actually throw in `std.exception.assumeWontThrow`, or in `try ... catch (Exception e) assert(0, e.msg);`.
-    - Never catch `Error` or `Throwable` to make code `nothrow`.
+    - Never catch `Error` or `Throwable` to make code `nothrow` (see "No silent catches" below).
   - **`@nogc`** forbids `new`, array appending and concatenation, closures that escape, and `throw new`. Use it for leaf hot paths (codecs, parsers); error paths that throw stay outside it.
   - **`debug` statements** may break `pure`, `nothrow` and `@nogc`, which helps temporary logging. They compile only with `-debug`; don't leave them in committed code.
   - **`scope` and `return scope`** are checked only in `@safe` code compiled with `-preview=dip1000`, which is still not the default (D 2.113, August 2026).
     - Without that switch, `scope` is an unchecked promise. With it, callers may pass stack memory to a `scope` parameter, so a `@trusted` or `@system` function that keeps such a parameter has a memory bug.
     - dbwire and the four connectors are dip1000-clean on current compilers: CI runs their unit tests with `-preview=dip1000` on dmd-latest and ldc-latest (dbwire#50, clickhoused#71, postgresql-native#37, oracle-native#47, mssql-native#42). Older Phobos isn't: 2.097's `std.socket` has no `scope` annotations. Don't add `scope` speculatively.
+- **No silent catches** (SD012). A `catch` that drops an exception (neither uses nor rethrows it; `collectException` too) has a comment saying why that is right.
+  - Never catch `Throwable` or `Error` to carry on, and never turn an `Error` into an exception. An `Error` reports a bug or an exhausted resource, such as a failed assert, an out-of-bounds index, a `SwitchError` or a failed allocation; the program or the connection is then in a broken state, and druntime doesn't promise to run cleanup while it unwinds. Known cases: ddbc's MySQL, ODBC and SQLite drivers (buggins/ddbc#269), and hibernated's `metadata.d`, which turns `RangeError` into `MappingException`.
+  - The one exception: a test runner may catch `AssertError` to report the failed test and go on with the next one, as our integration harnesses do.
+- **No `__gshared` in new code** (SD008). It shares a variable between threads without the type saying so, and `@safe` code can't touch it. Use `immutable` for data fixed at start-up (set in `shared static this()`), and `shared` with `core.atomic` or a lock for data that changes.
+  - State that is only touched under a lock, or loaded once under one, may stay `__gshared` (dbwire's OpenSSL loader and TLS context cache, both behind `synchronized`), with a comment naming the lock.
+  - `__gshared static this()` is not a process-wide constructor: like `static this()`, it runs again in every new thread (checked with LDC 1.27.1 and 1.36). Use `shared static this()`. ddbc's drivers register themselves this way (buggins/ddbc#269).
 - **No conditional members that change a layout.** A class, struct or interface must not get a field, a virtual method (one that takes a vtable slot: a public or protected method of a non-final class, an `override`, or an interface method) or an interface under a `version` or `debug` condition that the code importing the package may compile with differently: `version (unittest)`, `debug`, `version (assert)` (`-release`), `D_Coverage`, `Have_*`, or any version set through `versions`/`dflags`.
   - dub compiles each package with its own flags, and `dub test` adds `-unittest` to the root package only, so the library and the code importing it would disagree on the layout.
   - LDC 1.27–1.31 allocates a class from the library's size but copies the initializer of the size its own compilation sees: a heap overflow on every `new` (dbwire#84, `TlsTransport.readsThatSent`, found through mysql-native's TLS CI). DMD and newer LDC take the size from one place, so the bug stays hidden there.
   - Non-virtual (`private`, `package`, `final`) methods and static members are fine. Test-only helpers go in module-level `version (unittest)` blocks, and tests observe behaviour from outside (e.g. through a wrapping transport) instead of through counters in the class.
+- **Test-only imports stay in the tests** (SD024). An import at module level under `version (unittest)`, either `version (unittest) import ...;` or one directly inside a module-level `version (unittest) { ... }` block, is in scope for all of the module, but only when compiling tests. If ordinary code comes to rely on it, the tests still build and pass while the library build fails. Import inside the `unittest` block or the test helper function instead. A module that is test-only from its first line (`version (unittest):`) is exempt.
 - **Destructors the GC may run.** A class destructor runs in a GC finalizer, and so does the destructor of a struct that ends up inside a GC-allocated object (an RAII handle such as `PooledConnection` kept in a user's class). The GC finalizes in any order (at exit, everything that is left) and doesn't allow allocating or locking there.
   - Such a destructor must not touch other GC-managed objects (they may already be finalized), take locks, allocate or throw.
   - When the cleanup needs any of that, start with `if (GC.inFinalizer) return;` (`core.memory`) and document that the resource then stays held, so users release it explicitly.
